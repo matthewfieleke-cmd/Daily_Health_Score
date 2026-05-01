@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { RecordsRefreshProvider } from "../context/RecordsRefresh";
 
 const nav = [
   { to: "/today", label: "Today" },
@@ -36,7 +37,9 @@ export function Layout() {
         </nav>
       </header>
       <main className="main-region">
-        <Outlet />
+        <RecordsRefreshProvider>
+          <Outlet />
+        </RecordsRefreshProvider>
       </main>
     </div>
   );

@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+import { useRecordsVersion } from "../context/records-version-context";
 import { getDateKeysForRollingWindow } from "../lib/dates";
 import { getRollingAverages } from "../lib/averages";
 import { loadRecords } from "../lib/storage";
@@ -5,7 +7,11 @@ import { formatDisplayScore } from "../lib/scoring";
 import { DailyRecordList } from "../components/DailyRecordList";
 
 export function WeekPage() {
-  const records = loadRecords();
+  const version = useRecordsVersion();
+  const records = useMemo(() => {
+    void version;
+    return loadRecords();
+  }, [version]);
   const keys = getDateKeysForRollingWindow(7);
   const stats = getRollingAverages(records, keys);
 

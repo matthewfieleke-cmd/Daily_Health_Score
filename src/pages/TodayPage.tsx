@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useRecordsVersion } from "../context/records-version-context";
 import { MetricCard } from "../components/MetricCard";
 import { ScoreCard } from "../components/ScoreCard";
 import { DiscouragementModal } from "../components/DiscouragementModal";
@@ -11,7 +12,11 @@ import { loadRecords, sortRecordsDesc } from "../lib/storage";
 
 export function TodayPage() {
   const todayKey = localDateKey();
-  const records = sortRecordsDesc(loadRecords());
+  const version = useRecordsVersion();
+  const records = useMemo(() => {
+    void version;
+    return sortRecordsDesc(loadRecords());
+  }, [version]);
   const todayRecord = records.find((r) => r.date === todayKey);
   const latest = records[0] ?? null;
   const display = todayRecord ?? latest;

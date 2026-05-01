@@ -1,6 +1,9 @@
-import type { DailyRecord, PrimaryFocus, UserSettings } from "../types/health";
+import type { DailyRecord, UserSettings } from "../types/health";
+import { composeDailyRecord } from "./record-compose";
 import { calculateScore, determinePrimaryFocus } from "./scoring";
 import { getNextSuggestion } from "./suggestions";
+
+export { composeDailyRecord } from "./record-compose";
 
 export function buildDailyRecord(
   input: {
@@ -21,32 +24,18 @@ export function buildDailyRecord(
     },
     goals,
   );
-  const primaryFocus: PrimaryFocus = determinePrimaryFocus({
+  const primaryFocus = determinePrimaryFocus({
     sleepPercent: computed.sleepPercent,
     fiberPercent: computed.fiberPercent,
     exercisePercent: computed.exercisePercent,
   });
   const suggestion = getNextSuggestion(primaryFocus);
-  const iso = now.toISOString();
-
-  return {
-    date: input.date,
-    sleepHours: input.sleepHours,
-    fiberGrams: input.fiberGrams,
-    exerciseMinutes: input.exerciseMinutes,
-    sleepGoal: settings.sleepGoal,
-    fiberGoal: settings.fiberGoal,
-    exerciseGoal: 30,
-    sleepScore: computed.sleepScore,
-    fiberScore: computed.fiberScore,
-    exerciseScore: computed.exerciseScore,
-    totalScore: computed.totalScore,
-    sleepPercent: computed.sleepPercent,
-    fiberPercent: computed.fiberPercent,
-    exercisePercent: computed.exercisePercent,
+  return composeDailyRecord(
+    input,
+    settings,
+    computed,
     primaryFocus,
     suggestion,
-    createdAt: iso,
-    updatedAt: iso,
-  };
+    now,
+  );
 }

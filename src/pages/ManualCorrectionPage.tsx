@@ -2,8 +2,8 @@ import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { ImportPayload } from "../types/health";
-import { buildDailyRecord } from "../lib/record";
-import { loadSettings, PENDING_CORRECTION_KEY, saveDailyRecord } from "../lib/storage";
+import { applyImportPayload } from "../lib/cloud-sync";
+import { PENDING_CORRECTION_KEY } from "../lib/storage";
 
 function loadPending(): ImportPayload | null {
   const raw = sessionStorage.getItem(PENDING_CORRECTION_KEY);
@@ -48,7 +48,7 @@ export function ManualCorrectionPage() {
   const needFiber = initial.fiber === 0;
   const needExercise = initial.exercise === 0;
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
 
@@ -69,17 +69,14 @@ export function ManualCorrectionPage() {
       return;
     }
 
-    const settings = loadSettings();
-    const record = buildDailyRecord(
-      {
-        date: initial.date,
-        sleepHours: nextSleep,
-        fiberGrams: nextFiber,
-        exerciseMinutes: nextExercise,
-      },
-      settings,
-    );
-    saveDailyRecord(record);
+    const payload: ImportPayload = {
+      date: initial.date,
+      sleep: nextSleep,
+      fiber: nextFiber,
+      exercise: nextExercise,
+    };
+
+    await applyImportPayload(payload);
     sessionStorage.removeItem(PENDING_CORRECTION_KEY);
     navigate("/today", { replace: true });
   }

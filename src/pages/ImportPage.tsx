@@ -1,12 +1,8 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect } from "react";
+import { applyImportPayload } from "../lib/cloud-sync";
 import { validateImportParams } from "../lib/validation";
-import {
-  loadSettings,
-  PENDING_CORRECTION_KEY,
-  saveDailyRecord,
-} from "../lib/storage";
-import { buildDailyRecord } from "../lib/record";
+import { PENDING_CORRECTION_KEY } from "../lib/storage";
 
 let lastHandledImportQuery = "";
 
@@ -15,38 +11,37 @@ export function ImportPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    let cancelled = false;
     const qs = searchParams.toString();
     if (qs === lastHandledImportQuery) return;
     lastHandledImportQuery = qs;
 
-    const result = validateImportParams(searchParams);
-    if (!result.ok) {
-      navigate("/invalid-import", { replace: true });
-      return;
-    }
+    void (async () => {
+      const result = validateImportParams(searchParams);
+      if (!result.ok) {
+        if (!cancelled) navigate("/invalid-import", { replace: true });
+        return;
+      }
 
-    const { date, sleep, fiber, exercise } = result.data;
-    if (sleep === 0 || fiber === 0 || exercise === 0) {
-      sessionStorage.setItem(
-        PENDING_CORRECTION_KEY,
-        JSON.stringify({ date, sleep, fiber, exercise }),
-      );
-      navigate("/correct-import", { replace: true, state: result.data });
-      return;
-    }
+      const { date, sleep, fiber, exercise } = result.data;
+      if (sleep === 0 || fiber === 0 || exercise === 0) {
+        sessionStorage.setItem(
+          PENDING_CORRECTION_KEY,
+          JSON.stringify({ date, sleep, fiber, exercise }),
+        );
+        if (!cancelled) {
+          navigate("/correct-import", { replace: true, state: result.data });
+        }
+        return;
+      }
 
-    const settings = loadSettings();
-    const record = buildDailyRecord(
-      {
-        date,
-        sleepHours: sleep,
-        fiberGrams: fiber,
-        exerciseMinutes: exercise,
-      },
-      settings,
-    );
-    saveDailyRecord(record);
-    navigate("/today", { replace: true });
+      await applyImportPayload(result.data);
+      if (!cancelled) navigate("/today", { replace: true });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [navigate, searchParams]);
 
   return (

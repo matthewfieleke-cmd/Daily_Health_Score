@@ -4,6 +4,10 @@ import type {
   UserSettings,
 } from "../types/health";
 
+import { notifyRecordsUpdated } from "./storage-events";
+
+export const SYNC_TOKEN_KEY = "dailyHealthScore.syncToken";
+
 export const STORAGE_KEYS = {
   records: "dailyHealthScore.records",
   settings: "dailyHealthScore.settings",
@@ -52,6 +56,22 @@ export function loadSettings(): UserSettings {
 
 export function saveSettings(settings: UserSettings): void {
   localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
+  notifyRecordsUpdated();
+}
+
+export function getSyncToken(): string | null {
+  const t = localStorage.getItem(SYNC_TOKEN_KEY);
+  return t?.trim() || null;
+}
+
+export function setSyncToken(token: string | null): void {
+  if (token == null || token.trim() === "") {
+    localStorage.removeItem(SYNC_TOKEN_KEY);
+    notifyRecordsUpdated();
+    return;
+  }
+  localStorage.setItem(SYNC_TOKEN_KEY, token.trim());
+  notifyRecordsUpdated();
 }
 
 export function loadRecords(): DailyRecord[] {
@@ -80,6 +100,7 @@ export function saveDailyRecord(record: DailyRecord): void {
   const without = existing.filter((r) => r.date !== record.date);
   const next = trimToLatestDates([merged, ...without], 30);
   localStorage.setItem(STORAGE_KEYS.records, JSON.stringify(next));
+  notifyRecordsUpdated();
 }
 
 export function exportRecordsAsJson(): string {
@@ -92,6 +113,7 @@ export function clearAllLocalData(): void {
   localStorage.removeItem(STORAGE_KEYS.usedSuggestions);
   localStorage.removeItem(STORAGE_KEYS.usedDiscouragementParagraphs);
   sessionStorage.removeItem(PENDING_CORRECTION_KEY);
+  notifyRecordsUpdated();
 }
 
 export function loadUsedSuggestions(): UsedSuggestionsState {
