@@ -26,33 +26,13 @@ export function TodayPage() {
 
   if (!display) {
     return (
-      <div className="page-content">
-        <section className="card prose-card">
-          <h1 className="page-title">Welcome</h1>
-          <p className="lede">
-            Daily Health Score imports sleep, fiber, and exercise minutes from an Apple Shortcut and stores the last 30 days locally in your browser.
-          </p>
-          <ol className="numbered-list">
-            <li>
-              Configure your Shortcut to open{" "}
-              <code className="inline-code">
-                /import?date=yyyy-MM-dd&amp;sleep=[hours]&amp;fiber=[grams]&amp;exercise=[minutes]
-              </code>
-              .
-            </li>
-            <li>
-              Use your deployed URL (see Settings for the exact pattern). Example:{" "}
-              <code className="inline-code">
-                https://YOUR-VERCEL-APP.vercel.app/import?date=2026-05-01&amp;sleep=7.4&amp;fiber=38&amp;exercise=28
-              </code>
-              .
-            </li>
-            <li>
-              If any value arrives as <strong>0</strong>, you’ll be asked to correct it before saving.
-            </li>
-          </ol>
-          <p className="muted">
-            Configure goals under <Link to="/settings">Settings</Link>.
+      <div className="page-content home-empty">
+        <section className="card home-empty-card">
+          <img src="/DHS.png" alt="" className="home-empty-logo" />
+          <h1 className="page-title home-empty-title">Daily Health Score</h1>
+          <p className="muted home-empty-line">
+            No data yet. Run your Shortcut, or{" "}
+            <Link to="/settings">paste the import link</Link> in Settings.
           </p>
         </section>
       </div>
@@ -64,7 +44,7 @@ export function TodayPage() {
   return (
     <div className="page-content">
       {showingLatestInsteadOfToday ? (
-        <p className="callout">Today’s score has not been imported yet.</p>
+        <p className="callout callout--compact">No import for today yet.</p>
       ) : null}
 
       <header className="today-header">

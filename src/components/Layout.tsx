@@ -12,8 +12,14 @@ export function Layout() {
     <div className="shell">
       <header className="top-bar">
         <div className="brand">
+          <img
+            src="/DHS.png"
+            alt=""
+            width={36}
+            height={36}
+            className="brand-icon"
+          />
           <span className="brand__title">Daily Health Score</span>
-          <span className="brand__subtitle">Local dashboard</span>
         </div>
         <nav className="tab-nav" aria-label="Primary">
           {nav.map((item) => (

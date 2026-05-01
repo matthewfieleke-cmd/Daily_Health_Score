@@ -8,7 +8,7 @@ Local-first Progressive Web App that imports daily sleep, dietary fiber, and App
 - Vite 7  
 - `react-router-dom` (client-side routing)  
 - Plain CSS (mobile-first, clinical minimal UI)  
-- PWA-ready `manifest.webmanifest` + icons  
+- PWA `manifest.webmanifest` + **`public/DHS.png`** as install / favicon asset  
 - Deployed as a **static** site on Vercel (`vercel.json` SPA rewrite)
 
 No backend, database, auth, HealthKit in-app usage, or AI APIs.
@@ -71,12 +71,27 @@ https://YOUR-VERCEL-APP.vercel.app/import?date=2026-05-01&sleep=7.4&fiber=38&exe
 3. Action: **Run Shortcut** → choose your Daily Health Score shortcut  
 4. Prefer **Run Immediately** / disable **Ask Before Running** when available  
 
+## Shortcuts vs “Add to Home Screen” (where data is stored)
+
+On **iOS**, a Shortcut that **Opens URLs** usually opens **Safari**, not the standalone web app created with **Add to Home Screen**. Safari and that standalone app can use **different storage**, so data imported via the Shortcut might **not** show up in the Home Screen icon.
+
+**Reliable fix:** In the **installed** app, open **Settings → Import into this app**, paste the **full import URL**, and tap **Run import**. That executes `/import` in the **same** client you use for Today (same `localStorage`).
+
+Shortcut ideas:
+
+- Add **Copy to Clipboard** with the URL, then you paste it into the app; or  
+- Still **Open URLs** for convenience, then copy from the address bar and paste into Settings if the dashboard icon does not see the data.
+
+Alternatively, skip the Home Screen icon and use **only Safari** so Shortcut imports and the dashboard always share one browser profile.
+
+On **Android**, behavior varies by browser and install mode; when unsure, use the same **paste import** flow inside the installed PWA.
+
 ## Behavior notes
 
 - If **sleep**, **fiber**, or **exercise** is **0** in the URL, the app opens **manual correction** for only the zero fields (values must be &gt; 0 before save).  
 - Duplicate **date** imports **overwrite** the prior record.  
 - Only the **most recent 30** calendar-dated records are kept.  
-- Data lives in **this browser**; export JSON from **Settings** before clearing storage or switching devices.  
+- Data lives in **this browser profile**; export JSON from **Settings** before clearing storage or switching devices.  
 - **Exercise goal** is fixed at **30 minutes** (matching the scoring formula).
 
 ## LocalStorage keys
@@ -88,6 +103,6 @@ https://YOUR-VERCEL-APP.vercel.app/import?date=2026-05-01&sleep=7.4&fiber=38&exe
 | `dailyHealthScore.usedSuggestions` | Rotation state for suggestions |
 | `dailyHealthScore.usedDiscouragementParagraphs` | Rotation for “Feeling discouraged?” |
 
-## Icons
+## App icon
 
-Replace `public/icons/icon.svg` (and favicon) with branded PNG/SVG assets if you want broader install-card support on all platforms.
+Branding lives at **`public/DHS.png`** (linked from `manifest.webmanifest`, favicon, and `apple-touch-icon`). For faster loads you can replace it later with optimized **192×192** and **512×512** PNGs and reference both sizes in the manifest.

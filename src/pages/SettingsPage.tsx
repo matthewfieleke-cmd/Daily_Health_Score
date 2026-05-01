@@ -1,6 +1,9 @@
+import type { FormEvent } from "react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { FiberGoalGrams, SleepGoalHours } from "../types/health";
 import { localDateKey } from "../lib/dates";
+import { parseImportUrlToSearch } from "../lib/import-url";
 import {
   clearAllLocalData,
   exportRecordsAsJson,
@@ -12,7 +15,9 @@ const sleepOptions: SleepGoalHours[] = [7, 7.5, 8];
 const fiberOptions: FiberGoalGrams[] = [30, 40, 50];
 
 export function SettingsPage() {
+  const navigate = useNavigate();
   const [settings, setSettings] = useState(loadSettings);
+  const [pastedImportUrl, setPastedImportUrl] = useState("");
   const baseUrl =
     typeof window !== "undefined"
       ? window.location.origin
@@ -50,6 +55,19 @@ export function SettingsPage() {
     clearAllLocalData();
     setSettings(loadSettings());
     window.alert("Local data cleared.");
+  }
+
+  function handlePastedImport(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const search = parseImportUrlToSearch(pastedImportUrl);
+    if (!search) {
+      window.alert(
+        "Paste a full URL that ends in /import and includes date, sleep, fiber, and exercise parameters.",
+      );
+      return;
+    }
+    setPastedImportUrl("");
+    navigate(`/import${search}`);
   }
 
   const sampleUrl = `${baseUrl}/import?date=2026-05-01&sleep=7.4&fiber=38&exercise=28`;
@@ -102,6 +120,33 @@ export function SettingsPage() {
       </section>
 
       <section className="card stack-gap">
+        <h2 className="section-title">Import into this app</h2>
+        <p className="muted small-copy">
+          Shortcuts usually open a URL in Safari (or another browser), which can be a{" "}
+          <strong>different storage bucket</strong> than the icon installed from “Add to Home
+          Screen.” Pasting the full import URL here runs import <strong>inside this window</strong>{" "}
+          so data saves where you are using the app.
+        </p>
+        <form className="stack-form" onSubmit={handlePastedImport}>
+          <label className="field">
+            <span>Paste full import URL</span>
+            <textarea
+              rows={3}
+              className="field-textarea"
+              value={pastedImportUrl}
+              onChange={(ev) => setPastedImportUrl(ev.target.value)}
+              placeholder={sampleUrl}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          <button type="submit" className="btn-primary">
+            Run import
+          </button>
+        </form>
+      </section>
+
+      <section className="card stack-gap">
         <h2 className="section-title">Data management</h2>
         <p className="muted">
           Records stay in this browser unless you export them. Clearing site data will remove them.
@@ -119,13 +164,15 @@ export function SettingsPage() {
       <section className="card stack-gap prose-card">
         <h2 className="section-title">Apple Shortcut URL</h2>
         <p className="muted">
-          Your Shortcut should open a URL in this format (swap in your deployed domain):
+          Shortcut format (same domain as this app):
         </p>
         <pre className="code-block wrap">{templateUrl}</pre>
         <p className="muted">Example:</p>
         <pre className="code-block wrap">{sampleUrl}</pre>
         <p className="muted small-copy">
-          If any imported value is <strong>0</strong>, the app will ask you to correct it before saving.
+          Zeros trigger correction. For the Home Screen app, use{" "}
+          <strong>Import into this app</strong> above if Safari does not share data with your
+          installed icon.
         </p>
       </section>
 

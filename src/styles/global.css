@@ -59,15 +59,23 @@ a {
   }
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.brand-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
 .brand__title {
   font-weight: 600;
   letter-spacing: 0.01em;
-}
-
-.brand__subtitle {
-  display: block;
-  font-size: 0.85rem;
-  color: var(--muted);
 }
 
 .tab-nav {
@@ -184,6 +192,36 @@ a {
   border: 1px dashed var(--border);
   background: var(--accent-soft);
   color: var(--text);
+}
+
+.callout--compact {
+  padding: 0.65rem 0.85rem;
+  font-size: 0.95rem;
+}
+
+.home-empty-card {
+  text-align: center;
+  padding-top: 1.75rem;
+  padding-bottom: 1.75rem;
+}
+
+.home-empty-logo {
+  width: min(140px, 42vw);
+  height: auto;
+  margin: 0 auto 1.25rem;
+  display: block;
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+}
+
+.home-empty-title {
+  margin-bottom: 0.35rem;
+}
+
+.home-empty-line {
+  margin: 0 auto;
+  max-width: 22rem;
+  font-size: 0.98rem;
 }
 
 .today-header {
@@ -434,6 +472,17 @@ a {
   border-radius: 10px;
   border: 1px solid var(--border);
   font-size: 1rem;
+}
+
+.field-textarea {
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-size: 0.95rem;
+  font-family: inherit;
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 4.5rem;
 }
 
 .error-text {
