@@ -62,10 +62,18 @@ export type TenantResolution =
   | { ok: true; prefix: string }
   | { ok: false; status: number; error: string };
 
+function parseBodyToken(body: unknown): string | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const token = (body as Record<string, unknown>).syncToken;
+  if (typeof token !== "string") return null;
+  const trimmed = token.trim();
+  return trimmed.length >= 24 ? trimmed : null;
+}
+
 export function resolveTenantFromRequest(req: VercelRequest): TenantResolution {
-  const token = parseBearer(req.headers.authorization);
+  const token = parseBearer(req.headers.authorization) ?? parseBodyToken(req.body);
   if (!token) {
-    return { ok: false, status: 401, error: "Missing Authorization Bearer token." };
+    return { ok: false, status: 401, error: "Missing sync token." };
   }
   try {
     return { ok: true, prefix: safePrefix(token) };

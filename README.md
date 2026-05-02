@@ -65,7 +65,7 @@ http://localhost:5173/import?date=bad-date&sleep=7.4&fiber=38&exercise=28
 Use one Home Screen Shortcut icon as the app launcher. The Shortcut should:
 
 1. Format today's local date as `yyyy-MM-dd`.
-2. `GET` **`https://YOUR-VERCEL-APP.vercel.app/api/sync-status?today=yyyy-MM-dd`** with the Bearer token.
+2. `POST` to **`https://YOUR-VERCEL-APP.vercel.app/api/sync-status`** with JSON fields `syncToken` and `today`.
 3. For each returned date, read:
    - AutoSleep **Time Asleep** for the sleep session ending on that date.
    - Apple Health **Dietary Fiber** for that date.
@@ -79,15 +79,11 @@ The first run imports the latest 90 days. Later runs import today, missing dates
 
 `POST` **`https://YOUR-VERCEL-APP.vercel.app/api/ingest`**
 
-Headers:
-
-- **`Authorization`**: `Bearer <your-sync-token>`  
-- **`Content-Type`**: `application/json`
-
 Body (example):
 
 ```json
 {
+  "syncToken": "<your-sync-token>",
   "date": "2026-05-01",
   "sleep": 7.4,
   "fiber": 38,
@@ -98,7 +94,7 @@ Body (example):
 
 Zeros are accepted and score as zero. The server scores the day, rotates suggestions, merges into KV (last **90** days), and the PWA pulls when opened or refocused.
 
-Optional **`GET /api/data`** / **`PUT /api/data`** use the same Bearer token for full sync of records + settings + suggestion rotation state.
+Optional **`GET /api/data`** / **`PUT /api/data`** use the Bearer token header for full sync of records + settings + suggestion rotation state. The Shortcut-specific POST endpoints can use `syncToken` in the JSON body to avoid iOS Shortcuts header issues.
 
 ### Shortcut: Open URL (alternative)
 
@@ -147,7 +143,7 @@ On **Android**, behavior varies by browser and install mode; when unsure, use th
 | `dailyHealthScore.settings` | Sleep / fiber goals |
 | `dailyHealthScore.usedSuggestions` | Rotation state for suggestions |
 | `dailyHealthScore.usedDiscouragementParagraphs` | Rotation for “Feeling discouraged?” |
-| `dailyHealthScore.syncToken` | Bearer token for `/api/*` (optional; device-local only) |
+| `dailyHealthScore.syncToken` | Sync token for `/api/*` (optional; device-local only) |
 
 ## App icon
 

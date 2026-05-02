@@ -116,9 +116,9 @@ export function SettingsPage() {
   const sampleUrl = `${baseUrl}/import?date=2026-05-01&sleep=7.4&fiber=38&exercise=28`;
   const templateUrl = `${baseUrl}/import?date=yyyy-MM-dd&sleep=[sleep]&fiber=[fiber]&exercise=[exercise]`;
   const ingestUrl = `${baseUrl}/api/ingest`;
-  const syncStatusUrl = `${baseUrl}/api/sync-status?today=yyyy-MM-dd`;
+  const syncStatusUrl = `${baseUrl}/api/sync-status`;
   const sampleJson =
-    '{"date":"2026-05-01","sleep":7.4,"fiber":38,"exercise":28,"completionStatus":"complete"}';
+    '{"syncToken":"[token]","date":"2026-05-01","sleep":7.4,"fiber":38,"exercise":28,"completionStatus":"complete"}';
 
   return (
     <div className="page-content">
@@ -152,8 +152,8 @@ export function SettingsPage() {
         {syncToken ? (
           <>
             <p className="muted small-copy">
-              Add header <code className="inline-code">Authorization: Bearer [token]</code> (same
-              token everywhere—keep it secret).
+              For Shortcuts, include <code className="inline-code">syncToken</code> in the JSON body
+              instead of using an Authorization header (same token everywhere—keep it secret).
             </p>
             <pre className="code-block wrap">{syncToken}</pre>
             <p className="muted small-copy">POST URL:</p>
