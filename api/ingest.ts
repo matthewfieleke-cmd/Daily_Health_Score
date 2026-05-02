@@ -1,8 +1,8 @@
 ﻿import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { calculateScore, determinePrimaryFocus } from "../src/lib/scoring";
-import { composeDailyRecord } from "../src/lib/record-compose";
-import { advanceSuggestion } from "../src/lib/suggestion-engine";
-import { validateImportBody } from "../src/validation/import-body";
+import { calculateScore, determinePrimaryFocus } from "./lib/scoring";
+import { composeDailyRecord } from "./lib/record-compose";
+import { advanceSuggestion } from "./lib/suggestion-engine";
+import { validateImportBody } from "./lib/import-body";
 import { kvReady, loadTenant, resolveTenantFromRequest, saveTenant } from "./kv-tenant";
 import { trimRecords } from "./_shared";
 

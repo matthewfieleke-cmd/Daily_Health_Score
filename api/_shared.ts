@@ -2,7 +2,7 @@ import type {
   DailyRecord,
   UsedSuggestionsState,
   UserSettings,
-} from "../src/types/health";
+} from "./types/health";
 
 export const EMPTY_USED: UsedSuggestionsState = {
   sleep: [],

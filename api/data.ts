@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { UserSettings } from "../src/types/health";
+import type { UserSettings } from "./types/health";
 import { kvReady, loadTenant, resolveTenantFromRequest, saveTenant } from "./kv-tenant";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

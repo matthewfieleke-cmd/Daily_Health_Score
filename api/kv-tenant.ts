@@ -4,7 +4,7 @@ import type {
   DailyRecord,
   UsedSuggestionsState,
   UserSettings,
-} from "../src/types/health";
+} from "./types/health";
 import {
   DEFAULT_SETTINGS,
   EMPTY_USED,

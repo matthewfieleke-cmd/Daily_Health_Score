@@ -4,13 +4,5 @@
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
-  ],
-  "functions": {
-    "api/ingest.ts": {
-      "includeFiles": "src/**"
-    },
-    "api/data.ts": {
-      "includeFiles": "src/**"
-    }
-  }
+  ]
 }
