@@ -10,14 +10,33 @@ type SyncDate = {
   reason: "today" | "missing" | "partial";
 };
 
+function getTodayFromRequest(req: VercelRequest): string {
+  const queryToday = Array.isArray(req.query.today)
+    ? req.query.today[0]
+    : req.query.today;
+  if (queryToday && isValidDateKey(queryToday)) {
+    return queryToday;
+  }
+
+  const bodyToday =
+    req.body && typeof req.body === "object" && !Array.isArray(req.body)
+      ? (req.body as Record<string, unknown>).today
+      : undefined;
+  if (typeof bodyToday === "string" && isValidDateKey(bodyToday)) {
+    return bodyToday;
+  }
+
+  return localDateKey();
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!kvReady()) {
     res.status(503).json({ error: "Vercel KV is not configured." });
     return;
   }
 
-  if (req.method !== "GET") {
-    res.setHeader("Allow", "GET");
+  if (req.method !== "GET" && req.method !== "POST") {
+    res.setHeader("Allow", "GET, POST");
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
@@ -28,12 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const requestedToday = Array.isArray(req.query.today)
-    ? req.query.today[0]
-    : req.query.today;
-  const today = requestedToday && isValidDateKey(requestedToday)
-    ? requestedToday
-    : localDateKey();
+  const today = getTodayFromRequest(req);
 
   try {
     const tenant = await loadTenant(tenantInfo.prefix);
