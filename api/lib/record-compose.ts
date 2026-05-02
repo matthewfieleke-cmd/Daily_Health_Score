@@ -1,5 +1,5 @@
-import type { DailyRecord, PrimaryFocus, UserSettings } from "../types/health";
-import type { ScoreComputation } from "./scoring";
+import type { DailyRecord, PrimaryFocus, UserSettings } from "../types/health.js";
+import type { ScoreComputation } from "./scoring.js";
 
 /** Pure assembly of a daily record — safe for serverless (no storage side effects). */
 export function composeDailyRecord(

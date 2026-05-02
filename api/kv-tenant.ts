@@ -4,13 +4,13 @@ import type {
   DailyRecord,
   UsedSuggestionsState,
   UserSettings,
-} from "./types/health";
+} from "./types/health.js";
 import {
   DEFAULT_SETTINGS,
   EMPTY_USED,
   parseBearer,
   safePrefix,
-} from "./_shared";
+} from "./_shared.js";
 
 export function kvReady(): boolean {
   return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);

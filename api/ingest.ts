@@ -1,10 +1,10 @@
 ﻿import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { calculateScore, determinePrimaryFocus } from "./lib/scoring";
-import { composeDailyRecord } from "./lib/record-compose";
-import { advanceSuggestion } from "./lib/suggestion-engine";
-import { validateImportBody } from "./lib/import-body";
-import { kvReady, loadTenant, resolveTenantFromRequest, saveTenant } from "./kv-tenant";
-import { trimRecords } from "./_shared";
+import { calculateScore, determinePrimaryFocus } from "./lib/scoring.js";
+import { composeDailyRecord } from "./lib/record-compose.js";
+import { advanceSuggestion } from "./lib/suggestion-engine.js";
+import { validateImportBody } from "./lib/import-body.js";
+import { kvReady, loadTenant, resolveTenantFromRequest, saveTenant } from "./kv-tenant.js";
+import { trimRecords } from "./_shared.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!kvReady()) {

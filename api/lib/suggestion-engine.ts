@@ -1,4 +1,4 @@
-import type { PrimaryFocus, SuggestionCategory, UsedSuggestionsState } from "../types/health";
+import type { PrimaryFocus, SuggestionCategory, UsedSuggestionsState } from "../types/health.js";
 
 type SuggestionEntry = { id: string; text: string };
 

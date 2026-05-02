@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { UserSettings } from "./types/health";
-import { kvReady, loadTenant, resolveTenantFromRequest, saveTenant } from "./kv-tenant";
+import type { UserSettings } from "./types/health.js";
+import { kvReady, loadTenant, resolveTenantFromRequest, saveTenant } from "./kv-tenant.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!kvReady()) {

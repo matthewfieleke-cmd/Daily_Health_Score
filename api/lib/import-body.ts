@@ -1,5 +1,5 @@
-import { isValidDateKey } from "./dates";
-import type { ImportPayload } from "../types/health";
+import { isValidDateKey } from "./dates.js";
+import type { ImportPayload } from "../types/health.js";
 
 function parseNonNegativeNumber(raw: unknown): number | null {
   const n = typeof raw === "number" ? raw : Number(raw);

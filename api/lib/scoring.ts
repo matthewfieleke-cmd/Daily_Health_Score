@@ -1,5 +1,5 @@
-import type { PrimaryFocus } from "../types/health";
-import type { SleepGoalHours, FiberGoalGrams } from "../types/health";
+import type { PrimaryFocus } from "../types/health.js";
+import type { SleepGoalHours, FiberGoalGrams } from "../types/health.js";
 
 const EXERCISE_GOAL_MINUTES = 30;
 
