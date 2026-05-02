@@ -2,6 +2,7 @@ import type { DailyRecord, UserSettings } from "../types/health";
 import { composeDailyRecord } from "./record-compose";
 import { calculateScore, determinePrimaryFocus } from "./scoring";
 import { getNextSuggestion } from "./suggestions";
+import { localDateKey } from "./dates";
 
 export { composeDailyRecord } from "./record-compose";
 
@@ -11,6 +12,7 @@ export function buildDailyRecord(
     sleepHours: number;
     fiberGrams: number;
     exerciseMinutes: number;
+    completionStatus?: DailyRecord["completionStatus"];
   },
   settings: UserSettings,
   now: Date = new Date(),
@@ -31,7 +33,12 @@ export function buildDailyRecord(
   });
   const suggestion = getNextSuggestion(primaryFocus);
   return composeDailyRecord(
-    input,
+    {
+      ...input,
+      completionStatus:
+        input.completionStatus ??
+        (input.date === localDateKey(now) ? "partial" : "complete"),
+    },
     settings,
     computed,
     primaryFocus,

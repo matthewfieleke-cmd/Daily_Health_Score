@@ -16,11 +16,13 @@ export const DEFAULT_SETTINGS: UserSettings = {
   fiberGoal: 40,
 };
 
+export const RECORD_RETENTION_DAYS = 90;
+
 export function sortRecordsDesc(records: DailyRecord[]): DailyRecord[] {
   return [...records].sort((a, b) => b.date.localeCompare(a.date));
 }
 
-export function trimRecords(records: DailyRecord[], max = 30): DailyRecord[] {
+export function trimRecords(records: DailyRecord[], max = RECORD_RETENTION_DAYS): DailyRecord[] {
   return sortRecordsDesc(records).slice(0, max);
 }
 

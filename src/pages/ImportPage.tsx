@@ -4,7 +4,31 @@ import { applyImportPayload } from "../lib/cloud-sync";
 import { validateImportParams } from "../lib/validation";
 import { PENDING_CORRECTION_KEY } from "../lib/storage";
 
-let lastHandledImportQuery = "";
+type ImportDestination = {
+  to: "/today" | "/invalid-import" | "/correct-import";
+  state?: unknown;
+};
+
+const importRuns = new Map<string, Promise<ImportDestination>>();
+
+async function processImport(searchParams: URLSearchParams): Promise<ImportDestination> {
+  const result = validateImportParams(searchParams);
+  if (!result.ok) {
+    return { to: "/invalid-import" };
+  }
+
+  const { date, sleep, fiber, exercise } = result.data;
+  if (sleep === 0 || fiber === 0 || exercise === 0) {
+    sessionStorage.setItem(
+      PENDING_CORRECTION_KEY,
+      JSON.stringify({ date, sleep, fiber, exercise }),
+    );
+    return { to: "/correct-import", state: result.data };
+  }
+
+  await applyImportPayload(result.data);
+  return { to: "/today" };
+}
 
 export function ImportPage() {
   const [searchParams] = useSearchParams();
@@ -13,30 +37,20 @@ export function ImportPage() {
   useEffect(() => {
     let cancelled = false;
     const qs = searchParams.toString();
-    if (qs === lastHandledImportQuery) return;
-    lastHandledImportQuery = qs;
+    const existingRun = importRuns.get(qs);
+    const run = existingRun ?? processImport(new URLSearchParams(searchParams));
+    if (!existingRun) {
+      importRuns.set(qs, run);
+      run.finally(() => {
+        window.setTimeout(() => importRuns.delete(qs), 0);
+      });
+    }
 
     void (async () => {
-      const result = validateImportParams(searchParams);
-      if (!result.ok) {
-        if (!cancelled) navigate("/invalid-import", { replace: true });
-        return;
+      const destination = await run;
+      if (!cancelled) {
+        navigate(destination.to, { replace: true, state: destination.state });
       }
-
-      const { date, sleep, fiber, exercise } = result.data;
-      if (sleep === 0 || fiber === 0 || exercise === 0) {
-        sessionStorage.setItem(
-          PENDING_CORRECTION_KEY,
-          JSON.stringify({ date, sleep, fiber, exercise }),
-        );
-        if (!cancelled) {
-          navigate("/correct-import", { replace: true, state: result.data });
-        }
-        return;
-      }
-
-      await applyImportPayload(result.data);
-      if (!cancelled) navigate("/today", { replace: true });
     })();
 
     return () => {

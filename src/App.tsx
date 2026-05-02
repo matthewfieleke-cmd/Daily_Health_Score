@@ -4,6 +4,7 @@ import { ImportPage } from "./pages/ImportPage";
 import { InvalidImportPage } from "./pages/InvalidImportPage";
 import { ManualCorrectionPage } from "./pages/ManualCorrectionPage";
 import { MonthPage } from "./pages/MonthPage";
+import { NinetyDayPage } from "./pages/NinetyDayPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TodayPage } from "./pages/TodayPage";
 import { WeekPage } from "./pages/WeekPage";
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="/today" element={<TodayPage />} />
           <Route path="/week" element={<WeekPage />} />
           <Route path="/month" element={<MonthPage />} />
+          <Route path="/ninety" element={<NinetyDayPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/today" replace />} />

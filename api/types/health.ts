@@ -8,6 +8,8 @@ export type UserSettings = {
   fiberGoal: FiberGoalGrams;
 };
 
+export type RecordCompletionStatus = "partial" | "complete";
+
 export type DailyRecord = {
   date: string;
   sleepHours: number;
@@ -25,6 +27,7 @@ export type DailyRecord = {
   exercisePercent: number;
   primaryFocus: PrimaryFocus;
   suggestion: string;
+  completionStatus?: RecordCompletionStatus;
   createdAt: string;
   updatedAt: string;
 };
@@ -34,6 +37,7 @@ export type ImportPayload = {
   sleep: number;
   fiber: number;
   exercise: number;
+  completionStatus?: RecordCompletionStatus;
 };
 
 export type SuggestionCategory = "sleep" | "fiber" | "exercise" | "maintain";

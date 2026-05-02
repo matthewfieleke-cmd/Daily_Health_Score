@@ -26,5 +26,9 @@ export function validateImportBody(body: unknown): BodyImportResult {
   if (sleep === null || fiber === null || exercise === null) {
     return { ok: false };
   }
-  return { ok: true, data: { date, sleep, fiber, exercise } };
+  const completionStatus =
+    o.completionStatus === "partial" || o.completionStatus === "complete"
+      ? o.completionStatus
+      : undefined;
+  return { ok: true, data: { date, sleep, fiber, exercise, completionStatus } };
 }

@@ -1,6 +1,6 @@
 # Daily Health Score
 
-Local-first Progressive Web App that imports daily sleep, dietary fiber, and Apple Health **Exercise Minutes** from an Apple Shortcut via a URL, scores them against adjustable goals, stores the last **30 days** in **localStorage**, and shows calm Today / 7-Day / 30-Day dashboards plus Settings.
+Local-first Progressive Web App that imports daily sleep, dietary fiber, and Apple Health **Exercise Minutes** from an Apple Shortcut, scores them against adjustable goals, stores the last **90 days** in **localStorage**, and shows calm Today / 7-Day / 30-Day / 90-Day dashboards plus Settings.
 
 ## Tech stack
 
@@ -11,7 +11,7 @@ Local-first Progressive Web App that imports daily sleep, dietary fiber, and App
 - PWA `manifest.webmanifest` + **`public/DHS.png`** as install / favicon asset  
 - Deployed on **Vercel**: static SPA plus **Vercel Functions** under `/api/*` backed by **Vercel KV**
 
-Optional cloud sync: generate a **Bearer token** in **Settings** so Shortcuts can **POST** JSON to `/api/ingest`; data is stored in KV and the **Add to Home Screen** app pulls it when you return to the tab.
+Optional cloud sync: generate a **Bearer token** in **Settings** so a Home Screen Shortcut can ask `/api/sync-status` what dates need refresh, **POST** JSON to `/api/ingest`, and then open the PWA. Data is stored in KV and the **Add to Home Screen** app pulls it when opened.
 
 There is no traditional account system, HealthKit in-app usage, or AI APIs.
 
@@ -60,7 +60,22 @@ http://localhost:5173/import?date=bad-date&sleep=7.4&fiber=38&exercise=28
 2. Connect it to this project so **`KV_REST_API_URL`** and **`KV_REST_API_TOKEN`** are injected at build/runtime (see also **`.env.example`** for local preview).  
 3. Open the deployed app → **Settings** → **Generate sync token** (same value everywhere—keep it secret).
 
-### Shortcut: POST ingest (recommended)
+### Shortcut: Home Screen launcher (recommended)
+
+Use one Home Screen Shortcut icon as the app launcher. The Shortcut should:
+
+1. Format today's local date as `yyyy-MM-dd`.
+2. `GET` **`https://YOUR-VERCEL-APP.vercel.app/api/sync-status?today=yyyy-MM-dd`** with the Bearer token.
+3. For each returned date, read:
+   - AutoSleep **Time Asleep** for the sleep session ending on that date.
+   - Apple Health **Dietary Fiber** for that date.
+   - Apple Health **Exercise Minutes** for that date.
+4. `POST` each date to `/api/ingest`.
+5. Open the PWA URL.
+
+The first run imports the latest 90 days. Later runs import today, missing dates, and dates previously marked partial. Today is partial; prior dates are complete.
+
+### Shortcut: POST ingest
 
 `POST` **`https://YOUR-VERCEL-APP.vercel.app/api/ingest`**
 
@@ -72,10 +87,16 @@ Headers:
 Body (example):
 
 ```json
-{ "date": "2026-05-01", "sleep": 7.4, "fiber": 38, "exercise": 28 }
+{
+  "date": "2026-05-01",
+  "sleep": 7.4,
+  "fiber": 38,
+  "exercise": 28,
+  "completionStatus": "complete"
+}
 ```
 
-Zeros are rejected (`sleep`, `fiber`, `exercise` must all be &gt; 0). The server scores the day, rotates suggestions, merges into KV (last **30** days), and the PWA pulls when you focus the tab again.
+Zeros are accepted and score as zero. The server scores the day, rotates suggestions, merges into KV (last **90** days), and the PWA pulls when opened or refocused.
 
 Optional **`GET /api/data`** / **`PUT /api/data`** use the same Bearer token for full sync of records + settings + suggestion rotation state.
 
@@ -91,18 +112,11 @@ Example:
 https://YOUR-VERCEL-APP.vercel.app/import?date=2026-05-01&sleep=7.4&fiber=38&exercise=28
 ```
 
-## Apple Shortcut automation (8 PM)
-
-1. **Shortcuts** → **Automation** → **+**  
-2. **Time of Day** → **8:00 PM** → **Daily**  
-3. Action: **Run Shortcut** → choose your Daily Health Score shortcut  
-4. Prefer **Run Immediately** / disable **Ask Before Running** when available  
-
 ## Shortcuts vs “Add to Home Screen” (where data is stored)
 
 On **iOS**, a Shortcut that **Opens URLs** usually opens **Safari**, not the standalone web app created with **Add to Home Screen**. Safari and that standalone app can use **different storage**, so data imported via the Shortcut might **not** show up in the Home Screen icon.
 
-**Recommended fix:** Configure **POST `/api/ingest`** with your Settings sync token so metrics land in **Vercel KV**; open the **Home Screen** app afterward and data syncs into that client automatically.
+**Recommended fix:** Use the Home Screen Shortcut launcher. It sends metrics to **Vercel KV** first, then opens the PWA so the app pulls the same data regardless of browser storage buckets.
 
 **Manual URL fix:** In the **installed** app, open **Settings → Import into this app**, paste the **full import URL**, and tap **Run import**. That executes `/import` in the **same** client you use for Today (same `localStorage`).
 
@@ -118,9 +132,11 @@ On **Android**, behavior varies by browser and install mode; when unsure, use th
 ## Behavior notes
 
 - If **sleep**, **fiber**, or **exercise** is **0** in the URL, the app opens **manual correction** for only the zero fields (values must be &gt; 0 before save).  
+- If **sleep**, **fiber**, or **exercise** is **0** via the cloud API, the value is accepted and scores as zero.  
 - Duplicate **date** imports **overwrite** the prior record.  
-- Only the **most recent 30** calendar-dated records are kept.  
-- With **cloud sync** enabled, records also sync to **KV** (last **30** days server-side); local **localStorage** still holds the working copy after pull.  
+- Only the **most recent 90** calendar-dated records are kept.  
+- With **cloud sync** enabled, records also sync to **KV** (last **90** days server-side); local **localStorage** still holds the working copy after pull.  
+- Today is marked **partial**. Prior dates imported after they end are marked **complete** and are not re-imported unless they were missing or previously partial.
 - **Exercise goal** is fixed at **30 minutes** (matching the scoring formula).
 
 ## LocalStorage keys

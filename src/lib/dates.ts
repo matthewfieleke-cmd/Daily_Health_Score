@@ -25,6 +25,13 @@ export function formatDisplayDate(dateKey: string): string {
   });
 }
 
+export function addDays(dateKey: string, days: number): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  return localDateKey(dt);
+}
+
 /** Inclusive rolling window ending on `anchor` (local midnight semantics via Date parts). */
 export function getDateKeysForRollingWindow(
   days: number,

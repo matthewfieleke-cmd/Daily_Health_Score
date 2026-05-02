@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -10,7 +11,18 @@ import { DHS_STORAGE_UPDATED } from "../lib/storage-events";
 
 export function RecordsRefreshProvider({ children }: { children: ReactNode }) {
   const [version, setVersion] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
+
+  const pull = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const ok = await pullCloudIntoLocal();
+      if (ok) bump();
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [bump]);
 
   useEffect(() => {
     window.addEventListener(DHS_STORAGE_UPDATED, bump);
@@ -20,20 +32,22 @@ export function RecordsRefreshProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     function onVisibility() {
       if (document.visibilityState !== "visible") return;
-      void pullCloudIntoLocal().then((ok) => {
-        if (ok) bump();
-      });
+      void pull();
     }
     document.addEventListener("visibilitychange", onVisibility);
-    void pullCloudIntoLocal().then((ok) => {
-      if (ok) bump();
-    });
-    return () =>
+    const initialPull = window.setTimeout(() => {
+      void pull();
+    }, 0);
+    return () => {
+      window.clearTimeout(initialPull);
       document.removeEventListener("visibilitychange", onVisibility);
-  }, [bump]);
+    };
+  }, [pull]);
+
+  const value = useMemo(() => ({ version, isSyncing }), [version, isSyncing]);
 
   return (
-    <RecordsVersionContext.Provider value={version}>
+    <RecordsVersionContext.Provider value={value}>
       {children}
     </RecordsVersionContext.Provider>
   );

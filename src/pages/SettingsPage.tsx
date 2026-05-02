@@ -116,8 +116,9 @@ export function SettingsPage() {
   const sampleUrl = `${baseUrl}/import?date=2026-05-01&sleep=7.4&fiber=38&exercise=28`;
   const templateUrl = `${baseUrl}/import?date=yyyy-MM-dd&sleep=[sleep]&fiber=[fiber]&exercise=[exercise]`;
   const ingestUrl = `${baseUrl}/api/ingest`;
+  const syncStatusUrl = `${baseUrl}/api/sync-status?today=yyyy-MM-dd`;
   const sampleJson =
-    '{"date":"2026-05-01","sleep":7.4,"fiber":38,"exercise":28}';
+    '{"date":"2026-05-01","sleep":7.4,"fiber":38,"exercise":28,"completionStatus":"complete"}';
 
   return (
     <div className="page-content">
@@ -127,8 +128,8 @@ export function SettingsPage() {
         <h2 className="section-title">Cloud backup (Shortcut POST)</h2>
         <p className="muted small-copy">
           Connect Vercel KV on your deployment. Your Shortcut can POST daily metrics to the API so
-          the Home Screen app picks them up on next open (pull runs automatically when you return
-          to the tab).
+          the Home Screen app picks them up on next open. Launch from your Home Screen Shortcut icon
+          to refresh Health data before the PWA opens.
         </p>
         <div className="button-row">
           <button type="button" className="btn-primary" onClick={generateSyncToken}>
@@ -157,6 +158,8 @@ export function SettingsPage() {
             <pre className="code-block wrap">{syncToken}</pre>
             <p className="muted small-copy">POST URL:</p>
             <pre className="code-block wrap">{ingestUrl}</pre>
+            <p className="muted small-copy">Sync status URL:</p>
+            <pre className="code-block wrap">{syncStatusUrl}</pre>
             <p className="muted small-copy">JSON body example:</p>
             <pre className="code-block wrap">{sampleJson}</pre>
           </>
@@ -252,9 +255,11 @@ export function SettingsPage() {
       <section className="card stack-gap prose-card">
         <h2 className="section-title">Apple Shortcut</h2>
         <p className="muted">
-          <strong>Recommended (cloud):</strong> POST JSON to{" "}
-          <code className="inline-code">{ingestUrl}</code> with Bearer token and body matching the
-          example above (zeros not allowed—fix zero readings before POST).
+          <strong>Recommended launcher:</strong> Add one Shortcut to your Home Screen. It should GET{" "}
+          <code className="inline-code">/api/sync-status</code> with today’s local date, collect
+          AutoSleep Time Asleep plus Apple Health fiber and exercise for each returned date, POST
+          each result to <code className="inline-code">{ingestUrl}</code>, then open this PWA.
+          Zeros are allowed and score as zero.
         </p>
         <p className="muted">
           <strong>Alternative (browser URL):</strong>
@@ -263,19 +268,9 @@ export function SettingsPage() {
         <p className="muted">Example:</p>
         <pre className="code-block wrap">{sampleUrl}</pre>
         <p className="muted small-copy">
-          Zeros trigger correction in the app. With a sync token, prefer POST so data lands in KV for
-          your Home Screen build.
+          URL imports still trigger correction for zeros. With a sync token, prefer POST so data
+          lands in KV for your Home Screen build.
         </p>
-      </section>
-
-      <section className="card stack-gap prose-card">
-        <h2 className="section-title">8:00 PM automation (iOS)</h2>
-        <ol className="numbered-list">
-          <li>Open the Shortcuts app → Automation.</li>
-          <li>Create Personal Automation → Time of Day → 8:00 PM → Daily.</li>
-          <li>Action: Run Shortcut → choose your Daily Health Score shortcut.</li>
-          <li>Turn off Ask Before Running / use Run Immediately where available.</li>
-        </ol>
       </section>
     </div>
   );

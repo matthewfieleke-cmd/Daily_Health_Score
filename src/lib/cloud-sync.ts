@@ -95,6 +95,7 @@ export async function pushRemoteIngest(payload: ImportPayload): Promise<boolean>
         sleep: payload.sleep,
         fiber: payload.fiber,
         exercise: payload.exercise,
+        completionStatus: payload.completionStatus,
       }),
     });
     return res.ok;
@@ -120,6 +121,7 @@ export async function applyImportPayload(payload: ImportPayload): Promise<void> 
       sleepHours: payload.sleep,
       fiberGrams: payload.fiber,
       exerciseMinutes: payload.exercise,
+      completionStatus: payload.completionStatus,
     },
     settings,
   );

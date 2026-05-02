@@ -16,6 +16,7 @@ export const STORAGE_KEYS = {
 } as const;
 
 export const PENDING_CORRECTION_KEY = "dailyHealthScore.pendingCorrection";
+export const RECORD_RETENTION_DAYS = 90;
 
 const DEFAULT_SETTINGS: UserSettings = {
   sleepGoal: 7.5,
@@ -84,7 +85,7 @@ export function sortRecordsDesc(records: DailyRecord[]): DailyRecord[] {
   return [...records].sort((a, b) => b.date.localeCompare(a.date));
 }
 
-function trimToLatestDates(records: DailyRecord[], max = 30): DailyRecord[] {
+function trimToLatestDates(records: DailyRecord[], max = RECORD_RETENTION_DAYS): DailyRecord[] {
   const sorted = sortRecordsDesc(records);
   return sorted.slice(0, max);
 }
@@ -98,7 +99,7 @@ export function saveDailyRecord(record: DailyRecord): void {
     updatedAt: record.updatedAt,
   };
   const without = existing.filter((r) => r.date !== record.date);
-  const next = trimToLatestDates([merged, ...without], 30);
+  const next = trimToLatestDates([merged, ...without]);
   localStorage.setItem(STORAGE_KEYS.records, JSON.stringify(next));
   notifyRecordsUpdated();
 }

@@ -9,7 +9,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const tenantInfo = resolveTenantFromRequest(req);
-  if (!tenantInfo.ok) {
+  if (tenantInfo.ok === false) {
     res.status(tenantInfo.status).json({ error: tenantInfo.error });
     return;
   }

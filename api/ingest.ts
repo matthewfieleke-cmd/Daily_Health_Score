@@ -5,6 +5,7 @@ import { advanceSuggestion } from "./lib/suggestion-engine.js";
 import { validateImportBody } from "./lib/import-body.js";
 import { kvReady, loadTenant, resolveTenantFromRequest, saveTenant } from "./kv-tenant.js";
 import { trimRecords } from "./_shared.js";
+import { localDateKey } from "./lib/dates.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!kvReady()) {
@@ -19,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const tenantInfo = resolveTenantFromRequest(req);
-  if (!tenantInfo.ok) {
+  if (tenantInfo.ok === false) {
     res.status(tenantInfo.status).json({ error: tenantInfo.error });
     return;
   }
@@ -34,13 +35,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { date, sleep, fiber, exercise } = parsed.data;
-  if (sleep === 0 || fiber === 0 || exercise === 0) {
-    res.status(400).json({
-      error:
-        "Zeros are not accepted via API. Correct values in the app or adjust your Shortcut.",
-    });
-    return;
-  }
+  const completionStatus =
+    parsed.data.completionStatus ??
+    (date === localDateKey() ? "partial" : "complete");
 
   try {
     const tenant = await loadTenant(prefix);
@@ -65,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sleepHours: sleep,
         fiberGrams: fiber,
         exerciseMinutes: exercise,
+        completionStatus,
       },
       settings,
       computed,
@@ -82,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     const without = tenant.records.filter((r) => r.date !== date);
-    tenant.records = trimRecords([merged, ...without], 30);
+    tenant.records = trimRecords([merged, ...without]);
     tenant.usedSuggestions = nextState;
 
     await saveTenant(prefix, tenant);

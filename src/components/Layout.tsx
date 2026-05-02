@@ -1,12 +1,20 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { RecordsRefreshProvider } from "../context/RecordsRefresh";
+import { useRecordsSyncStatus } from "../context/records-version-context";
 
 const nav = [
   { to: "/today", label: "Today" },
   { to: "/week", label: "7-Day" },
   { to: "/month", label: "30-Day" },
+  { to: "/ninety", label: "90-Day" },
   { to: "/settings", label: "Settings" },
 ];
+
+function SyncStatusBanner() {
+  const isSyncing = useRecordsSyncStatus();
+  if (!isSyncing) return null;
+  return <p className="callout callout--compact">Syncing health data...</p>;
+}
 
 export function Layout() {
   return (
@@ -38,6 +46,7 @@ export function Layout() {
       </header>
       <main className="main-region">
         <RecordsRefreshProvider>
+          <SyncStatusBanner />
           <Outlet />
         </RecordsRefreshProvider>
       </main>

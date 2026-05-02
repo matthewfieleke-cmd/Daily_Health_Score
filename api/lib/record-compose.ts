@@ -8,6 +8,7 @@ export function composeDailyRecord(
     sleepHours: number;
     fiberGrams: number;
     exerciseMinutes: number;
+    completionStatus?: DailyRecord["completionStatus"];
   },
   settings: UserSettings,
   computed: ScoreComputation,
@@ -33,6 +34,7 @@ export function composeDailyRecord(
     exercisePercent: computed.exercisePercent,
     primaryFocus,
     suggestion,
+    completionStatus: input.completionStatus,
     createdAt: iso,
     updatedAt: iso,
   };
