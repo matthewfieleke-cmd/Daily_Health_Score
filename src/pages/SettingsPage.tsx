@@ -116,9 +116,8 @@ export function SettingsPage() {
   const sampleUrl = `${baseUrl}/import?date=2026-05-01&sleep=7.4&fiber=38&exercise=28`;
   const templateUrl = `${baseUrl}/import?date=yyyy-MM-dd&sleep=[sleep]&fiber=[fiber]&exercise=[exercise]`;
   const ingestUrl = `${baseUrl}/api/ingest`;
-  const syncStatusUrl = `${baseUrl}/api/sync-status`;
   const sampleJson =
-    '{"syncToken":"[token]","date":"2026-05-01","sleep":7.4,"fiber":38,"exercise":28,"completionStatus":"complete"}';
+    '{"syncToken":"[token]","date":"yyyy-MM-dd","sleep":7.4,"fiber":38,"exercise":28}';
 
   return (
     <div className="page-content">
@@ -158,8 +157,6 @@ export function SettingsPage() {
             <pre className="code-block wrap">{syncToken}</pre>
             <p className="muted small-copy">POST URL:</p>
             <pre className="code-block wrap">{ingestUrl}</pre>
-            <p className="muted small-copy">Sync status URL:</p>
-            <pre className="code-block wrap">{syncStatusUrl}</pre>
             <p className="muted small-copy">JSON body example:</p>
             <pre className="code-block wrap">{sampleJson}</pre>
           </>
@@ -255,11 +252,10 @@ export function SettingsPage() {
       <section className="card stack-gap prose-card">
         <h2 className="section-title">Apple Shortcut</h2>
         <p className="muted">
-          <strong>Recommended launcher:</strong> Add one Shortcut to your Home Screen. It should GET{" "}
-          <code className="inline-code">/api/sync-status</code> with today’s local date, collect
-          AutoSleep Time Asleep plus Apple Health fiber and exercise for each returned date, POST
-          each result to <code className="inline-code">{ingestUrl}</code>, then open this PWA.
-          Zeros are allowed and score as zero.
+          <strong>Recommended launcher:</strong> Add one Shortcut to your Home Screen. It should
+          collect AutoSleep Time Asleep plus today’s Apple Health fiber and exercise, POST one record
+          to <code className="inline-code">{ingestUrl}</code>, then open this PWA. Running it again
+          the same day overwrites today’s record. Zeros are allowed and score as zero.
         </p>
         <p className="muted">
           <strong>Alternative (browser URL):</strong>

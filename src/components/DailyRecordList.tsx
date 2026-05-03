@@ -17,12 +17,7 @@ export function DailyRecordList({
       <ul className="record-list__items">
         {records.map((r) => (
           <li key={r.date} className="record-list__row">
-            <div className="record-list__date">
-              {formatDisplayDate(r.date)}
-              {r.completionStatus === "partial" ? (
-                <span className="record-list__badge">Partial</span>
-              ) : null}
-            </div>
+            <div className="record-list__date">{formatDisplayDate(r.date)}</div>
             <div className="record-list__stats">
               Score {formatDisplayScore(r.totalScore)} / 10 · Sleep {r.sleepHours} hr · Fiber{" "}
               {r.fiberGrams} g · Exercise {r.exerciseMinutes} min

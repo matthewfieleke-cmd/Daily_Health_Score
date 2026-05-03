@@ -11,7 +11,7 @@ Local-first Progressive Web App that imports daily sleep, dietary fiber, and App
 - PWA `manifest.webmanifest` + **`public/DHS.png`** as install / favicon asset  
 - Deployed on **Vercel**: static SPA plus **Vercel Functions** under `/api/*` backed by **Vercel KV**
 
-Optional cloud sync: generate a **Bearer token** in **Settings** so a Home Screen Shortcut can ask `/api/sync-status` what dates need refresh, **POST** JSON to `/api/ingest`, and then open the PWA. Data is stored in KV and the **Add to Home Screen** app pulls it when opened.
+Optional cloud sync: generate a **Bearer token** in **Settings** so a Home Screen Shortcut can **POST** today’s metrics to `/api/ingest`, and then open the PWA. Data is stored in KV and the **Add to Home Screen** app pulls it when opened.
 
 There is no traditional account system, HealthKit in-app usage, or AI APIs.
 
@@ -65,15 +65,13 @@ http://localhost:5173/import?date=bad-date&sleep=7.4&fiber=38&exercise=28
 Use one Home Screen Shortcut icon as the app launcher. The Shortcut should:
 
 1. Format today's local date as `yyyy-MM-dd`.
-2. `POST` to **`https://YOUR-VERCEL-APP.vercel.app/api/sync-status`** with JSON fields `syncToken` and `today`.
-3. For each returned date, read:
-   - AutoSleep **Time Asleep** for the sleep session ending on that date.
-   - Apple Health **Dietary Fiber** for that date.
-   - Apple Health **Exercise Minutes** for that date.
-4. `POST` each date to `/api/ingest`.
-5. Open the PWA URL.
+2. Read AutoSleep **Time Asleep** for the latest sleep.
+3. Read Apple Health **Dietary Fiber** for today.
+4. Read Apple Health **Exercise Minutes** for today.
+5. `POST` one record to `/api/ingest`.
+6. Open the PWA URL.
 
-The first run imports the latest 90 days. Later runs import today, missing dates, and dates previously marked partial. Today is partial; prior dates are complete.
+Each run overwrites today’s record. The app stores the latest 90 days moving forward; skipped days are not backfilled.
 
 ### Shortcut: POST ingest
 
@@ -84,17 +82,16 @@ Body (example):
 ```json
 {
   "syncToken": "<your-sync-token>",
-  "date": "2026-05-01",
+  "date": "yyyy-MM-dd",
   "sleep": 7.4,
   "fiber": 38,
-  "exercise": 28,
-  "completionStatus": "complete"
+  "exercise": 28
 }
 ```
 
 Zeros are accepted and score as zero. The server scores the day, rotates suggestions, merges into KV (last **90** days), and the PWA pulls when opened or refocused.
 
-Optional **`GET /api/data`** / **`PUT /api/data`** use the Bearer token header for full sync of records + settings + suggestion rotation state. The Shortcut-specific POST endpoints can use `syncToken` in the JSON body to avoid iOS Shortcuts header issues.
+Optional **`GET /api/data`** / **`PUT /api/data`** use the Bearer token header for full sync of records + settings + suggestion rotation state. The Shortcut-specific ingest endpoint can use `syncToken` in the JSON body to avoid iOS Shortcuts header issues.
 
 ### Shortcut: Open URL (alternative)
 
@@ -132,7 +129,7 @@ On **Android**, behavior varies by browser and install mode; when unsure, use th
 - Duplicate **date** imports **overwrite** the prior record.  
 - Only the **most recent 90** calendar-dated records are kept.  
 - With **cloud sync** enabled, records also sync to **KV** (last **90** days server-side); local **localStorage** still holds the working copy after pull.  
-- Today is marked **partial**. Prior dates imported after they end are marked **complete** and are not re-imported unless they were missing or previously partial.
+- The Shortcut imports today only. If you skip a day, that day is not backfilled.
 - **Exercise goal** is fixed at **30 minutes** (matching the scoring formula).
 
 ## LocalStorage keys

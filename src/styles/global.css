@@ -357,21 +357,7 @@ a {
 }
 
 .record-list__date {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
   font-weight: 600;
-}
-
-.record-list__badge {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 0.1rem 0.45rem;
-  text-transform: uppercase;
 }
 
 .record-list__stats {
