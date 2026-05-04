@@ -8,6 +8,7 @@ import { formatDisplayDate, localDateKey } from "../lib/dates";
 import { primaryFocusLabel } from "../lib/display";
 import { formatDisplayScore } from "../lib/scoring";
 import { getNextDiscouragementParagraph } from "../lib/discouragement";
+import { getNextMotivationParagraph } from "../lib/motivation";
 import { loadRecords, sortRecordsDesc } from "../lib/storage";
 
 export function TodayPage() {
@@ -23,10 +24,17 @@ export function TodayPage() {
 
   const [discOpen, setDiscOpen] = useState(false);
   const [discText, setDiscText] = useState<string | null>(null);
+  const [motivOpen, setMotivOpen] = useState(false);
+  const [motivText, setMotivText] = useState<string | null>(null);
 
   function openDiscouragement() {
     setDiscText(getNextDiscouragementParagraph());
     setDiscOpen(true);
+  }
+
+  function openMotivation() {
+    setMotivText(getNextMotivationParagraph());
+    setMotivOpen(true);
   }
 
   if (!display) {
@@ -57,9 +65,14 @@ export function TodayPage() {
           eyebrow={formatDisplayDate(display.date)}
           score={formatDisplayScore(display.totalScore)}
         />
-        <button type="button" className="btn-ghost" onClick={openDiscouragement}>
-          Feeling discouraged?
-        </button>
+        <div className="today-header-actions">
+          <button type="button" className="btn-ghost" onClick={openDiscouragement}>
+            Feeling discouraged?
+          </button>
+          <button type="button" className="btn-ghost" onClick={openMotivation}>
+            Need motivation?
+          </button>
+        </div>
       </header>
 
       <section className="metric-grid">
@@ -102,6 +115,13 @@ export function TodayPage() {
         open={discOpen}
         text={discText}
         onClose={() => setDiscOpen(false)}
+      />
+      <DiscouragementModal
+        open={motivOpen}
+        text={motivText}
+        title="Take responsibility"
+        titleId="motiv-title"
+        onClose={() => setMotivOpen(false)}
       />
     </div>
   );

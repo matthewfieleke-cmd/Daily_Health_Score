@@ -140,6 +140,7 @@ On **Android**, behavior varies by browser and install mode; when unsure, use th
 | `dailyHealthScore.settings` | Sleep / fiber goals |
 | `dailyHealthScore.usedSuggestions` | Rotation state for suggestions |
 | `dailyHealthScore.usedDiscouragementParagraphs` | Rotation for “Feeling discouraged?” |
+| `dailyHealthScore.usedMotivationParagraphs` | Rotation for “Need motivation?” |
 | `dailyHealthScore.syncToken` | Sync token for `/api/*` (optional; device-local only) |
 
 ## App icon

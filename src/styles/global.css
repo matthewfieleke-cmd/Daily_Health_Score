@@ -242,6 +242,13 @@ a {
   }
 }
 
+.today-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+}
+
 .score-hero {
   margin: 0.25rem 0 0;
   font-size: clamp(2.6rem, 8vw, 3.4rem);

@@ -13,6 +13,7 @@ export const STORAGE_KEYS = {
   settings: "dailyHealthScore.settings",
   usedSuggestions: "dailyHealthScore.usedSuggestions",
   usedDiscouragementParagraphs: "dailyHealthScore.usedDiscouragementParagraphs",
+  usedMotivationParagraphs: "dailyHealthScore.usedMotivationParagraphs",
 } as const;
 
 export const PENDING_CORRECTION_KEY = "dailyHealthScore.pendingCorrection";
@@ -113,6 +114,7 @@ export function clearAllLocalData(): void {
   localStorage.removeItem(STORAGE_KEYS.settings);
   localStorage.removeItem(STORAGE_KEYS.usedSuggestions);
   localStorage.removeItem(STORAGE_KEYS.usedDiscouragementParagraphs);
+  localStorage.removeItem(STORAGE_KEYS.usedMotivationParagraphs);
   sessionStorage.removeItem(PENDING_CORRECTION_KEY);
   notifyRecordsUpdated();
 }
@@ -138,6 +140,14 @@ export function persistUsedSuggestions(state: UsedSuggestionsState): void {
 export function loadUsedDiscouragementIds(): string[] {
   const parsed = safeParse<unknown>(
     localStorage.getItem(STORAGE_KEYS.usedDiscouragementParagraphs),
+    [],
+  );
+  return Array.isArray(parsed) ? (parsed as string[]) : [];
+}
+
+export function loadUsedMotivationIds(): string[] {
+  const parsed = safeParse<unknown>(
+    localStorage.getItem(STORAGE_KEYS.usedMotivationParagraphs),
     [],
   );
   return Array.isArray(parsed) ? (parsed as string[]) : [];
