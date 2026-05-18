@@ -65,7 +65,7 @@ http://localhost:5173/import?date=bad-date&sleep=7.4&fiber=38&exercise=28
 Use one Home Screen Shortcut icon as the app launcher. The Shortcut should:
 
 1. Format today's local date as `yyyy-MM-dd`.
-2. Read AutoSleep **Time Asleep** for the latest sleep.
+2. Read AutoSleep **Time Asleep** for the sleep episode that belongs to the **import date** (usually the night that ended when you woke up that morning—not a leftover placeholder value).
 3. Read Apple Health **Dietary Fiber** for today.
 4. Read Apple Health **Exercise Minutes** for today.
 5. `POST` one record to `/api/ingest`.
@@ -77,17 +77,19 @@ Each run overwrites today’s record. The app stores the latest 90 days moving f
 
 `POST` **`https://YOUR-VERCEL-APP.vercel.app/api/ingest`**
 
-Body (example):
+Body (recommended field names—real AutoSleep hours should map into **`sleepHours`**, not a fixed number left in **`sleep`**):
 
 ```json
 {
   "syncToken": "<your-sync-token>",
   "date": "yyyy-MM-dd",
-  "sleep": 7.4,
-  "fiber": 38,
-  "exercise": 28
+  "sleepHours": 7.4,
+  "fiberGrams": 38,
+  "exerciseMinutes": 28
 }
 ```
+
+The same numbers may still be sent as `sleep`, `fiber`, and `exercise`; those names are supported. When both `sleepHours` and `sleep` are present, **`sleepHours` wins** so a stale template `sleep` value cannot override real data.
 
 Zeros are accepted and score as zero. The server scores the day, rotates suggestions, merges into KV (last **90** days), and the PWA pulls when opened or refocused.
 
@@ -127,11 +129,23 @@ On **Android**, behavior varies by browser and install mode; when unsure, use th
 - If **sleep**, **fiber**, or **exercise** is **0** in the URL, the app opens **manual correction** for only the zero fields (values must be &gt; 0 before save).  
 - If **sleep**, **fiber**, or **exercise** is **0** via the cloud API, the value is accepted and scores as zero.  
 - Duplicate **date** imports **overwrite** the prior record.  
-- **Open URL** imports: if `sleep`, `fiber`, `exercise`, or `date` appears **more than once** in the query string, the app uses the **last** value for each name. (Some Shortcuts accidentally emit a static `sleep` first and the real reading second; the web platform’s `URLSearchParams.get` would otherwise keep only the first.)
+- **Open URL** imports: the app prefers **`sleepHours`** (then `timeAsleep`, then `sleep`) and similar explicit names for fiber and exercise when multiple keys exist. If `sleep`, `fiber`, `exercise`, or `date` appears **more than once** for the same name, the app uses the **last** value for that name.
 - Only the **most recent 90** calendar-dated records are kept.  
 - With **cloud sync** enabled, records also sync to **KV** (last **90** days server-side); local **localStorage** still holds the working copy after pull.  
 - The Shortcut imports today only. If you skip a day, that day is not backfilled.
 - **Exercise goal** is fixed at **30 minutes** (matching the scoring formula).
+
+### If sleep looks “stuck” but fiber and exercise change
+
+The dashboard shows **exactly what was saved** for that calendar day—it does not re-read Apple Health by itself. Typical causes:
+
+1. **The Shortcut is still sending the same sleep number** — Often the JSON field **`sleep`** is a typed placeholder (for example `7.7`) while AutoSleep is connected to a different field. Put AutoSleep **Time Asleep** into **`sleepHours`** in the Request body (see POST example above), or re-wire the variable so **`sleep`** is the live Health value, not fixed text.
+
+2. **Same duration several nights** — Less common, but confirm in the Health app.
+
+3. **Fix it in the app** — Open **Settings → Adjust a saved day**, enter the date and the correct hours/grams/minutes from Health, and tap **Save this day**.
+
+After a URL import, **Today** shows a short confirmation line with the numbers that were stored so you can spot a mismatch right away.
 
 ## LocalStorage keys
 

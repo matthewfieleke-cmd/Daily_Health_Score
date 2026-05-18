@@ -2,8 +2,8 @@ import type { FormEvent } from "react";
 import { useReducer, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { FiberGoalGrams, SleepGoalHours } from "../types/health";
-import { pullCloudIntoLocal, pushRemoteSettings } from "../lib/cloud-sync";
-import { localDateKey } from "../lib/dates";
+import { applyImportPayload, pullCloudIntoLocal, pushRemoteSettings } from "../lib/cloud-sync";
+import { isValidDateKey, localDateKey } from "../lib/dates";
 import { parseImportUrlToSearch } from "../lib/import-url";
 import {
   clearAllLocalData,
@@ -21,6 +21,12 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const [settings, setSettings] = useState(loadSettings);
   const [pastedImportUrl, setPastedImportUrl] = useState("");
+  const [fixDate, setFixDate] = useState(() => localDateKey());
+  const [fixSleep, setFixSleep] = useState("");
+  const [fixFiber, setFixFiber] = useState("");
+  const [fixExercise, setFixExercise] = useState("");
+  const [fixError, setFixError] = useState<string | null>(null);
+  const [fixBusy, setFixBusy] = useState(false);
   const [, bumpTokenUi] = useReducer((n: number) => n + 1, 0);
 
   const baseUrl =
@@ -105,7 +111,7 @@ export function SettingsPage() {
     const search = parseImportUrlToSearch(pastedImportUrl);
     if (!search) {
       window.alert(
-        "Paste a full URL that ends in /import and includes date, sleep, fiber, and exercise parameters.",
+        "Paste a full URL that ends in /import and includes the date plus sleep (or sleepHours), fiber, and exercise.",
       );
       return;
     }
@@ -113,11 +119,47 @@ export function SettingsPage() {
     navigate(`/import${search}`);
   }
 
+  async function handleFixSavedDay(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setFixError(null);
+    const date = fixDate.trim();
+    if (!isValidDateKey(date)) {
+      setFixError("Use a calendar date like 2026-05-18.");
+      return;
+    }
+    const sleep = Number(fixSleep);
+    const fiber = Number(fixFiber);
+    const exercise = Number(fixExercise);
+    if (!Number.isFinite(sleep) || sleep < 0) {
+      setFixError("Sleep (hours) must be a number zero or greater.");
+      return;
+    }
+    if (!Number.isFinite(fiber) || fiber < 0) {
+      setFixError("Fiber (grams) must be a number zero or greater.");
+      return;
+    }
+    if (!Number.isFinite(exercise) || exercise < 0) {
+      setFixError("Exercise (minutes) must be a number zero or greater.");
+      return;
+    }
+    setFixBusy(true);
+    try {
+      await applyImportPayload({ date, sleep, fiber, exercise });
+      navigate("/today", {
+        state: {
+          importSaved: { date, sleep, fiber, exercise },
+        },
+      });
+    } finally {
+      setFixBusy(false);
+    }
+  }
+
   const sampleUrl = `${baseUrl}/import?date=2026-05-01&sleep=7.4&fiber=38&exercise=28`;
   const templateUrl = `${baseUrl}/import?date=yyyy-MM-dd&sleep=[sleep]&fiber=[fiber]&exercise=[exercise]`;
   const ingestUrl = `${baseUrl}/api/ingest`;
   const sampleJson =
-    '{"syncToken":"[token]","date":"yyyy-MM-dd","sleep":7.4,"fiber":38,"exercise":28}';
+    '{"syncToken":"[token]","date":"yyyy-MM-dd","sleepHours":7.4,"fiberGrams":38,"exerciseMinutes":28}';
 
   return (
     <div className="page-content">
@@ -230,6 +272,64 @@ export function SettingsPage() {
           </label>
           <button type="submit" className="btn-primary">
             Run import
+          </button>
+        </form>
+      </section>
+
+      <section className="card stack-gap">
+        <h2 className="section-title">Adjust a saved day</h2>
+        <p className="muted small-copy">
+          Use this when a day saved with the wrong numbers—especially sleep that does not match
+          Apple Health. It overwrites that date the same way a fresh import would. If you use cloud
+          sync, the update is sent to the server too.
+        </p>
+        <form className="stack-form" onSubmit={handleFixSavedDay}>
+          <label className="field">
+            <span>Date (yyyy-MM-dd)</span>
+            <input
+              type="text"
+              value={fixDate}
+              onChange={(ev) => setFixDate(ev.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          <label className="field">
+            <span>Sleep (hours)</span>
+            <input
+              type="number"
+              step="0.1"
+              min={0}
+              required
+              value={fixSleep}
+              onChange={(ev) => setFixSleep(ev.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>Fiber (grams)</span>
+            <input
+              type="number"
+              step="0.1"
+              min={0}
+              required
+              value={fixFiber}
+              onChange={(ev) => setFixFiber(ev.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>Exercise (minutes)</span>
+            <input
+              type="number"
+              step="1"
+              min={0}
+              required
+              value={fixExercise}
+              onChange={(ev) => setFixExercise(ev.target.value)}
+            />
+          </label>
+          {fixError ? <p className="error-text">{fixError}</p> : null}
+          <button type="submit" className="btn-primary" disabled={fixBusy}>
+            {fixBusy ? "Saving…" : "Save this day"}
           </button>
         </form>
       </section>

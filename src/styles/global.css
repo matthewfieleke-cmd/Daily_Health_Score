@@ -203,6 +203,19 @@ a {
   font-size: 0.95rem;
 }
 
+.import-flash {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.import-flash__copy {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
 .home-empty-card {
   text-align: center;
   padding-top: 1.75rem;

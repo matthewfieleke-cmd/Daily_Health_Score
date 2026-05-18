@@ -12,6 +12,21 @@ export type BodyImportResult =
   | { ok: true; data: ImportPayload }
   | { ok: false };
 
+/** Prefer explicit metric keys over plain `sleep` / `fiber` / `exercise` (Shortcuts often keep a stale template in the generic names). */
+function firstParsedBodyMetric(
+  o: Record<string, unknown>,
+  keys: readonly string[],
+): number | null {
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(o, key)) continue;
+    const raw = o[key];
+    if (raw === undefined || raw === null) continue;
+    const n = parseNonNegativeNumber(raw);
+    if (n !== null) return n;
+  }
+  return null;
+}
+
 /** Validates JSON body from Shortcut POST / manual sync. Zeros allowed here (caller may reject). */
 export function validateImportBody(body: unknown): BodyImportResult {
   if (!body || typeof body !== "object") return { ok: false };
@@ -20,9 +35,14 @@ export function validateImportBody(body: unknown): BodyImportResult {
   if (typeof date !== "string" || !isValidDateKey(date)) {
     return { ok: false };
   }
-  const sleep = parseNonNegativeNumber(o.sleep);
-  const fiber = parseNonNegativeNumber(o.fiber);
-  const exercise = parseNonNegativeNumber(o.exercise);
+  const sleep = firstParsedBodyMetric(o, [
+    "sleepHours",
+    "timeAsleep",
+    "asleepHours",
+    "sleep",
+  ]);
+  const fiber = firstParsedBodyMetric(o, ["fiberGrams", "dietaryFiber", "fiber"]);
+  const exercise = firstParsedBodyMetric(o, ["exerciseMinutes", "exercise"]);
   if (sleep === null || fiber === null || exercise === null) {
     return { ok: false };
   }

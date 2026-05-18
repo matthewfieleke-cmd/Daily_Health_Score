@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useRecordsVersion } from "../context/records-version-context";
 import { MetricCard } from "../components/MetricCard";
 import { ScoreCard } from "../components/ScoreCard";
@@ -11,7 +11,17 @@ import { getNextDiscouragementParagraph } from "../lib/discouragement";
 import { getNextMotivationParagraph } from "../lib/motivation";
 import { loadRecords, sortRecordsDesc } from "../lib/storage";
 
+type TodayLocationState = {
+  importSaved?: { date: string; sleep: number; fiber: number; exercise: number };
+};
+
 export function TodayPage() {
+  const location = useLocation();
+  const [importBanner] = useState(() => {
+    const s = location.state as TodayLocationState | null;
+    return s?.importSaved ?? null;
+  });
+  const [importBannerDismissed, setImportBannerDismissed] = useState(false);
   const todayKey = localDateKey();
   const version = useRecordsVersion();
   const records = useMemo(() => {
@@ -58,6 +68,27 @@ export function TodayPage() {
     <div className="page-content">
       {showingLatestInsteadOfToday ? (
         <p className="callout callout--compact">No import for today yet.</p>
+      ) : null}
+
+      {importBanner && !importBannerDismissed ? (
+        <div className="callout callout--compact import-flash" role="status">
+          <p className="import-flash__copy">
+            Saved <strong>{formatDisplayDate(importBanner.date)}</strong> with sleep{" "}
+            <strong>{importBanner.sleep}</strong> hr, fiber <strong>{importBanner.fiber}</strong> g,
+            exercise <strong>{importBanner.exercise}</strong> min. If sleep still does not match
+            Apple Health, open <Link to="/settings">Settings</Link> and use{" "}
+            <strong>Adjust a saved day</strong>, or change your Shortcut so the JSON or URL sends
+            real hours as <code className="inline-code">sleepHours</code> (not a fixed placeholder
+            in <code className="inline-code">sleep</code>).
+          </p>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setImportBannerDismissed(true)}
+          >
+            Dismiss
+          </button>
+        </div>
       ) : null}
 
       <header className="today-header">

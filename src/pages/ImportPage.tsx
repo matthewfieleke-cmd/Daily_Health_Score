@@ -1,13 +1,18 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect } from "react";
 import { applyImportPayload } from "../lib/cloud-sync";
+import type { ImportPayload } from "../types/health";
 import { validateImportParams } from "../lib/validation";
 import { PENDING_CORRECTION_KEY } from "../lib/storage";
 
-type ImportDestination = {
-  to: "/today" | "/invalid-import" | "/correct-import";
-  state?: unknown;
+type ImportSavedFlash = {
+  importSaved: { date: string; sleep: number; fiber: number; exercise: number };
 };
+
+type ImportDestination =
+  | { to: "/today"; state?: ImportSavedFlash }
+  | { to: "/invalid-import" }
+  | { to: "/correct-import"; state: ImportPayload };
 
 const importRuns = new Map<string, Promise<ImportDestination>>();
 
@@ -27,7 +32,8 @@ async function processImport(searchParams: URLSearchParams): Promise<ImportDesti
   }
 
   await applyImportPayload(result.data);
-  return { to: "/today" };
+  const { date, sleep, fiber, exercise } = result.data;
+  return { to: "/today", state: { importSaved: { date, sleep, fiber, exercise } } };
 }
 
 export function ImportPage() {

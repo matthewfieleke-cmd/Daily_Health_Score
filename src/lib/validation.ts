@@ -26,6 +26,20 @@ export type ValidImportResult =
   | { ok: true; data: ImportPayload }
   | { ok: false };
 
+/** First matching key wins (after `lastQueryValue` per key). Prefer explicit Health-style names over plain `sleep`, which Shortcuts sometimes leave as a stale template. */
+function firstParsedQueryMetric(
+  searchParams: URLSearchParams,
+  keys: readonly string[],
+): number | null {
+  for (const key of keys) {
+    const raw = lastQueryValue(searchParams, key);
+    if (raw === null) continue;
+    const n = parseNonNegativeNumber(raw);
+    if (n !== null) return n;
+  }
+  return null;
+}
+
 /** Validates Apple Shortcut import query params. Zero values are valid here (handled upstream). */
 export function validateImportParams(searchParams: URLSearchParams): ValidImportResult {
   const date = lastQueryValue(searchParams, "date");
@@ -33,9 +47,18 @@ export function validateImportParams(searchParams: URLSearchParams): ValidImport
     return { ok: false };
   }
 
-  const sleep = parseNonNegativeNumber(lastQueryValue(searchParams, "sleep"));
-  const fiber = parseNonNegativeNumber(lastQueryValue(searchParams, "fiber"));
-  const exercise = parseNonNegativeNumber(lastQueryValue(searchParams, "exercise"));
+  const sleep = firstParsedQueryMetric(searchParams, [
+    "sleepHours",
+    "timeAsleep",
+    "asleepHours",
+    "sleep",
+  ]);
+  const fiber = firstParsedQueryMetric(searchParams, [
+    "fiberGrams",
+    "dietaryFiber",
+    "fiber",
+  ]);
+  const exercise = firstParsedQueryMetric(searchParams, ["exerciseMinutes", "exercise"]);
 
   if (sleep === null || fiber === null || exercise === null) {
     return { ok: false };

@@ -78,7 +78,17 @@ export function ManualCorrectionPage() {
 
     await applyImportPayload(payload);
     sessionStorage.removeItem(PENDING_CORRECTION_KEY);
-    navigate("/today", { replace: true });
+    navigate("/today", {
+      replace: true,
+      state: {
+        importSaved: {
+          date: payload.date,
+          sleep: nextSleep,
+          fiber: nextFiber,
+          exercise: nextExercise,
+        },
+      },
+    });
   }
 
   return (
