@@ -32,8 +32,10 @@ async function processImport(searchParams: URLSearchParams): Promise<ImportDesti
   }
 
   await applyImportPayload(result.data);
-  const { date, sleep, fiber, exercise } = result.data;
-  return { to: "/today", state: { importSaved: { date, sleep, fiber, exercise } } };
+  return {
+    to: "/today",
+    state: { importSaved: { date, sleep, fiber, exercise } },
+  };
 }
 
 export function ImportPage() {
@@ -54,8 +56,16 @@ export function ImportPage() {
 
     void (async () => {
       const destination = await run;
-      if (!cancelled) {
-        navigate(destination.to, { replace: true, state: destination.state });
+      if (cancelled) return;
+      switch (destination.to) {
+        case "/today":
+          navigate("/today", { replace: true, state: destination.state });
+          break;
+        case "/correct-import":
+          navigate("/correct-import", { replace: true, state: destination.state });
+          break;
+        default:
+          navigate("/invalid-import", { replace: true });
       }
     })();
 
