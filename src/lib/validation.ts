@@ -1,4 +1,10 @@
 import { isValidDateKey } from "./dates";
+import {
+  collectSleepValuesFromQuery,
+  lastSavedSleepHoursForDate,
+  resolveSleepHours,
+} from "./import-sleep";
+import { loadRecords } from "./storage";
 import type { ImportPayload } from "../types/health";
 
 function parseNonNegativeNumber(raw: string | null): number | null {
@@ -47,12 +53,11 @@ export function validateImportParams(searchParams: URLSearchParams): ValidImport
     return { ok: false };
   }
 
-  const sleep = firstParsedQueryMetric(searchParams, [
-    "sleepHours",
-    "timeAsleep",
-    "asleepHours",
-    "sleep",
-  ]);
+  const lastSaved = lastSavedSleepHoursForDate(loadRecords(), date);
+  const sleep = resolveSleepHours(
+    collectSleepValuesFromQuery((name) => lastQueryValue(searchParams, name)),
+    lastSaved,
+  );
   const fiber = firstParsedQueryMetric(searchParams, [
     "fiberGrams",
     "dietaryFiber",

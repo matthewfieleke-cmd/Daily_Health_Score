@@ -3,6 +3,7 @@ import { calculateScore, determinePrimaryFocus } from "./lib/scoring.js";
 import { composeDailyRecord } from "./lib/record-compose.js";
 import { advanceSuggestion } from "./lib/suggestion-engine.js";
 import { validateImportBody } from "./lib/import-body.js";
+import { lastSavedSleepHoursForDate } from "./lib/import-sleep.js";
 import { kvReady, loadTenant, resolveTenantFromRequest, saveTenant } from "./kv-tenant.js";
 import { trimRecords } from "./_shared.js";
 import { localDateKey } from "./lib/dates.js";
@@ -28,19 +29,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const rawBody =
     typeof req.body === "object" && req.body !== null ? req.body : undefined;
-  const parsed = validateImportBody(rawBody);
-  if (!parsed.ok) {
-    res.status(400).json({ error: "Invalid import body." });
-    return;
-  }
-
-  const { date, sleep, fiber, exercise } = parsed.data;
-  const completionStatus =
-    parsed.data.completionStatus ??
-    (date === localDateKey() ? "partial" : "complete");
 
   try {
     const tenant = await loadTenant(prefix);
+    const dateProbe =
+      rawBody && typeof rawBody === "object" && typeof (rawBody as { date?: unknown }).date === "string"
+        ? (rawBody as { date: string }).date
+        : null;
+    const lastSaved =
+      dateProbe && /^\d{4}-\d{2}-\d{2}$/.test(dateProbe)
+        ? lastSavedSleepHoursForDate(tenant.records, dateProbe)
+        : undefined;
+    const parsed = validateImportBody(rawBody, { lastSavedSleepHours: lastSaved });
+    if (!parsed.ok) {
+      res.status(400).json({ error: "Invalid import body." });
+      return;
+    }
+
+    const { date, sleep, fiber, exercise } = parsed.data;
+    const completionStatus =
+      parsed.data.completionStatus ??
+      (date === localDateKey() ? "partial" : "complete");
     const settings = tenant.settings;
     const computed = calculateScore(
       {

@@ -159,7 +159,7 @@ export function SettingsPage() {
   const templateUrl = `${baseUrl}/import?date=yyyy-MM-dd&sleep=[sleep]&fiber=[fiber]&exercise=[exercise]`;
   const ingestUrl = `${baseUrl}/api/ingest`;
   const sampleJson =
-    '{"syncToken":"[token]","date":"yyyy-MM-dd","sleepHours":7.4,"fiberGrams":38,"exerciseMinutes":28}';
+    '{"syncToken":"[token]","date":"yyyy-MM-dd","sleepHours":[sleep from AutoSleep],"fiberGrams":[fiber],"exerciseMinutes":[exercise]}';
 
   return (
     <div className="page-content">

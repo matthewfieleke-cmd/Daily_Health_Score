@@ -89,7 +89,7 @@ Body (recommended field names—real AutoSleep hours should map into **`sleepHou
 }
 ```
 
-The same numbers may still be sent as `sleep`, `fiber`, and `exercise`; those names are supported. When both `sleepHours` and `sleep` are present, **`sleepHours` wins** so a stale template `sleep` value cannot override real data.
+The same numbers may still be sent as `sleep`, `fiber`, and `exercise`; those names are supported. When both `sleepHours` and `sleep` are present with **different** values, the app picks the one that **changed** vs your last saved night (so a copied template in one field does not block live AutoSleep in the other).
 
 Zeros are accepted and score as zero. The server scores the day, rotates suggestions, merges into KV (last **90** days), and the PWA pulls when opened or refocused.
 
