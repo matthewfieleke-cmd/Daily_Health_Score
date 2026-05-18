@@ -127,6 +127,7 @@ On **Android**, behavior varies by browser and install mode; when unsure, use th
 - If **sleep**, **fiber**, or **exercise** is **0** in the URL, the app opens **manual correction** for only the zero fields (values must be &gt; 0 before save).  
 - If **sleep**, **fiber**, or **exercise** is **0** via the cloud API, the value is accepted and scores as zero.  
 - Duplicate **date** imports **overwrite** the prior record.  
+- **Open URL** imports: if `sleep`, `fiber`, `exercise`, or `date` appears **more than once** in the query string, the app uses the **last** value for each name. (Some Shortcuts accidentally emit a static `sleep` first and the real reading second; the web platform’s `URLSearchParams.get` would otherwise keep only the first.)
 - Only the **most recent 90** calendar-dated records are kept.  
 - With **cloud sync** enabled, records also sync to **KV** (last **90** days server-side); local **localStorage** still holds the working copy after pull.  
 - The Shortcut imports today only. If you skip a day, that day is not backfilled.
