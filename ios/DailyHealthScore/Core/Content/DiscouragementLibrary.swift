@@ -1,0 +1,36 @@
+import Foundation
+
+enum DiscouragementLibrary {
+    static let all: [ContentEntry] = [
+        ContentEntry(id: "disc-01", text: "Sleep, movement, and whole-food nutrition quietly shape energy, attention, and emotional steadiness. These are not vanity metrics—they are the steady inputs that change how you meet stress and how present you feel with people you care about."),
+        ContentEntry(id: "disc-02", text: "Metabolic resilience and mood regulation emerge from repeated small choices, not sudden perfection. When you protect basics like sleep and walking, you are investing in steadier glucose rhythms and clearer thinking tomorrow."),
+        ContentEntry(id: "disc-03", text: "Whole-food plant-forward meals support microbiome diversity and fiber-linked benefits without needing rigid ideology. Practical consistency helps digestion, satiety, and long-run cardiovascular risk reduction over years."),
+        ContentEntry(id: "disc-04", text: "Physical activity—even brisk walking—supports brain-derived signals linked to mood and cognition. You do not need an optimal gym plan; you need repeatable minutes that fit real life."),
+        ContentEntry(id: "disc-05", text: "Sleep debt stacks faster than it feels. Protecting wind-down is partly about protecting how kindly you respond when someone needs you—patience is biological, not purely moral."),
+        ContentEntry(id: "disc-06", text: "Stress systems calm when the body receives predictable cues: daylight, movement, meals, and sleep regularity. Mindfulness supports this by reducing rumination loops that steal sleep and appetite signals."),
+        ContentEntry(id: "disc-07", text: "Social connection is a health behavior. When you stabilize your own routines, you often have more bandwidth for listening, showing up, and repairing misunderstandings without burning out."),
+        ContentEntry(id: "disc-08", text: "Self-compassion is not self-indulgence. Accurate kindness reduces shame cycles that derail sleep and eating patterns—especially after hard weeks."),
+        ContentEntry(id: "disc-09", text: "Consistency beats peaks. Two moderate weeks outperform one heroic day because physiology learns from repetition—circadian timing, gut microbes, and habits all reward steadiness."),
+        ContentEntry(id: "disc-10", text: "Caring for yourself expands your capacity to care for others sustainably. Burnout often arrives when basics erode quietly—protecting sleep is partly protecting your relationships from unnecessary friction."),
+        ContentEntry(id: "disc-11", text: "Evidence-informed lifestyle medicine emphasizes foods close to nature: legumes, grains in intact forms, vegetables, fruits, nuts, and seeds. Progress can be incremental and still meaningful."),
+        ContentEntry(id: "disc-12", text: "Exercise minutes reduce all-cause mortality risk on average across large populations—not as punishment, but as a reliable lever available without perfection."),
+        ContentEntry(id: "disc-13", text: "Fiber-rich meals blunt post-meal glucose spikes for many people and support satiety—helpful for steady energy when life demands focus."),
+        ContentEntry(id: "disc-14", text: "When routines wobble, repair gently. One restarted walk, one earlier bedtime, one simple plant-forward meal can reopen a pathway without needing dramatic resets."),
+        ContentEntry(id: "disc-15", text: "Hope here is grounded: small sustained shifts change trajectories over months and years. You are allowed to move slowly if you move honestly."),
+        ContentEntry(id: "disc-16", text: "Attention is finite. Adequate sleep and movement improve executive function—the same resource you spend on parenting, partnering, and creative work."),
+        ContentEntry(id: "disc-17", text: "Nutrition quality influences inflammatory tone over time. Choosing minimally processed plants more often is a practical way to support vascular health without chasing extremes."),
+        ContentEntry(id: "disc-18", text: "Breathing practices and brief mindfulness reduce sympathetic drive for some people, especially when practiced consistently—not as a miracle, but as training."),
+        ContentEntry(id: "disc-19", text: "Taking care of yourself is how you stay dependable without resentment. Boundaries around sleep and movement are sometimes the most loving choice you can model."),
+        ContentEntry(id: "disc-20", text: "Your score is a mirror, not a verdict. Use it to steer tomorrow with clarity—and remember that steadiness builds the calm presence people around you often need most."),
+        ContentEntry(id: "disc-21", text: "Caring for yourself is how you refill the cup you pour from. When you fuel your body with enough sleep, fiber, and movement, you have more warmth and patience for the people who depend on you."),
+        ContentEntry(id: "disc-22", text: "A well-rested, well-fed body steadies your tone and softens sharp edges. Confidence in relationships often grows when you can trust yourself to meet basic needs—not when you push past empty."),
+        ContentEntry(id: "disc-23", text: "You are allowed to prioritize your health without guilt. Meeting your own needs first is not selfish; it is what makes generous presence with others possible and sincere."),
+        ContentEntry(id: "disc-24", text: "Sleep and movement change how you hear and how you respond. When you are depleted, small conflicts feel enormous; when you are cared for, repair comes faster and kinder."),
+        ContentEntry(id: "disc-25", text: "Proper fueling is a form of respect for your future self and for everyone who shares your table, your home, or your day. Steady meals and rest are investments in connection."),
+        ContentEntry(id: "disc-26", text: "Your relationships benefit when your nervous system is not fighting starvation, exhaustion, or sugar crashes. Basics are not background noise—they are the stage your life plays on."),
+        ContentEntry(id: "disc-27", text: "Showing up fully for others starts with showing up for yourself in ordinary ways: bed on time, plants on the plate, minutes on your feet. Those choices accumulate into trust—in yourself and from others."),
+        ContentEntry(id: "disc-28", text: "When you care for your body consistently, you practice self-worth in action. That quiet confidence often reads as reliability, calm, and emotional safety to the people you love."),
+        ContentEntry(id: "disc-29", text: "You cannot pour from an empty cup without bitterness. Refilling through sleep, nutrition, and walks is an act of care toward your family, friends, and coworkers—not a detour from them."),
+        ContentEntry(id: "disc-30", text: "Encourage yourself the way you would someone you cherish: protect tonight’s sleep, choose fiber tomorrow, move your body gently. A fuller cup makes every relationship you tend more sustainable."),
+    ]
+}
