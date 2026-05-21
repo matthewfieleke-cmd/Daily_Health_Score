@@ -59,7 +59,10 @@ struct DailyRecord: Identifiable, Equatable, Codable {
     var exerciseMinutes: Double
     var sleepGoal: SleepGoalHours
     var fiberGoal: FiberGoalGrams
-    let exerciseGoalMinutes: Int = 30
+    // `var` (not `let`) so `Codable` decoding can override the default value.
+    // The exercise goal is always 30 in practice; this just silences the
+    // "Immutable property will not be decoded" warning.
+    var exerciseGoalMinutes: Int = 30
     var sleepScore: Double
     var fiberScore: Double
     var exerciseScore: Double

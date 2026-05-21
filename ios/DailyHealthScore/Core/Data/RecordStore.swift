@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import SwiftData
 
+@MainActor
 final class RecordStore: ObservableObject {
     private let modelContext: ModelContext
     @Published private(set) var records: [DailyRecord] = []
@@ -11,7 +12,9 @@ final class RecordStore: ObservableObject {
         reload()
     }
 
-    static func makeContainer() -> ModelContainer {
+    /// Not isolated to the main actor: this is called from `App.body` to seed the
+    /// `.modelContainer(...)` modifier, before any actor context is established.
+    nonisolated static func makeContainer() -> ModelContainer {
         do {
             return try ModelContainer(for: DailyRecordEntity.self)
         } catch {

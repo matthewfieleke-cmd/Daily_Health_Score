@@ -2,6 +2,12 @@ import Combine
 import Foundation
 import SwiftData
 
+/// SwiftUI views observe AppState's `@Published` properties, so every read/write
+/// has to happen on the main thread. Marking the class `@MainActor` makes that
+/// guarantee static — without it, Combine falls back to `unsafeForcedSync` when
+/// a Task running off-main mutates an `@Published` property, which Xcode's
+/// concurrency diagnostics flag at runtime.
+@MainActor
 final class AppState: ObservableObject {
     let healthKit = HealthKitService()
     let settingsStore = SettingsStore()

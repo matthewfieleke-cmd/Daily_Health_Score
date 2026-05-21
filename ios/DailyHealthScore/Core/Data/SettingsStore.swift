@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 
+@MainActor
 final class SettingsStore: ObservableObject {
     private enum Keys {
         static let sleepGoal = "dhs.sleepGoal"

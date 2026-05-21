@@ -4,6 +4,10 @@ import XCTest
 /// Regression coverage for the SettingsStore.loadRotationState crash where a stale or
 /// foreign UserDefaults dictionary would shallow-cast through `as? [String: [String]]`
 /// and then explode on first mutation with `-[__NSCFNumber count]: unrecognized selector`.
+///
+/// `SettingsStore` is `@MainActor`-isolated, so this XCTestCase is too — instantiating
+/// the store and calling its methods has to happen from MainActor.
+@MainActor
 final class SettingsStoreLoadTests: XCTestCase {
     private let suiteName = "DailyHealthScoreTests.SettingsStoreLoadTests"
     private var defaults: UserDefaults!
@@ -22,7 +26,8 @@ final class SettingsStoreLoadTests: XCTestCase {
     }
 
     // SettingsStore reads from UserDefaults.standard internally, so we exercise the
-    // same load path by writing to standard, but namespaced so tests are isolated.
+    // same load path by writing to standard. We scrub these keys in tearDown so tests
+    // are deterministic and don't leak state between runs.
     private func writeStandard(_ value: Any?, forKey key: String) {
         if let value {
             UserDefaults.standard.set(value, forKey: key)

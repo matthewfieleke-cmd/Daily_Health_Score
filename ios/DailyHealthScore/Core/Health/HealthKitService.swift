@@ -79,8 +79,9 @@ final class HealthKitService {
                     continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
                     return
                 }
+                // `.asleep` was renamed to `.asleepUnspecified` in iOS 16 (same raw value),
+                // so we list only the modern cases to keep the build warning-free.
                 let asleepValues: Set<Int> = [
-                    HKCategoryValueSleepAnalysis.asleep.rawValue,
                     HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
                     HKCategoryValueSleepAnalysis.asleepCore.rawValue,
                     HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
