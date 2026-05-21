@@ -17,6 +17,7 @@ targets:
       PRODUCT_BUNDLE_IDENTIFIER: com.dailyhealthscore.app
       INFOPLIST_FILE: DailyHealthScore/Info.plist
       CODE_SIGN_ENTITLEMENTS: DailyHealthScore/DailyHealthScore.entitlements
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       # iPhone-only. Adding iPad ("1,2") would also require declaring iPad
       # interface orientations in Info.plist or setting UIRequiresFullScreen.
       TARGETED_DEVICE_FAMILY: "1"
