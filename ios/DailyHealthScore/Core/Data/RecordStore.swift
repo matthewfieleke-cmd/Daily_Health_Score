@@ -1,7 +1,7 @@
+import Combine
 import Foundation
 import SwiftData
 
-@MainActor
 final class RecordStore: ObservableObject {
     private let modelContext: ModelContext
     @Published private(set) var records: [DailyRecord] = []
