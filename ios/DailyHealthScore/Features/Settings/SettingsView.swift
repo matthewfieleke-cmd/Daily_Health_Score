@@ -74,6 +74,7 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .tint(AppTheme.primary)
             .sheet(isPresented: $showEditDay) {
                 EditDayView()
             }

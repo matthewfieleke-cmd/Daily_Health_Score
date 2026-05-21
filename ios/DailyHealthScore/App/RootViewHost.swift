@@ -22,7 +22,7 @@ struct RootViewHost: View {
                         .tabItem { Label("Settings", systemImage: "gearshape") }
                 }
                 .environmentObject(appState)
-                .tint(Color(red: 0.2, green: 0.45, blue: 0.55))
+                .tint(AppTheme.primary)
                 .task {
                     await appState.requestHealthAccess()
                     await appState.syncTodayFromHealth()
