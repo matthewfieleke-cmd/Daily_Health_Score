@@ -1,5 +1,10 @@
 import SwiftUI
 
+/// Settings is a single-screen native iOS Form. Sections are trimmed so the
+/// whole screen fits inside the safe area on the standard iPhone 15 without
+/// scrolling. We use inline title display, drop the "About" / explanatory
+/// blurbs, and merge "Apple Health" + "Edit data" into one Apple Health
+/// section.
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @State private var showEditDay = false
@@ -10,73 +15,76 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Goals") {
-                    Picker("Sleep goal (hours)", selection: sleepGoalBinding) {
+                    Picker("Sleep goal", selection: sleepGoalBinding) {
                         ForEach(SleepGoalHours.allCases) { goal in
-                            Text(goal.label).tag(goal)
+                            Text("\(goal.label) hr").tag(goal)
                         }
                     }
-                    Picker("Fiber goal (grams)", selection: fiberGoalBinding) {
+                    Picker("Fiber goal", selection: fiberGoalBinding) {
                         ForEach(FiberGoalGrams.allCases) { goal in
-                            Text("\(goal.rawValue)").tag(goal)
+                            Text("\(goal.rawValue) g").tag(goal)
                         }
                     }
-                    LabeledContent("Exercise goal", value: "30 minutes (fixed)")
+                    LabeledContent("Exercise goal", value: "30 min")
                 }
 
                 Section("Apple Health") {
-                    Text("Sleep, dietary fiber, and exercise minutes are read from Health when you open the app or tap Refresh on Today.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Button("Request Health access again") {
-                        Task { await appState.requestHealthAccess() }
-                    }
-                }
-
-                Section("Edit data") {
-                    Button("Adjust a saved day") { showEditDay = true }
-                    Button("Refresh today from Health") {
+                    Button {
                         Task { await appState.syncTodayFromHealth() }
+                    } label: {
+                        Label("Refresh today from Health", systemImage: "arrow.clockwise")
+                    }
+                    Button {
+                        showEditDay = true
+                    } label: {
+                        Label("Adjust a saved day", systemImage: "pencil")
+                    }
+                    Button {
+                        Task { await appState.requestHealthAccess() }
+                    } label: {
+                        Label("Request Health access again", systemImage: "heart.text.square")
                     }
                 }
 
                 Section("Data") {
-                    Button("Export records as JSON") {
+                    Button {
                         exportText = appState.recordStore.exportJSON()
+                    } label: {
+                        Label("Export records as JSON", systemImage: "square.and.arrow.up")
                     }
-                    .sheet(isPresented: Binding(
-                        get: { !exportText.isEmpty },
-                        set: { if !$0 { exportText = "" } }
-                    )) {
-                        NavigationStack {
-                            ScrollView {
-                                Text(exportText)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .textSelection(.enabled)
-                                    .padding()
-                            }
-                            .navigationTitle("Export")
-                            .toolbar {
-                                ToolbarItem(placement: .confirmationAction) {
-                                    Button("Done") { exportText = "" }
-                                }
-                            }
-                        }
-                    }
-                    Button("Clear all local data", role: .destructive) {
+                    Button(role: .destructive) {
                         showClearConfirm = true
+                    } label: {
+                        Label("Clear all local data", systemImage: "trash")
                     }
-                }
-
-                Section("About") {
-                    Text("Native iOS app. Data stays on your device. No cloud account required.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
             .tint(AppTheme.primary)
             .sheet(isPresented: $showEditDay) {
                 EditDayView()
+            }
+            .sheet(isPresented: Binding(
+                get: { !exportText.isEmpty },
+                set: { if !$0 { exportText = "" } }
+            )) {
+                NavigationStack {
+                    ScrollView {
+                        Text(exportText)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .navigationTitle("Export")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { exportText = "" }
+                        }
+                    }
+                }
             }
             .alert("Clear all data?", isPresented: $showClearConfirm) {
                 Button("Cancel", role: .cancel) {}
