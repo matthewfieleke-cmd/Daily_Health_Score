@@ -1,7 +1,7 @@
+import Combine
 import Foundation
 import SwiftData
 
-@MainActor
 final class AppState: ObservableObject {
     let healthKit = HealthKitService()
     let settingsStore = SettingsStore()
