@@ -74,7 +74,6 @@ final class HealthKitService {
                     return
                 }
                 let asleepValues: Set<Int> = [
-                    HKCategoryValueSleepAnalysis.asleep.rawValue,
                     HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
                     HKCategoryValueSleepAnalysis.asleepCore.rawValue,
                     HKCategoryValueSleepAnalysis.asleepDeep.rawValue,

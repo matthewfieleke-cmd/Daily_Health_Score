@@ -59,7 +59,7 @@ struct DailyRecord: Identifiable, Equatable, Codable {
     var exerciseMinutes: Double
     var sleepGoal: SleepGoalHours
     var fiberGoal: FiberGoalGrams
-    let exerciseGoalMinutes: Int = 30
+    var exerciseGoalMinutes: Int { 30 }
     var sleepScore: Double
     var fiberScore: Double
     var exerciseScore: Double
