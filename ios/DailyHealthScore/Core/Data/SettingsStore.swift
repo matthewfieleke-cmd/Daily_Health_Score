@@ -88,7 +88,19 @@ final class SettingsStore: ObservableObject {
     }
 
     private func loadRotationState() {
-        usedSuggestions = UserDefaults.standard.dictionary(forKey: Keys.usedSuggestions) as? [String: [String]] ?? [:]
+        // `as? [String: [String]]` is a shallow bridge from NSDictionary in Swift: it can
+        // appear to succeed while inner values are still bridged Foundation objects (e.g.
+        // NSNumber if any stale plist value sneaks in). On first mutation Swift then crashes
+        // with "-[__NSCFNumber count]: unrecognized selector". Validate each entry eagerly
+        // and discard anything that doesn't match `[String: [String]]`.
+        let raw = UserDefaults.standard.dictionary(forKey: Keys.usedSuggestions) ?? [:]
+        var validated: [String: [String]] = [:]
+        for (key, value) in raw {
+            if let array = value as? [String] {
+                validated[key] = array
+            }
+        }
+        usedSuggestions = validated
         usedDiscouragement = UserDefaults.standard.stringArray(forKey: Keys.usedDiscouragement) ?? []
         usedMotivation = UserDefaults.standard.stringArray(forKey: Keys.usedMotivation) ?? []
     }
