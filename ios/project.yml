@@ -22,3 +22,26 @@ targets:
       CURRENT_PROJECT_VERSION: "1"
     entitlements:
       path: DailyHealthScore/DailyHealthScore.entitlements
+
+  DailyHealthScoreTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: DailyHealthScoreTests
+        excludes:
+          - "**/.DS_Store"
+    dependencies:
+      - target: DailyHealthScore
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.dailyhealthscore.app.tests
+      GENERATE_INFOPLIST_FILE: "YES"
+      TARGETED_DEVICE_FAMILY: "1,2"
+schemes:
+  DailyHealthScore:
+    build:
+      targets:
+        DailyHealthScore: all
+        DailyHealthScoreTests: [test]
+    test:
+      targets:
+        - DailyHealthScoreTests

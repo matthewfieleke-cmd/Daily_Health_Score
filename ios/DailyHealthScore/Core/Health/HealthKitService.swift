@@ -53,7 +53,13 @@ final class HealthKitService {
         )
     }
 
-    /// Sleep attributed to the wake calendar day: asleep samples ending between 6 PM prior day and noon on dateKey.
+    /// Sleep attributed to the wake calendar day. The HealthKit query just
+    /// fetches asleep intervals from any source; `SleepAttribution` does the
+    /// windowing, clipping, and overlap merging.
+    ///
+    /// Merging overlaps is what makes our total match Apple Health's
+    /// "Time Asleep" — without it, multiple sources logging the same sleep
+    /// window (Apple Watch + AutoSleep + iPhone) are summed twice.
     private func fetchSleepHours(dayStart: Date, dayEnd: Date, calendar: Calendar) async throws -> Double {
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
             throw HealthKitError.unavailable
@@ -81,15 +87,16 @@ final class HealthKitService {
                     HKCategoryValueSleepAnalysis.asleepREM.rawValue,
                 ]
                 let categories = (samples as? [HKCategorySample]) ?? []
-                var total: TimeInterval = 0
-                for sample in categories where asleepValues.contains(sample.value) {
-                    let end = sample.endDate
-                    guard end >= dayStart, end < dayEnd else { continue }
-                    let clippedStart = max(sample.startDate, windowStart)
-                    let clippedEnd = min(sample.endDate, windowEnd)
-                    total += max(0, clippedEnd.timeIntervalSince(clippedStart))
+                let intervals: [SleepInterval] = categories.compactMap { sample in
+                    guard asleepValues.contains(sample.value) else { return nil }
+                    return SleepInterval(start: sample.startDate, end: sample.endDate)
                 }
-                continuation.resume(returning: total / 3600.0)
+                let hours = SleepAttribution.attributedHours(
+                    intervals: intervals,
+                    dayStart: dayStart,
+                    calendar: calendar
+                )
+                continuation.resume(returning: hours)
             }
             store.execute(query)
         }
