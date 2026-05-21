@@ -1,5 +1,10 @@
 import Foundation
 
+/// `@MainActor` because `build` calls `SettingsStore.nextSuggestion(for:)` to
+/// advance the rotating suggestion text, and `SettingsStore` is itself
+/// MainActor-isolated. The only call sites of `build` are on `AppState`, which
+/// is also MainActor, so the constraint costs us nothing.
+@MainActor
 enum RecordBuilder {
     static func build(
         date: String,
