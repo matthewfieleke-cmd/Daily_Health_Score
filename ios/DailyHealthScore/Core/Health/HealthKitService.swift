@@ -22,7 +22,7 @@ enum HealthKitError: LocalizedError {
 }
 
 final class HealthKitService {
-    private let store = HKHealthStore()
+    let store = HKHealthStore()
 
     var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
 
