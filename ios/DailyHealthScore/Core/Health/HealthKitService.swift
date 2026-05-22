@@ -53,16 +53,22 @@ final class HealthKitService {
         )
     }
 
-    /// Sleep attributed to the wake calendar day: asleep samples ending between 6 PM prior day and noon on dateKey.
+    /// Sleep attributed to the wake calendar day. The HealthKit query fetches
+    /// every asleep sub-sample from any source in a wide window around the
+    /// wake day; `SleepAttribution` does the rest — grouping sub-samples into
+    /// sessions, attributing whole sessions to the day in which they ENDED,
+    /// merging overlapping intervals across sources, and clipping to the
+    /// safety window.
+    ///
+    /// This is the single source of truth for the Today score's sleep value
+    /// and must stay in lockstep with `sleepDiagnostic(forDateKey:)`.
     private func fetchSleepHours(dayStart: Date, dayEnd: Date, calendar: Calendar) async throws -> Double {
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
             throw HealthKitError.unavailable
         }
-        // The HKQuery window must be at least as wide as SleepAttribution's
-        // clipping window so the query actually returns the samples we want
-        // to keep. Apple Health attributes late-morning / afternoon wake-ups
-        // (sleep-in days, recovery sleep, night-shift schedules) to the wake
-        // calendar day, and our totals must follow.
+        // Window: 6 PM previous day through 6 PM wake day. Wide enough to
+        // capture late wake-ups (sleep-in days, recovery sleep, etc.) and
+        // matches what SleepAttribution clips to by default.
         let windowStart = calendar.date(byAdding: .hour, value: -6, to: dayStart)!
         let windowEnd = calendar.date(byAdding: .hour, value: 18, to: dayStart)!
         let predicate = HKQuery.predicateForSamples(withStart: windowStart, end: windowEnd, options: .strictStartDate)
@@ -78,23 +84,17 @@ final class HealthKitService {
                     continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
                     return
                 }
-                let asleepValues: Set<Int> = [
-                    HKCategoryValueSleepAnalysis.asleep.rawValue,
-                    HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
-                    HKCategoryValueSleepAnalysis.asleepCore.rawValue,
-                    HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
-                    HKCategoryValueSleepAnalysis.asleepREM.rawValue,
-                ]
                 let categories = (samples as? [HKCategorySample]) ?? []
-                var total: TimeInterval = 0
-                for sample in categories where asleepValues.contains(sample.value) {
-                    let end = sample.endDate
-                    guard end >= dayStart, end < dayEnd else { continue }
-                    let clippedStart = max(sample.startDate, windowStart)
-                    let clippedEnd = min(sample.endDate, windowEnd)
-                    total += max(0, clippedEnd.timeIntervalSince(clippedStart))
+                let intervals: [SleepInterval] = categories.compactMap { sample in
+                    guard HealthKitService.asleepCategoryValues.contains(sample.value) else { return nil }
+                    return SleepInterval(start: sample.startDate, end: sample.endDate)
                 }
-                continuation.resume(returning: total / 3600.0)
+                let hours = SleepAttribution.attributedHours(
+                    intervals: intervals,
+                    dayStart: dayStart,
+                    calendar: calendar
+                )
+                continuation.resume(returning: hours)
             }
             store.execute(query)
         }
