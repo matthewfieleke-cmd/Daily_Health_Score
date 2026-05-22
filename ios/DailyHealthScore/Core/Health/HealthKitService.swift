@@ -53,19 +53,18 @@ final class HealthKitService {
         )
     }
 
-    /// Sleep attributed to the wake calendar day. The HealthKit query just
-    /// fetches asleep intervals from any source; `SleepAttribution` does the
-    /// windowing, clipping, and overlap merging.
-    ///
-    /// Merging overlaps is what makes our total match Apple Health's
-    /// "Time Asleep" — without it, multiple sources logging the same sleep
-    /// window (Apple Watch + AutoSleep + iPhone) are summed twice.
+    /// Sleep attributed to the wake calendar day: asleep samples ending between 6 PM prior day and noon on dateKey.
     private func fetchSleepHours(dayStart: Date, dayEnd: Date, calendar: Calendar) async throws -> Double {
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
             throw HealthKitError.unavailable
         }
+        // The HKQuery window must be at least as wide as SleepAttribution's
+        // clipping window so the query actually returns the samples we want
+        // to keep. Apple Health attributes late-morning / afternoon wake-ups
+        // (sleep-in days, recovery sleep, night-shift schedules) to the wake
+        // calendar day, and our totals must follow.
         let windowStart = calendar.date(byAdding: .hour, value: -6, to: dayStart)!
-        let windowEnd = calendar.date(byAdding: .hour, value: 12, to: dayStart)!
+        let windowEnd = calendar.date(byAdding: .hour, value: 18, to: dayStart)!
         let predicate = HKQuery.predicateForSamples(withStart: windowStart, end: windowEnd, options: .strictStartDate)
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -79,25 +78,23 @@ final class HealthKitService {
                     continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
                     return
                 }
-                // `.asleep` was renamed to `.asleepUnspecified` in iOS 16 (same raw value),
-                // so we list only the modern cases to keep the build warning-free.
                 let asleepValues: Set<Int> = [
+                    HKCategoryValueSleepAnalysis.asleep.rawValue,
                     HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
                     HKCategoryValueSleepAnalysis.asleepCore.rawValue,
                     HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
                     HKCategoryValueSleepAnalysis.asleepREM.rawValue,
                 ]
                 let categories = (samples as? [HKCategorySample]) ?? []
-                let intervals: [SleepInterval] = categories.compactMap { sample in
-                    guard asleepValues.contains(sample.value) else { return nil }
-                    return SleepInterval(start: sample.startDate, end: sample.endDate)
+                var total: TimeInterval = 0
+                for sample in categories where asleepValues.contains(sample.value) {
+                    let end = sample.endDate
+                    guard end >= dayStart, end < dayEnd else { continue }
+                    let clippedStart = max(sample.startDate, windowStart)
+                    let clippedEnd = min(sample.endDate, windowEnd)
+                    total += max(0, clippedEnd.timeIntervalSince(clippedStart))
                 }
-                let hours = SleepAttribution.attributedHours(
-                    intervals: intervals,
-                    dayStart: dayStart,
-                    calendar: calendar
-                )
-                continuation.resume(returning: hours)
+                continuation.resume(returning: total / 3600.0)
             }
             store.execute(query)
         }
