@@ -9,6 +9,7 @@ struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @State private var showEditDay = false
     @State private var showClearConfirm = false
+    @State private var showSleepDiagnostic = false
     @State private var exportText = ""
 
     var body: some View {
@@ -44,6 +45,11 @@ struct SettingsView: View {
                     } label: {
                         Label("Request Health access again", systemImage: "heart.text.square")
                     }
+                    Button {
+                        showSleepDiagnostic = true
+                    } label: {
+                        Label("Sleep diagnostic", systemImage: "stethoscope")
+                    }
                 }
 
                 Section("Data") {
@@ -64,6 +70,10 @@ struct SettingsView: View {
             .tint(AppTheme.primary)
             .sheet(isPresented: $showEditDay) {
                 EditDayView()
+            }
+            .sheet(isPresented: $showSleepDiagnostic) {
+                SleepDiagnosticView()
+                    .environmentObject(appState)
             }
             .sheet(isPresented: Binding(
                 get: { !exportText.isEmpty },
