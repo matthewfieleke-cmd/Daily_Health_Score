@@ -7,14 +7,16 @@ import SwiftUI
 /// Behavior:
 /// - Dim backdrop fades in/out behind the card.
 /// - Card scales + fades in (spring) and out (ease).
-/// - Tapping the backdrop or the Done button dismisses.
+/// - Tapping the backdrop or Thanks dismisses.
 /// - Respects safe area and Dynamic Type.
-/// - Long paragraphs are scrollable inside the card so the dialog itself
-///   never grows past ~70% of the screen height.
+/// - Long paragraphs fall back to a scrollable body capped at ~70% of the
+///   screen height; short copy sizes the card to its content.
 struct ParagraphDialog: View {
     let title: String
     let text: String
     let onDismiss: () -> Void
+
+    private let bodyPadding: CGFloat = 20
 
     var body: some View {
         ZStack {
@@ -39,24 +41,23 @@ struct ParagraphDialog: View {
 
     private var card: some View {
         GeometryReader { proxy in
-            let maxHeight = proxy.size.height * 0.70
+            let maxCardHeight = proxy.size.height * 0.70
             VStack(spacing: 0) {
                 header
                 Divider()
                     .background(.quaternary)
-                ScrollView {
-                    Text(text)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(20)
+                ViewThatFits(in: .vertical) {
+                    paragraphBody
+                    ScrollView {
+                        paragraphBody
+                    }
+                    .frame(maxHeight: maxScrollBodyHeight(maxCardHeight: maxCardHeight))
                 }
-                .scrollIndicators(.hidden)
                 footer
             }
             .frame(maxWidth: 360)
-            .frame(maxHeight: maxHeight)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxHeight: maxCardHeight)
             .background(
                 RoundedRectangle(cornerRadius: AppTheme.Layout.heroCornerRadius, style: .continuous)
                     .fill(AppTheme.cardSurface)
@@ -75,28 +76,28 @@ struct ParagraphDialog: View {
         )
     }
 
+    private var paragraphBody: some View {
+        Text(text)
+            .font(.body)
+            .foregroundStyle(.primary)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, bodyPadding)
+            .padding(.top, bodyPadding)
+            .padding(.bottom, bodyPadding)
+    }
+
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text("Take a breath.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(8)
-                    .background(Circle().fill(Color(.tertiarySystemFill)))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Dismiss")
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text("Take a breath.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, bodyPadding)
         .padding(.top, 18)
         .padding(.bottom, 14)
     }
@@ -112,7 +113,14 @@ struct ParagraphDialog: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
-        .padding(20)
+        .padding(.horizontal, bodyPadding)
+        .padding(.bottom, bodyPadding)
+    }
+
+    /// Scroll body height when `ViewThatFits` chooses the scrollable variant.
+    private func maxScrollBodyHeight(maxCardHeight: CGFloat) -> CGFloat {
+        // Header ~70pt + divider + body padding + footer ~68pt (approximate).
+        max(120, maxCardHeight - 150)
     }
 }
 
