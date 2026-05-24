@@ -79,8 +79,12 @@ struct TodayView: View {
             Image("BrandMark")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 30, height: 30)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                // 40x40 (was 30x30) so the rounded-square brand mark fills
+                // and overflows the iOS 26 Liquid Glass toolbar-item circular
+                // background — the previous white "halo" around the icon was
+                // that glass capsule showing around a too-small image.
+                .frame(width: 40, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .accessibilityHidden(true)
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
@@ -96,7 +100,9 @@ struct TodayView: View {
                 motivText = appState.settingsStore.nextMotivation()
                 withAnimation { showMotivation = true }
             } label: {
-                Image(systemName: "sparkles")
+                // Hiker climbing an incline — "motivation = forward movement".
+                // Same brand tint as the rest of the toolbar; colors unchanged.
+                Image(systemName: "figure.hiking")
             }
             .accessibilityLabel("Need motivation")
 
