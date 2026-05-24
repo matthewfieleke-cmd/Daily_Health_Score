@@ -29,7 +29,9 @@ struct TodayView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 8)
             }
-            .navigationTitle("Daily Health Score")
+            // Title text lives inside the principal toolbar item below
+            // (alongside the brand mark), so we don't set a separate
+            // .navigationTitle here.
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
         }
@@ -75,17 +77,27 @@ struct TodayView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Image("BrandMark")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                // 40x40 (was 30x30) so the rounded-square brand mark fills
-                // and overflows the iOS 26 Liquid Glass toolbar-item circular
-                // background — the previous white "halo" around the icon was
-                // that glass capsule showing around a too-small image.
-                .frame(width: 40, height: 40)
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .accessibilityHidden(true)
+        // Brand mark + title together in the principal slot. Principal does
+        // NOT apply iOS 26's Liquid Glass button background, so the brand
+        // mark renders without the white halo we saw in .topBarLeading. The
+        // title travels with the mark, so it isn't squeezed by the trailing
+        // capsule and never truncates.
+        ToolbarItem(placement: .principal) {
+            HStack(spacing: 10) {
+                Image("BrandMark")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 32, height: 32)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .accessibilityHidden(true)
+                Text("Daily Health Score")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Daily Health Score")
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button {
@@ -100,9 +112,15 @@ struct TodayView: View {
                 motivText = appState.settingsStore.nextMotivation()
                 withAnimation { showMotivation = true }
             } label: {
-                // Hiker climbing an incline — "motivation = forward movement".
-                // Same brand tint as the rest of the toolbar; colors unchanged.
-                Image(systemName: "figure.hiking")
+                // Custom HikerOnHill template asset — a hiker climbing a slope,
+                // designed to match the user's reference image. Configured as
+                // template-rendering-intent in the asset catalog so the system
+                // tint (AppTheme.primary) recolors it to match the rest of the
+                // toolbar icons; colors stay consistent.
+                Image("HikerOnHill")
+                    .renderingMode(.template)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
             }
             .accessibilityLabel("Need motivation")
 
