@@ -14,7 +14,7 @@ final class SMARTGoalStore: ObservableObject {
     }
 
     func reload() {
-        var descriptor = FetchDescriptor<SMARTGoalEntity>(
+        let descriptor = FetchDescriptor<SMARTGoalEntity>(
             sortBy: [SortDescriptor(\.endDate, order: .forward)]
         )
         let entities = (try? modelContext.fetch(descriptor)) ?? []
@@ -70,7 +70,7 @@ final class SMARTGoalStore: ObservableObject {
 
     func renew(cloning goal: SMARTGoal) {
         let created = Date()
-        var clone = SMARTGoal(
+        let clone = SMARTGoal(
             id: UUID(),
             category: goal.category,
             specificText: goal.specificText,

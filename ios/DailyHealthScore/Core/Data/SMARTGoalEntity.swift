@@ -25,7 +25,24 @@ final class SMARTGoalEntity {
 
     init(goal: SMARTGoal) {
         id = goal.id
-        apply(goal)
+        categoryRaw = goal.category.rawValue
+        specificText = goal.specificText
+        measurableDescription = goal.measurableDescription
+        measurablePatternRaw = goal.measurablePattern.rawValue
+        targetCount = goal.targetCount
+        achievableText = goal.achievableText
+        relevantThemeRaw = goal.relevantTheme.rawValue
+        timePresetRaw = goal.timePreset.rawValue
+        endDate = goal.endDate
+        createdAt = goal.createdAt
+        generatedSummary = goal.generatedSummary
+        filledMask = goal.filledMask
+        awaitingConfirm = goal.awaitingConfirm
+        statusRaw = goal.status.rawValue
+        remindersEnabled = goal.remindersEnabled
+        reminderHour = goal.reminderHour
+        reminderMinute = goal.reminderMinute
+        reminderWeekdaysMask = goal.reminderWeekdaysMask
     }
 
     func apply(_ goal: SMARTGoal) {
