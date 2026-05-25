@@ -12,10 +12,6 @@ struct TodayView: View {
     @State private var showMotivation = false
     @State private var discText: String = ""
     @State private var motivText: String = ""
-    /// Shared 0…1 progress for coordinated dial-up (ring, numbers, bars).
-    @State private var dialUpProgress: Double = 0
-    @State private var hasPlayedLaunchDialUp = false
-    @State private var dialUpTask: Task<Void, Never>?
 
     private var todayKey: String { DateHelpers.localDateKey() }
 
@@ -33,18 +29,12 @@ struct TodayView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 8)
             }
+            // Title text lives inside the principal toolbar item below
+            // (alongside the brand mark), so we don't set a separate
+            // .navigationTitle here.
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
         }
-        .task { await playLaunchDialUpIfNeeded() }
-        .onChange(of: displayRecord?.date) { oldDate, newDate in
-            guard oldDate == nil, newDate != nil else { return }
-            Task { await playLaunchDialUpIfNeeded() }
-        }
-        .onChange(of: appState.userRefreshToken) { _, _ in
-            startDialUp()
-        }
-        .onDisappear { dialUpTask?.cancel() }
         .paragraphDialog(
             isPresented: $showDiscouragement,
             title: "Feeling discouraged?",
@@ -62,54 +52,24 @@ struct TodayView: View {
     @ViewBuilder
     private var content: some View {
         if let record = displayRecord {
-            ZStack(alignment: .top) {
-                VStack(spacing: 14) {
-                    if let error = appState.lastSyncError {
-                        errorBanner(error)
-                    }
-
-                    heroCard(for: record)
-
-                    metricRow(for: record)
-                        .animation(DialUpAnimation.timing, value: dialUpProgress)
-
-                    focusCard(for: record)
-
-                    TodaySMARTGoalsCard(
-                        attentionCount: SMARTGoalLogic.attentionCount(
-                            goals: appState.smartGoalStore.goals
-                        )
-                    )
-
-                    Spacer(minLength: 0)
-                }
-
+            VStack(spacing: 14) {
                 if appState.isSyncingHealth {
                     syncingBanner
-                        .padding(.top, 4)
-                        .transition(.opacity)
                 }
+                if let error = appState.lastSyncError {
+                    errorBanner(error)
+                }
+
+                heroCard(for: record)
+
+                metricRow(for: record)
+
+                focusCard(for: record)
+
+                Spacer(minLength: 0)
             }
-            .animation(.easeInOut(duration: 0.2), value: appState.isSyncingHealth)
         } else {
             emptyState
-        }
-    }
-
-    // MARK: - Dial-up
-
-    private func playLaunchDialUpIfNeeded() async {
-        guard displayRecord != nil, !hasPlayedLaunchDialUp else { return }
-        hasPlayedLaunchDialUp = true
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        startDialUp()
-    }
-
-    private func startDialUp() {
-        guard displayRecord != nil else { return }
-        dialUpTask?.cancel()
-        dialUpTask = Task { @MainActor in
-            await DialUpAnimation.animate { dialUpProgress = $0 }
         }
     }
 
@@ -117,6 +77,11 @@ struct TodayView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        // Brand mark + title together in the principal slot. Principal does
+        // NOT apply iOS 26's Liquid Glass button background, so the brand
+        // mark renders without the white halo we saw in .topBarLeading. The
+        // title travels with the mark, so it isn't squeezed by the trailing
+        // capsule and never truncates.
         ToolbarItem(placement: .principal) {
             HStack(spacing: 10) {
                 Image("BrandMark")
@@ -147,6 +112,11 @@ struct TodayView: View {
                 motivText = appState.settingsStore.nextMotivation()
                 withAnimation { showMotivation = true }
             } label: {
+                // Custom HikerOnHill template asset — a hiker climbing a slope,
+                // designed to match the user's reference image. Configured as
+                // template-rendering-intent in the asset catalog so the system
+                // tint (AppTheme.primary) recolors it to match the rest of the
+                // toolbar icons; colors stay consistent.
                 Image("HikerOnHill")
                     .renderingMode(.template)
                     .resizable()
@@ -155,7 +125,7 @@ struct TodayView: View {
             .accessibilityLabel("Need motivation")
 
             Button {
-                Task { await appState.syncTodayFromHealth(userInitiated: true) }
+                Task { await appState.syncTodayFromHealth() }
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
@@ -201,12 +171,7 @@ struct TodayView: View {
                 }
             }
 
-            ScoreRingView(
-                score: record.totalScore,
-                animationProgress: dialUpProgress,
-                lineWidth: 12,
-                size: 140
-            )
+            ScoreRingView(score: record.totalScore, lineWidth: 12, size: 140)
 
             Text(focusHeadline(for: record))
                 .font(.footnote.weight(.medium))
@@ -244,39 +209,30 @@ struct TodayView: View {
         HStack(spacing: 10) {
             CompactMetricCard(
                 title: "Sleep",
-                metricValue: record.sleepHours,
-                unitSuffix: "hr",
-                usesIntegerDisplay: false,
-                scoreValue: record.sleepScore,
-                maxScore: 4,
-                goalValue: record.sleepGoal.rawValue,
-                animationProgress: dialUpProgress,
+                value: "\(ScoreCalculator.formatDisplayScore(record.sleepHours))",
+                unit: "hr",
+                scoreText: "\(ScoreCalculator.formatDisplayScore(record.sleepScore)) / 4",
+                fractionOfGoal: record.sleepHours / record.sleepGoal.rawValue,
                 systemImage: "moon.stars.fill",
                 tint: AppTheme.primary
             )
             CompactMetricCard(
                 title: "Fiber",
-                metricValue: record.fiberGrams,
-                unitSuffix: "g",
-                usesIntegerDisplay: false,
-                scoreValue: record.fiberScore,
-                maxScore: 4,
-                goalValue: Double(record.fiberGoal.rawValue),
-                animationProgress: dialUpProgress,
+                value: "\(ScoreCalculator.formatDisplayScore(record.fiberGrams))",
+                unit: "g",
+                scoreText: "\(ScoreCalculator.formatDisplayScore(record.fiberScore)) / 4",
+                fractionOfGoal: record.fiberGrams / Double(record.fiberGoal.rawValue),
                 systemImage: "leaf.fill",
                 tint: AppTheme.leaf
             )
             CompactMetricCard(
                 title: "Exercise",
-                metricValue: record.exerciseMinutes,
-                unitSuffix: "min",
-                usesIntegerDisplay: true,
-                scoreValue: record.exerciseScore,
-                maxScore: 2,
-                goalValue: Double(record.exerciseGoalMinutes),
-                animationProgress: dialUpProgress,
+                value: "\(Int(record.exerciseMinutes.rounded()))",
+                unit: "min",
+                scoreText: "\(ScoreCalculator.formatDisplayScore(record.exerciseScore)) / 2",
+                fractionOfGoal: record.exerciseMinutes / Double(record.exerciseGoalMinutes),
                 systemImage: "figure.run",
-                tint: AppTheme.tint(for: .exercise)
+                tint: AppTheme.tint(for: PrimaryFocus.exercise)
             )
         }
     }
@@ -357,17 +313,10 @@ struct TodayView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 8)
             }
-            TodaySMARTGoalsCard(
-                attentionCount: SMARTGoalLogic.attentionCount(
-                    goals: appState.smartGoalStore.goals
-                )
-            )
-            .padding(.horizontal, 8)
-
             Button {
                 Task {
                     await appState.requestHealthAccess()
-                    await appState.syncTodayFromHealth(userInitiated: true)
+                    await appState.syncTodayFromHealth()
                 }
             } label: {
                 Text("Connect Apple Health")
@@ -389,42 +338,15 @@ struct TodayView: View {
 
 private struct CompactMetricCard: View {
     let title: String
-    let metricValue: Double
-    let unitSuffix: String
-    let usesIntegerDisplay: Bool
-    let scoreValue: Double
-    let maxScore: Double
-    let goalValue: Double
-    let animationProgress: Double
+    let value: String
+    let unit: String
+    let scoreText: String
+    let fractionOfGoal: Double
     let systemImage: String
     let tint: Color
 
-    private var progress: Double { max(0, min(animationProgress, 1)) }
-
-    private var displayedMetric: Double { metricValue * progress }
-    private var displayedScore: Double { scoreValue * progress }
-
-    private var fractionOfGoal: Double {
-        guard goalValue > 0 else { return 0 }
-        return metricValue / goalValue
-    }
-
-    private var animatedBarFraction: Double {
-        max(0, min(fractionOfGoal * progress, 1))
-    }
-
+    private var capped: Double { max(0, min(fractionOfGoal, 1)) }
     private var atOrOverGoal: Bool { fractionOfGoal >= 1 }
-
-    private var metricDisplayText: String {
-        if usesIntegerDisplay {
-            return "\(Int(displayedMetric.rounded()))"
-        }
-        return ScoreCalculator.formatDisplayScore(displayedMetric)
-    }
-
-    private var scoreDisplayText: String {
-        "\(ScoreCalculator.formatDisplayScore(displayedScore)) / \(ScoreCalculator.formatDisplayScore(maxScore))"
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -439,14 +361,20 @@ private struct CompactMetricCard: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
+                Spacer(minLength: 0)
+                if atOrOverGoal {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.leaf)
+                        .accessibilityLabel("Goal met")
+                }
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(metricDisplayText)
+                Text(value)
                     .font(.title3.weight(.bold))
                     .monospacedDigit()
-                    .contentTransition(.numericText(value: displayedMetric))
-                Text(unitSuffix)
+                Text(unit)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -455,33 +383,23 @@ private struct CompactMetricCard: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(tint.opacity(0.15))
                     Capsule().fill(tint)
-                        .frame(width: geo.size.width * animatedBarFraction)
+                        .frame(width: geo.size.width * capped)
+                        .animation(.spring(response: 0.5, dampingFraction: 0.85), value: capped)
                 }
             }
             .frame(height: 5)
 
-            HStack(alignment: .center, spacing: 4) {
-                Text(scoreDisplayText)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .contentTransition(.numericText(value: displayedScore))
-                Spacer(minLength: 0)
-                if atOrOverGoal, progress >= 1 {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.leaf)
-                        .accessibilityLabel("Goal met")
-                }
-            }
+            Text(scoreText)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
-        .animation(DialUpAnimation.timing, value: animationProgress)
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
         .cardShadow()
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title): \(metricDisplayText) \(unitSuffix), \(scoreDisplayText)")
+        .accessibilityLabel("\(title): \(value) \(unit), \(scoreText)")
     }
 }

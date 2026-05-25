@@ -93,7 +93,7 @@ struct RollingSummaryView: View {
                      icon: "leaf.fill", tint: AppTheme.leaf),
             StatTile(label: "Exercise", value: "\(Int(stats.avgExerciseMinutes.rounded())) min",
                      sub: "\(ScoreCalculator.formatDisplayScore(stats.avgExerciseScore)) / 2",
-                     icon: "figure.run", tint: AppTheme.tint(for: .exercise)),
+                     icon: "figure.run", tint: AppTheme.tint(for: PrimaryFocus.exercise)),
         ]
         return LazyVGrid(
             columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
