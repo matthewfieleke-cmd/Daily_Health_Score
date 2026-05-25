@@ -63,11 +63,11 @@ final class SMARTGoalDraft: ObservableObject, Identifiable {
         let count = SMARTGoalLogic.clampedTargetCount(targetCount)
         let days = SMARTGoalLogic.clampedDays(timeWindowDays)
         [
-            (.specific, "Specific", specificText),
-            (.measurable, "Measurable", "\(count) \(count == 1 ? "time" : "times")"),
-            (.achievable, "Achievable", SMARTGoalLogic.achievableReminder),
-            (.relevant, "Relevant", relevantTheme.label),
-            (.time, "Time-bound", "\(days) \(days == 1 ? "day" : "days") · ends \(endDatePreview.formatted(date: .abbreviated, time: .shortened))")
+            (SMARTWizardStep.specific, "Specific", specificText),
+            (SMARTWizardStep.measurable, "Measurable", "\(count) \(count == 1 ? "time" : "times")"),
+            (SMARTWizardStep.achievable, "Achievable", SMARTGoalLogic.achievableReminder),
+            (SMARTWizardStep.relevant, "Relevant", relevantTheme.label),
+            (SMARTWizardStep.time, "Time-bound", "\(days) \(days == 1 ? "day" : "days") · ends \(endDatePreview.formatted(date: .abbreviated, time: .shortened))")
         ]
     }
 }
