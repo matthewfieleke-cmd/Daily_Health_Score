@@ -62,7 +62,7 @@ final class SMARTGoalDraft: ObservableObject, Identifiable {
     func summaryFields() -> [(SMARTWizardStep, String, String)] {
         let count = SMARTGoalLogic.clampedTargetCount(targetCount)
         let days = SMARTGoalLogic.clampedDays(timeWindowDays)
-        [
+        return [
             (SMARTWizardStep.specific, "Specific", specificText),
             (SMARTWizardStep.measurable, "Measurable", "\(count) \(count == 1 ? "time" : "times")"),
             (SMARTWizardStep.achievable, "Achievable", SMARTGoalLogic.achievableReminder),
