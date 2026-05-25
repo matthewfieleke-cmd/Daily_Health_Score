@@ -37,7 +37,6 @@ struct SMARTGoalDetailView: View {
         .onAppear { reload() }
         .alert("Goal complete!", isPresented: $showCelebration) {
             Button("Great") {
-                appState.smartGoalStore.completeAndRemove(id: goalId)
                 dismiss()
             }
         } message: {
@@ -122,10 +121,12 @@ struct SMARTGoalDetailView: View {
         guard !current.isFilled(index) else { return }
 
         current.setFilled(index, filled: true)
-        persist(current)
         if current.isComplete {
-            SMARTNotificationService.cancelReminders(for: current.id)
+            goal = current
+            appState.smartGoalStore.completeAndRemove(id: current.id)
             showCelebration = true
+        } else {
+            persist(current)
         }
     }
 
