@@ -31,7 +31,7 @@ struct SettingsView: View {
 
                 Section("Apple Health") {
                     Button {
-                        Task { await appState.syncTodayFromHealth() }
+                        Task { await appState.syncTodayFromHealth(userInitiated: true) }
                     } label: {
                         Label("Refresh today from Health", systemImage: "arrow.clockwise")
                     }

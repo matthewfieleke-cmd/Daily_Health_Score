@@ -7,13 +7,21 @@ import SwiftUI
 /// below. The fill color subtly shifts from the brand primary toward the
 /// leaf-green as the score approaches 10, giving the user immediate
 /// visual feedback about how complete the day is.
+///
+/// Pass `animationProgress` (0…1) to drive a coordinated dial-up; at `1`
+/// the ring and label show the final `score` with no extra motion.
 struct ScoreRingView: View {
     let score: Double
+    var animationProgress: Double = 1
     var lineWidth: CGFloat = 14
     var size: CGFloat = 168
 
+    private var displayedScore: Double {
+        score * max(0, min(animationProgress, 1))
+    }
+
     private var fraction: Double {
-        max(0, min(score / 10.0, 1))
+        max(0, min(displayedScore / 10.0, 1))
     }
 
     /// Blend brand primary -> leaf green as the score increases. UIColor's
@@ -46,10 +54,9 @@ struct ScoreRingView: View {
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .animation(.spring(response: 0.55, dampingFraction: 0.85), value: fraction)
 
             VStack(spacing: 2) {
-                Text(formatted(score))
+                Text(formatted(displayedScore))
                     .font(.system(size: 52, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(AppTheme.backgroundDeep)
