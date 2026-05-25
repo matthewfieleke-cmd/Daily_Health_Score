@@ -2,10 +2,19 @@ import SwiftUI
 
 struct SMARTGoalsListView: View {
     @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        SMARTGoalsListContent(store: appState.smartGoalStore)
+            .environmentObject(appState)
+    }
+}
+
+private struct SMARTGoalsListContent: View {
+    @ObservedObject var store: SMARTGoalStore
     @State private var showWizard = false
 
     private var goals: [SMARTGoal] {
-        appState.smartGoalStore.goals
+        store.goals
     }
 
     var body: some View {
@@ -45,7 +54,7 @@ struct SMARTGoalsListView: View {
             }
         }
         .onAppear {
-            appState.smartGoalStore.refreshEndedStatus()
+            store.refreshEndedStatus()
         }
     }
 
@@ -82,7 +91,7 @@ struct SMARTGoalsListView: View {
     private func deleteGoals(at offsets: IndexSet) {
         for index in offsets {
             let id = goals[index].id
-            appState.smartGoalStore.delete(id: id)
+            store.delete(id: id)
         }
     }
 }
