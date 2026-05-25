@@ -426,13 +426,6 @@ private struct CompactMetricCard: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
-                Spacer(minLength: 0)
-                if atOrOverGoal, progress >= 1 {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(AppTheme.leaf)
-                        .accessibilityLabel("Goal met")
-                }
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
@@ -454,11 +447,20 @@ private struct CompactMetricCard: View {
             }
             .frame(height: 5)
 
-            Text(scoreDisplayText)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .contentTransition(.numericText(value: displayedScore))
+            HStack(alignment: .center, spacing: 4) {
+                Text(scoreDisplayText)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .contentTransition(.numericText(value: displayedScore))
+                Spacer(minLength: 0)
+                if atOrOverGoal, progress >= 1 {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.leaf)
+                        .accessibilityLabel("Goal met")
+                }
+            }
         }
         .animation(DialUpAnimation.timing, value: animationProgress)
         .padding(12)
