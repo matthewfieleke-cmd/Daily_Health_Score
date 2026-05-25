@@ -15,6 +15,7 @@ struct TodayView: View {
     /// Shared 0…1 progress for coordinated dial-up (ring, numbers, bars).
     @State private var dialUpProgress: Double = 0
     @State private var hasPlayedLaunchDialUp = false
+    @State private var dialUpTask: Task<Void, Never>?
 
     private var todayKey: String { DateHelpers.localDateKey() }
 
@@ -35,14 +36,15 @@ struct TodayView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
         }
-        .onAppear { playLaunchDialUpIfNeeded() }
+        .task { await playLaunchDialUpIfNeeded() }
         .onChange(of: displayRecord?.date) { oldDate, newDate in
             guard oldDate == nil, newDate != nil else { return }
-            playLaunchDialUpIfNeeded()
+            Task { await playLaunchDialUpIfNeeded() }
         }
         .onChange(of: appState.userRefreshToken) { _, _ in
-            playRefreshDialUpIfNeeded()
+            startDialUp()
         }
+        .onDisappear { dialUpTask?.cancel() }
         .paragraphDialog(
             isPresented: $showDiscouragement,
             title: "Feeling discouraged?",
@@ -69,6 +71,7 @@ struct TodayView: View {
                     heroCard(for: record)
 
                     metricRow(for: record)
+                        .animation(DialUpAnimation.timing, value: dialUpProgress)
 
                     focusCard(for: record)
 
@@ -89,15 +92,19 @@ struct TodayView: View {
 
     // MARK: - Dial-up
 
-    private func playLaunchDialUpIfNeeded() {
+    private func playLaunchDialUpIfNeeded() async {
         guard displayRecord != nil, !hasPlayedLaunchDialUp else { return }
         hasPlayedLaunchDialUp = true
-        DialUpAnimation.run(progress: $dialUpProgress)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        startDialUp()
     }
 
-    private func playRefreshDialUpIfNeeded() {
+    private func startDialUp() {
         guard displayRecord != nil else { return }
-        DialUpAnimation.run(progress: $dialUpProgress)
+        dialUpTask?.cancel()
+        dialUpTask = Task { @MainActor in
+            await DialUpAnimation.animate { dialUpProgress = $0 }
+        }
     }
 
     // MARK: - Toolbar
@@ -432,6 +439,7 @@ private struct CompactMetricCard: View {
                 Text(metricDisplayText)
                     .font(.title3.weight(.bold))
                     .monospacedDigit()
+                    .contentTransition(.numericText(value: displayedMetric))
                 Text(unitSuffix)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -450,7 +458,9 @@ private struct CompactMetricCard: View {
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                .contentTransition(.numericText(value: displayedScore))
         }
+        .animation(DialUpAnimation.timing, value: animationProgress)
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.cardSurface)

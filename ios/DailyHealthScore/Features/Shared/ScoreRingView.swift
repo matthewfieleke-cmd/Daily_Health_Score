@@ -1,15 +1,6 @@
 import SwiftUI
 
 /// Circular progress ring showing today's daily health score out of 10.
-///
-/// The ring fills clockwise from 12 o'clock based on `score / 10`. The
-/// large numeric label sits at the center; a smaller "/ 10" subtitle sits
-/// below. The fill color subtly shifts from the brand primary toward the
-/// leaf-green as the score approaches 10, giving the user immediate
-/// visual feedback about how complete the day is.
-///
-/// Pass `animationProgress` (0…1) to drive a coordinated dial-up; at `1`
-/// the ring and label show the final `score` with no extra motion.
 struct ScoreRingView: View {
     let score: Double
     var animationProgress: Double = 1
@@ -24,8 +15,6 @@ struct ScoreRingView: View {
         max(0, min(displayedScore / 10.0, 1))
     }
 
-    /// Blend brand primary -> leaf green as the score increases. UIColor's
-    /// `blend` helper isn't built-in, so we interpolate manually in RGB.
     private var ringColor: Color {
         let t = fraction
         return Color(
@@ -60,11 +49,13 @@ struct ScoreRingView: View {
                     .font(.system(size: 52, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(AppTheme.backgroundDeep)
+                    .contentTransition(.numericText(value: displayedScore))
                 Text("/ 10")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
         }
+        .animation(DialUpAnimation.timing, value: animationProgress)
         .frame(width: size, height: size)
         .accessibilityElement()
         .accessibilityLabel("Daily score")
@@ -91,11 +82,7 @@ struct ScoreRingView: View {
     }
 }
 
-// MARK: - Light/dark color resolution
-
 extension Color {
-    /// Resolve this Color against an explicit interface style so we can blend
-    /// the right shade per appearance without needing the environment.
     func resolve(style: UIUserInterfaceStyle) -> Color {
         let trait = UITraitCollection(userInterfaceStyle: style)
         let resolved = UIColor(self).resolvedColor(with: trait)
