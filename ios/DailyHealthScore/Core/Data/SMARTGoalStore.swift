@@ -70,21 +70,23 @@ final class SMARTGoalStore: ObservableObject {
 
     func renew(cloning goal: SMARTGoal) {
         let created = Date()
+        let endDate = SMARTGoalLogic.endDate(createdAt: created, days: goal.timeWindowDays)
         let clone = SMARTGoal(
             id: UUID(),
-            category: goal.category,
             specificText: goal.specificText,
-            measurableDescription: goal.measurableDescription,
-            measurablePattern: goal.measurablePattern,
             targetCount: goal.targetCount,
-            achievableText: goal.achievableText,
             relevantTheme: goal.relevantTheme,
-            timePreset: goal.timePreset,
-            endDate: SMARTGoalLogic.endDate(createdAt: created, preset: goal.timePreset),
+            timeWindowDays: goal.timeWindowDays,
+            endDate: endDate,
             createdAt: created,
-            generatedSummary: goal.generatedSummary,
+            generatedSummary: SMARTGoalLogic.buildSummary(
+                specific: goal.specificText,
+                targetCount: goal.targetCount,
+                theme: goal.relevantTheme,
+                timeWindowDays: goal.timeWindowDays,
+                endDate: endDate
+            ),
             filledMask: 0,
-            awaitingConfirm: false,
             status: .active,
             remindersEnabled: goal.remindersEnabled,
             reminderHour: goal.reminderHour,

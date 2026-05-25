@@ -73,13 +73,14 @@ enum AppTheme {
         }
     }
 
-    static func tint(for category: SMARTGoalCategory) -> Color {
-        switch category {
-        case .sleep: return primary
-        case .fiber: return leaf
-        case .exercise: return Color(red: 0.94, green: 0.55, blue: 0.32)
-        case .relationshipBuilding: return Color(red: 0.85, green: 0.45, blue: 0.55)
+    static func tint(for theme: SMARTRelevantTheme) -> Color {
+        switch theme {
+        case .health: return primary
+        case .marriage: return Color(red: 0.85, green: 0.45, blue: 0.55)
+        case .parenting: return Color(red: 0.94, green: 0.55, blue: 0.32)
+        case .relationships: return Color(red: 0.62, green: 0.47, blue: 0.86)
         case .stressManagement: return Color(red: 0.55, green: 0.48, blue: 0.82)
+        case .growth: return leaf
         }
     }
 

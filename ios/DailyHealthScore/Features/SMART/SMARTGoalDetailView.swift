@@ -10,7 +10,7 @@ struct SMARTGoalDetailView: View {
     @State private var showCelebration = false
 
     private var tint: Color {
-        goal.map { AppTheme.tint(for: $0.category) } ?? AppTheme.primary
+        goal.map { AppTheme.tint(for: $0.relevantTheme) } ?? AppTheme.primary
     }
 
     var body: some View {
@@ -52,10 +52,10 @@ struct SMARTGoalDetailView: View {
 
     private func header(_ goal: SMARTGoal) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: goal.category.systemImage)
+            Image(systemName: goal.relevantTheme.systemImage)
                 .foregroundStyle(tint)
             VStack(alignment: .leading, spacing: 2) {
-                Text(goal.category.label)
+                Text(goal.relevantTheme.label)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(goal.specificText)
@@ -109,18 +109,9 @@ struct SMARTGoalDetailView: View {
                     }
                 )
 
-                if goal.awaitingConfirm {
-                    Button("I did it") {
-                        confirmYesNo()
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(AppTheme.primary)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .buttonStyle(.plain)
-                }
+                Text("\(goal.filledCount) of \(goal.targetCount) complete")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .dhsCard(padding: 14)
         }
@@ -130,27 +121,12 @@ struct SMARTGoalDetailView: View {
         guard var current = goal, current.status == .active, !current.isExpired else { return }
         guard !current.isFilled(index) else { return }
 
-        if current.isYesNoStyle {
-            current.setFilled(index, filled: true)
-            current.awaitingConfirm = true
-            persist(current)
-            return
-        }
-
         current.setFilled(index, filled: true)
         persist(current)
         if current.isComplete {
             SMARTNotificationService.cancelReminders(for: current.id)
             showCelebration = true
         }
-    }
-
-    private func confirmYesNo() {
-        guard var current = goal else { return }
-        current.awaitingConfirm = false
-        persist(current)
-        SMARTNotificationService.cancelReminders(for: current.id)
-        showCelebration = true
     }
 
     private func persist(_ updated: SMARTGoal) {

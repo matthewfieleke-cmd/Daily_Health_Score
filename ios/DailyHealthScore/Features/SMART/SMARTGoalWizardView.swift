@@ -24,7 +24,7 @@ struct SMARTGoalWizardView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }
             }
-            if draft.step != .category && draft.step != .summary {
+            if draft.step != .specific && draft.step != .summary {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Back") { goBack() }
                 }
@@ -67,11 +67,9 @@ struct SMARTGoalWizardView: View {
 
     private var stepTitle: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if draft.step != .category {
-                Text(draft.step.letter)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(AppTheme.primary)
-            }
+            Text(draft.step.letter)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(AppTheme.primary)
             Text(draft.step.title)
                 .font(.title2.weight(.semibold))
         }
@@ -80,8 +78,6 @@ struct SMARTGoalWizardView: View {
     @ViewBuilder
     private var stepContent: some View {
         switch draft.step {
-        case .category:
-            categoryStep
         case .specific:
             specificStep
         case .measurable:
@@ -94,34 +90,6 @@ struct SMARTGoalWizardView: View {
             timeStep
         case .summary:
             EmptyView()
-        }
-    }
-
-    private var categoryStep: some View {
-        VStack(spacing: 10) {
-            ForEach(SMARTGoalCategory.allCases) { cat in
-                Button {
-                    draft.category = cat
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: cat.systemImage)
-                            .foregroundStyle(AppTheme.tint(for: cat))
-                            .frame(width: 28)
-                        Text(cat.label)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if draft.category == cat {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(AppTheme.primary)
-                        }
-                    }
-                    .padding(12)
-                    .background(AppTheme.cardSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
         }
     }
 
@@ -138,42 +106,27 @@ struct SMARTGoalWizardView: View {
 
     private var measurableStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Toggle("Once each day for 7 days", isOn: $draft.dailyForSevenDays)
-                .onChange(of: draft.dailyForSevenDays) { _, on in
-                    if on { draft.sessionCount = 7 }
-                    refreshMeasurableDefaults()
-                }
-
-            if !draft.dailyForSevenDays {
-                Stepper("Times in goal window: \(draft.sessionCount)", value: $draft.sessionCount, in: 1 ... 7)
-                    .onChange(of: draft.sessionCount) { _, _ in
-                        refreshMeasurableDefaults()
-                    }
-            }
-
-            TextField("Measurable description", text: $draft.measurableDescription, axis: .vertical)
-                .lineLimit(2 ... 4)
-                .textFieldStyle(.roundedBorder)
-
-            if draft.category.isHealthPillar {
-                Text("Pre-filled from your health goals — adjust if needed.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Text("How many times do you want to do it?")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Stepper("Times: \(draft.targetCount)", value: $draft.targetCount, in: 1 ... 30)
+            Text("The action itself comes from your Specific step.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        .onAppear { refreshMeasurableDefaults() }
     }
 
     private var achievableStep: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Suggested from your recent data — edit freely.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            TextField("Achievable", text: $draft.achievableText, axis: .vertical)
-                .lineLimit(2 ... 5)
-                .textFieldStyle(.roundedBorder)
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.title2)
+                .foregroundStyle(AppTheme.primary)
+            Text(SMARTGoalLogic.achievableReminder)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .onAppear { refreshMeasurableDefaults() }
+        .dhsCard()
     }
 
     private var relevantStep: some View {
@@ -183,6 +136,9 @@ struct SMARTGoalWizardView: View {
                     draft.relevantTheme = theme
                 } label: {
                     HStack {
+                        Image(systemName: theme.systemImage)
+                            .foregroundStyle(AppTheme.tint(for: theme))
+                            .frame(width: 28)
                         Text(theme.label)
                             .foregroundStyle(.primary)
                         Spacer()
@@ -202,12 +158,18 @@ struct SMARTGoalWizardView: View {
 
     private var timeStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Picker("Duration", selection: $draft.timePreset) {
-                ForEach(SMARTTimePreset.allCases) { preset in
-                    Text(preset.label).tag(preset)
+            Text("What's the time window?")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Picker("Number of days", selection: $draft.timeWindowDays) {
+                ForEach(SMARTGoalLogic.minTimeWindowDays ... SMARTGoalLogic.maxTimeWindowDays, id: \.self) { day in
+                    Text("\(day) \(day == 1 ? "day" : "days")").tag(day)
                 }
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.wheel)
+            .frame(height: 150)
+            .clipped()
 
             LabeledContent("Ends") {
                 Text(draft.endDatePreview.formatted(date: .abbreviated, time: .shortened))
@@ -274,7 +236,7 @@ struct SMARTGoalWizardView: View {
                     .buttonStyle(.plain)
                 }
 
-                Text(draft.buildGoal().generatedSummary)
+                Text(draft.generatedSummaryPreview)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(.top, 4)
@@ -316,11 +278,9 @@ struct SMARTGoalWizardView: View {
 
     private var canContinue: Bool {
         switch draft.step {
-        case .category: return true
         case .specific: return !draft.specificText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .measurable: return !draft.measurableDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .achievable: return !draft.achievableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .relevant, .time: return true
+        case .measurable: return draft.targetCount >= 1
+        case .achievable, .relevant, .time: return true
         case .summary: return true
         }
     }
@@ -332,22 +292,11 @@ struct SMARTGoalWizardView: View {
 
     private func advance() {
         if draft.step == .time {
-            draft.measurablePattern = draft.resolvedPattern()
             draft.step = .summary
             return
         }
         guard let next = SMARTWizardStep(rawValue: draft.step.rawValue + 1) else { return }
         draft.step = next
-        if next == .measurable || next == .achievable {
-            refreshMeasurableDefaults()
-        }
-    }
-
-    private func refreshMeasurableDefaults() {
-        draft.applyDefaults(
-            from: appState.settingsStore.settings,
-            records: appState.recordStore.records
-        )
     }
 
     private func saveGoal() {

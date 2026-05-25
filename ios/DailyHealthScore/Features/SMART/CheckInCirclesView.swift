@@ -8,8 +8,12 @@ struct CheckInCirclesView: View {
     let enabled: Bool
     let onTap: (Int) -> Void
 
+    private let columns = [
+        GridItem(.adaptive(minimum: 32), spacing: 10)
+    ]
+
     var body: some View {
-        HStack(spacing: 10) {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
             ForEach(0 ..< targetCount, id: \.self) { index in
                 Button {
                     onTap(index)

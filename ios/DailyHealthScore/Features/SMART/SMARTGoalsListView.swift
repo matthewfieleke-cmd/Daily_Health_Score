@@ -90,12 +90,12 @@ struct SMARTGoalsListView: View {
 private struct SMARTGoalRowView: View {
     let goal: SMARTGoal
 
-    private var tint: Color { AppTheme.tint(for: goal.category) }
+    private var tint: Color { AppTheme.tint(for: goal.relevantTheme) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(goal.category.label)
+                Image(systemName: goal.relevantTheme.systemImage)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(tint)
                 Spacer(minLength: 0)
