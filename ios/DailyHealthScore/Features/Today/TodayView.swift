@@ -75,6 +75,12 @@ struct TodayView: View {
 
                     focusCard(for: record)
 
+                    TodaySMARTGoalsCard(
+                        attentionCount: SMARTGoalLogic.attentionCount(
+                            goals: appState.smartGoalStore.goals
+                        )
+                    )
+
                     Spacer(minLength: 0)
                 }
 
@@ -351,6 +357,13 @@ struct TodayView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 8)
             }
+            TodaySMARTGoalsCard(
+                attentionCount: SMARTGoalLogic.attentionCount(
+                    goals: appState.smartGoalStore.goals
+                )
+            )
+            .padding(.horizontal, 8)
+
             Button {
                 Task {
                     await appState.requestHealthAccess()

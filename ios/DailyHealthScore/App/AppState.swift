@@ -12,12 +12,11 @@ final class AppState: ObservableObject {
     let healthKit = HealthKitService()
     let settingsStore = SettingsStore()
     let recordStore: RecordStore
+    let smartGoalStore: SMARTGoalStore
 
     @Published var isSyncingHealth = false
     @Published var lastSyncError: String?
     @Published var healthAuthorized = false
-    /// Incremented when a user-initiated refresh completes (toolbar / settings).
-    @Published private(set) var userRefreshToken: UInt = 0
 
     init(modelContext: ModelContext) {
         recordStore = RecordStore(modelContext: modelContext)
@@ -33,7 +32,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    func syncTodayFromHealth(userInitiated: Bool = false) async {
+    func syncTodayFromHealth() async {
         isSyncingHealth = true
         defer { isSyncingHealth = false }
         do {
@@ -55,9 +54,6 @@ final class AppState: ObservableObject {
             )
             recordStore.save(record)
             lastSyncError = nil
-            if userInitiated {
-                userRefreshToken &+= 1
-            }
         } catch {
             lastSyncError = error.localizedDescription
         }
