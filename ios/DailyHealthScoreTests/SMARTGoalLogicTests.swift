@@ -2,6 +2,13 @@ import XCTest
 @testable import DailyHealthScore
 
 final class SMARTGoalLogicTests: XCTestCase {
+    func test_relevantThemes_areInRequestedOrder() {
+        XCTAssertEqual(
+            SMARTRelevantTheme.allCases,
+            [.marriage, .parenting, .health, .relationships, .finances, .career]
+        )
+    }
+
     func test_dayWindow_isClampedToSupportedRange() {
         XCTAssertEqual(SMARTGoalLogic.clampedDays(0), 1)
         XCTAssertEqual(SMARTGoalLogic.clampedDays(12), 12)

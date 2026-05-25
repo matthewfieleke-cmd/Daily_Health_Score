@@ -4,11 +4,18 @@ import SwiftData
 
 @MainActor
 final class SMARTGoalStore: ObservableObject {
+    private enum Keys {
+        static let schemaVersion = "dhs.smartGoals.schemaVersion"
+    }
+
+    private static let currentSchemaVersion = 1
+
     private let modelContext: ModelContext
     @Published private(set) var goals: [SMARTGoal] = []
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
+        resetStoredGoalsForSchemaChangeIfNeeded()
         reload()
         refreshEndedStatus()
     }
@@ -104,5 +111,19 @@ final class SMARTGoalStore: ObservableObject {
 
     private func fullMask(for count: Int) -> Int {
         count <= 0 ? 0 : (1 << count) - 1
+    }
+
+    private func resetStoredGoalsForSchemaChangeIfNeeded() {
+        guard UserDefaults.standard.integer(forKey: Keys.schemaVersion) != Self.currentSchemaVersion else {
+            return
+        }
+
+        let all = (try? modelContext.fetch(FetchDescriptor<SMARTGoalEntity>())) ?? []
+        for entity in all {
+            SMARTNotificationService.cancelReminders(for: entity.id)
+            modelContext.delete(entity)
+        }
+        try? modelContext.save()
+        UserDefaults.standard.set(Self.currentSchemaVersion, forKey: Keys.schemaVersion)
     }
 }

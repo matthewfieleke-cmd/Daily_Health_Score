@@ -3,34 +3,34 @@ import Foundation
 // MARK: - Themes
 
 enum SMARTRelevantTheme: String, CaseIterable, Identifiable, Codable {
-    case health
     case marriage
     case parenting
+    case health
     case relationships
-    case stressManagement
-    case growth
+    case finances
+    case career
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .health: return "Health"
         case .marriage: return "Marriage"
         case .parenting: return "Parenting"
+        case .health: return "Health"
         case .relationships: return "Relationships"
-        case .stressManagement: return "Stress management"
-        case .growth: return "Growth"
+        case .finances: return "Finances"
+        case .career: return "Career"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .health: return "heart.fill"
         case .marriage: return "heart.circle.fill"
         case .parenting: return "figure.2.and.child.holdinghands"
+        case .health: return "heart.fill"
         case .relationships: return "person.2.fill"
-        case .stressManagement: return "brain.head.profile"
-        case .growth: return "tree.fill"
+        case .finances: return "dollarsign.circle.fill"
+        case .career: return "briefcase.fill"
         }
     }
 }
