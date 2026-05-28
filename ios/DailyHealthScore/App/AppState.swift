@@ -74,4 +74,41 @@ final class AppState: ObservableObject {
         )
         recordStore.save(record)
     }
+
+    func applyGoalChangesToTodayRecord() {
+        let todayKey = DateHelpers.localDateKey()
+        guard let existing = recordStore.records.first(where: { $0.date == todayKey }) else { return }
+
+        let metrics = DailyMetrics(
+            sleepHours: existing.sleepHours,
+            fiberGrams: existing.fiberGrams,
+            exerciseMinutes: existing.exerciseMinutes
+        )
+        let computed = ScoreCalculator.calculate(metrics: metrics, settings: settingsStore.settings)
+        let focus = ScoreCalculator.determinePrimaryFocus(computed)
+        let suggestion = (focus == existing.primaryFocus)
+            ? existing.suggestion
+            : settingsStore.nextSuggestion(for: focus)
+
+        let updated = DailyRecord(
+            date: existing.date,
+            sleepHours: existing.sleepHours,
+            fiberGrams: existing.fiberGrams,
+            exerciseMinutes: existing.exerciseMinutes,
+            sleepGoal: settingsStore.settings.sleepGoal,
+            fiberGoal: settingsStore.settings.fiberGoal,
+            sleepScore: computed.sleepScore,
+            fiberScore: computed.fiberScore,
+            exerciseScore: computed.exerciseScore,
+            totalScore: computed.totalScore,
+            sleepPercent: computed.sleepPercent,
+            fiberPercent: computed.fiberPercent,
+            exercisePercent: computed.exercisePercent,
+            primaryFocus: focus,
+            suggestion: suggestion,
+            createdAt: existing.createdAt,
+            updatedAt: Date()
+        )
+        recordStore.save(updated)
+    }
 }

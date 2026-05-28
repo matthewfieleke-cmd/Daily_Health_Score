@@ -111,14 +111,22 @@ struct SettingsView: View {
     private var sleepGoalBinding: Binding<SleepGoalHours> {
         Binding(
             get: { appState.settingsStore.settings.sleepGoal },
-            set: { appState.settingsStore.settings.sleepGoal = $0 }
+            set: { newGoal in
+                guard appState.settingsStore.settings.sleepGoal != newGoal else { return }
+                appState.settingsStore.settings.sleepGoal = newGoal
+                appState.applyGoalChangesToTodayRecord()
+            }
         )
     }
 
     private var fiberGoalBinding: Binding<FiberGoalGrams> {
         Binding(
             get: { appState.settingsStore.settings.fiberGoal },
-            set: { appState.settingsStore.settings.fiberGoal = $0 }
+            set: { newGoal in
+                guard appState.settingsStore.settings.fiberGoal != newGoal else { return }
+                appState.settingsStore.settings.fiberGoal = newGoal
+                appState.applyGoalChangesToTodayRecord()
+            }
         )
     }
 }
