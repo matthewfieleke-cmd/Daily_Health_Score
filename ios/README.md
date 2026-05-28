@@ -1,6 +1,6 @@
 # Daily Health Score — Native iOS
 
-SwiftUI app with **HealthKit** (no Apple Shortcut, no Vercel). Same scoring and 7 / 30 / 90 day views as the web PWA.
+Native SwiftUI app with **HealthKit** — sleep, fiber, and exercise scoring with **Today** and **7 / 30 / 90-day** rolling views.
 
 ## Requirements
 

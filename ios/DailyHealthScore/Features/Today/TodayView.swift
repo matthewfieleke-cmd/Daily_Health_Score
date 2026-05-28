@@ -118,12 +118,12 @@ struct TodayView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .principal) {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Image("BrandMark")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 32, height: 32)
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .frame(width: 46, height: 46)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .accessibilityHidden(true)
                 Text("Daily Health Score")
                     .font(.headline.weight(.semibold))
@@ -163,20 +163,11 @@ struct TodayView: View {
         }
     }
 
-    // MARK: - Hero card (logo + date + score ring)
+    // MARK: - Hero card (date + score ring)
 
     private func heroCard(for record: DailyRecord) -> some View {
         VStack(spacing: 14) {
             HStack(alignment: .center, spacing: 12) {
-                Image("BrandMark")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 44, height: 44)
-                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .stroke(.white.opacity(0.10), lineWidth: 0.5)
-                    )
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Today")
                         .font(.caption2.weight(.semibold))

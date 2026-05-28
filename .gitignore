@@ -23,3 +23,7 @@ Package.resolved
 
 # Logs
 *.log
+
+# Leftover web build artifacts (app is iOS-only)
+dist/
+node_modules/
