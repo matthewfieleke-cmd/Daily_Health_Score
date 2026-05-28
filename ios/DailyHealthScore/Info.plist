@@ -24,6 +24,12 @@
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Daily Health Score reads your sleep, dietary fiber, and exercise minutes from Apple Health to calculate your daily score. Data stays on your device.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Daily Health Score does not use your location. This description is required because Apple Health libraries may reference location APIs; the app never collects or stores your location.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Daily Health Score does not use your location. This description is required because Apple Health libraries may reference location APIs; the app never collects or stores your location.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Daily Health Score does not use your location. This description is required because Apple Health libraries may reference location APIs; the app never collects or stores your location.</string>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>Daily Health Score can send neutral reminders for your SMART goals.</string>
 	<key>UIApplicationSceneManifest</key>
