@@ -24,6 +24,8 @@
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Daily Health Score reads your sleep, dietary fiber, and exercise minutes from Apple Health to calculate your daily score. Data stays on your device.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Daily Health Score does not write data to Apple Health. This description is required because HealthKit may reference write APIs; the app only reads sleep, fiber, and exercise to calculate your score.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Daily Health Score does not use your location. This description is required because Apple Health libraries may reference location APIs; the app never collects or stores your location.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
