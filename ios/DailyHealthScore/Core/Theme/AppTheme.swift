@@ -81,6 +81,7 @@ enum AppTheme {
         case .relationships: return Color(red: 0.62, green: 0.47, blue: 0.86)
         case .finances: return Color(red: 0.20, green: 0.63, blue: 0.42)
         case .career: return Color(red: 0.30, green: 0.45, blue: 0.78)
+        case .choresMisc: return Color(red: 0.49, green: 0.53, blue: 0.61)
         }
     }
 

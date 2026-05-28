@@ -9,6 +9,7 @@ enum SMARTRelevantTheme: String, CaseIterable, Identifiable, Codable {
     case relationships
     case finances
     case career
+    case choresMisc
 
     var id: String { rawValue }
 
@@ -20,6 +21,7 @@ enum SMARTRelevantTheme: String, CaseIterable, Identifiable, Codable {
         case .relationships: return "Relationships"
         case .finances: return "Finances"
         case .career: return "Career"
+        case .choresMisc: return "Chores/Misc"
         }
     }
 
@@ -31,6 +33,7 @@ enum SMARTRelevantTheme: String, CaseIterable, Identifiable, Codable {
         case .relationships: return "person.2.fill"
         case .finances: return "dollarsign.circle.fill"
         case .career: return "briefcase.fill"
+        case .choresMisc: return "wrench.and.screwdriver.fill"
         }
     }
 }

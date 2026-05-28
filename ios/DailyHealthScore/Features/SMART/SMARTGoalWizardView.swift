@@ -100,6 +100,7 @@ struct SMARTGoalWizardView: View {
                 .foregroundStyle(.secondary)
             TextField("e.g. play a board game with my kids", text: $draft.specificText, axis: .vertical)
                 .lineLimit(3 ... 6)
+                .textInputAutocapitalization(.never)
                 .textFieldStyle(.roundedBorder)
         }
     }
