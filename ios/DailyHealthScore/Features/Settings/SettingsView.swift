@@ -125,7 +125,7 @@ struct SettingsView: View {
                 guard selectedSleepGoal != newGoal else { return }
                 selectedSleepGoal = newGoal
                 appState.settingsStore.settings.sleepGoal = newGoal
-                appState.applyGoalChangesToTodayRecord()
+                Task { await appState.refreshTodayAfterGoalChange() }
             }
         )
     }
@@ -137,7 +137,7 @@ struct SettingsView: View {
                 guard selectedFiberGoal != newGoal else { return }
                 selectedFiberGoal = newGoal
                 appState.settingsStore.settings.fiberGoal = newGoal
-                appState.applyGoalChangesToTodayRecord()
+                Task { await appState.refreshTodayAfterGoalChange() }
             }
         )
     }

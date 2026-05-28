@@ -75,7 +75,14 @@ final class AppState: ObservableObject {
         recordStore.save(record)
     }
 
-    func applyGoalChangesToTodayRecord() {
+    func refreshTodayAfterGoalChange() async {
+        await syncTodayFromHealth(userInitiated: true)
+        if lastSyncError != nil {
+            applyGoalChangesToTodayRecord()
+        }
+    }
+
+    private func applyGoalChangesToTodayRecord() {
         let todayKey = DateHelpers.localDateKey()
         guard let existing = recordStore.records.first(where: { $0.date == todayKey }) else { return }
 
