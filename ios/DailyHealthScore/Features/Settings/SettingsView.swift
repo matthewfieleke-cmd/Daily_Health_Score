@@ -11,6 +11,8 @@ struct SettingsView: View {
     @State private var showClearConfirm = false
     @State private var showSleepDiagnostic = false
     @State private var exportText = ""
+    @State private var selectedSleepGoal: SleepGoalHours = .sevenHalf
+    @State private var selectedFiberGoal: FiberGoalGrams = .forty
 
     var body: some View {
         NavigationStack {
@@ -68,6 +70,14 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .tint(AppTheme.primary)
+            .onAppear {
+                selectedSleepGoal = appState.settingsStore.settings.sleepGoal
+                selectedFiberGoal = appState.settingsStore.settings.fiberGoal
+            }
+            .onChange(of: appState.settingsStore.settings) { _, settings in
+                selectedSleepGoal = settings.sleepGoal
+                selectedFiberGoal = settings.fiberGoal
+            }
             .sheet(isPresented: $showEditDay) {
                 EditDayView()
             }
@@ -110,9 +120,10 @@ struct SettingsView: View {
 
     private var sleepGoalBinding: Binding<SleepGoalHours> {
         Binding(
-            get: { appState.settingsStore.settings.sleepGoal },
+            get: { selectedSleepGoal },
             set: { newGoal in
-                guard appState.settingsStore.settings.sleepGoal != newGoal else { return }
+                guard selectedSleepGoal != newGoal else { return }
+                selectedSleepGoal = newGoal
                 appState.settingsStore.settings.sleepGoal = newGoal
                 appState.applyGoalChangesToTodayRecord()
             }
@@ -121,9 +132,10 @@ struct SettingsView: View {
 
     private var fiberGoalBinding: Binding<FiberGoalGrams> {
         Binding(
-            get: { appState.settingsStore.settings.fiberGoal },
+            get: { selectedFiberGoal },
             set: { newGoal in
-                guard appState.settingsStore.settings.fiberGoal != newGoal else { return }
+                guard selectedFiberGoal != newGoal else { return }
+                selectedFiberGoal = newGoal
                 appState.settingsStore.settings.fiberGoal = newGoal
                 appState.applyGoalChangesToTodayRecord()
             }
