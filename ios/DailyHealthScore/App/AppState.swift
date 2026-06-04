@@ -51,17 +51,17 @@ final class AppState: ObservableObject {
                 uniqueKeysWithValues: recordStore.records.map { ($0.date, $0) }
             )
 
-            if let todayRecord = try await buildRecordIfNeeded(
-                dateKey: today,
-                todayKey: today,
-                existingByDate: existingByDate
-            ) {
-                recordStore.save(todayRecord)
-                existingByDate[today] = todayRecord
-            } else {
-                throw HealthKitError.queryFailed("Could not load today's Health data.")
-            }
+            // Today always gets a record, even if every Health read is empty or
+            // fails — a partial day still shows a score (0 for missing metrics).
+            let todayRecord = await buildTodayRecord(
+                today: today,
+                existing: existingByDate[today]
+            )
+            recordStore.save(todayRecord)
+            existingByDate[today] = todayRecord
 
+            // Backfill never aborts because of an individual day; failures simply
+            // skip that day and the rest of the window still updates.
             var backfillBatch: [DailyRecord] = []
             for dateKey in windowKeys where dateKey != today {
                 guard let record = await buildRecordIfNeeded(
@@ -121,6 +121,25 @@ final class AppState: ObservableObject {
         if lastSyncError != nil {
             applyGoalChangesToTodayRecord()
         }
+    }
+
+    /// Builds today's record using whatever Health data is available; `fetchMetrics`
+    /// already resolves missing metrics to 0, so this only falls back to all-zeros
+    /// if Health is unavailable entirely.
+    private func buildTodayRecord(today: String, existing: DailyRecord?) async -> DailyRecord {
+        let healthMetrics = (try? await healthKit.fetchMetrics(forDateKey: today))
+            ?? HealthDayMetrics(sleepHours: 0, fiberGrams: 0, exerciseMinutes: 0)
+        return RecordBuilder.build(
+            date: today,
+            metrics: DailyMetrics(
+                sleepHours: healthMetrics.sleepHours,
+                fiberGrams: healthMetrics.fiberGrams,
+                exerciseMinutes: healthMetrics.exerciseMinutes
+            ),
+            settings: settingsStore.settings,
+            settingsStore: settingsStore,
+            existing: existing
+        )
     }
 
     private func buildRecordIfNeeded(

@@ -36,6 +36,11 @@ final class HealthKitService {
         try await store.requestAuthorization(toShare: [], read: [sleep, fiber, exercise])
     }
 
+    /// Reads sleep, fiber, and exercise for a day. Each metric is fetched
+    /// independently and resolves to 0 if its individual query fails or returns
+    /// nothing, so one missing/erroring metric never blocks the day's score.
+    /// Throwing is reserved for cases where Health is unavailable or the date is
+    /// invalid — situations where no metric could possibly be read.
     func fetchMetrics(forDateKey dateKey: String) async throws -> HealthDayMetrics {
         guard isAvailable else { throw HealthKitError.unavailable }
         guard let dayStart = DateHelpers.date(from: dateKey) else {
@@ -43,14 +48,24 @@ final class HealthKitService {
         }
         let calendar = Calendar.current
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
-        async let sleepHours = fetchSleepHours(dayStart: dayStart, dayEnd: dayEnd, calendar: calendar)
-        async let fiberGrams = fetchFiberGrams(dayStart: dayStart, dayEnd: dayEnd)
-        async let exerciseMinutes = fetchExerciseMinutes(dayStart: dayStart, dayEnd: dayEnd)
-        return try await HealthDayMetrics(
+        async let sleepHours = resilient { try await self.fetchSleepHours(dayStart: dayStart, dayEnd: dayEnd, calendar: calendar) }
+        async let fiberGrams = resilient { try await self.fetchFiberGrams(dayStart: dayStart, dayEnd: dayEnd) }
+        async let exerciseMinutes = resilient { try await self.fetchExerciseMinutes(dayStart: dayStart, dayEnd: dayEnd) }
+        return await HealthDayMetrics(
             sleepHours: sleepHours,
             fiberGrams: fiberGrams,
             exerciseMinutes: exerciseMinutes
         )
+    }
+
+    /// Runs a single metric query, returning 0 instead of throwing so a partial
+    /// Health read (e.g. no fiber logged yet today) still yields a scored day.
+    private func resilient(_ operation: () async throws -> Double) async -> Double {
+        do {
+            return try await operation()
+        } catch {
+            return 0
+        }
     }
 
     /// Sleep attributed to the wake calendar day. The HealthKit query fetches

@@ -20,9 +20,10 @@ struct TodayView: View {
 
     private var todayKey: String { DateHelpers.localDateKey() }
 
+    /// Only ever the actual current day. We never fall back to an older record,
+    /// which previously rendered yesterday under a "TODAY" header.
     private var displayRecord: DailyRecord? {
-        let records = appState.recordStore.records
-        return records.first { $0.date == todayKey } ?? records.first
+        appState.recordStore.records.first { $0.date == todayKey }
     }
 
     var body: some View {
@@ -97,9 +98,17 @@ struct TodayView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: appState.isSyncingHealth)
+        } else if hasAnyRecords || appState.isSyncingHealth {
+            // Returning user (or first sync in flight): build today's record before
+            // showing anything, rather than flashing stale data or the connect prompt.
+            preparingTodayState
         } else {
             emptyState
         }
+    }
+
+    private var hasAnyRecords: Bool {
+        !appState.recordStore.records.isEmpty
     }
 
     // MARK: - Dial-up
@@ -187,15 +196,6 @@ struct TodayView: View {
                         .minimumScaleFactor(0.7)
                 }
                 Spacer(minLength: 0)
-                if record.date != todayKey {
-                    Text("No data for today")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.white.opacity(0.15))
-                        .clipShape(Capsule())
-                }
             }
 
             ScoreRingView(
@@ -335,6 +335,22 @@ struct TodayView: View {
     }
 
     // MARK: - Empty state (single-screen, no scroll)
+
+    private var preparingTodayState: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            ProgressView()
+                .controlSize(.large)
+            Text("Updating today's score…")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if let error = appState.lastSyncError {
+                errorBanner(error)
+                    .padding(.horizontal, 8)
+            }
+            Spacer()
+        }
+    }
 
     private var emptyState: some View {
         VStack(spacing: 18) {
