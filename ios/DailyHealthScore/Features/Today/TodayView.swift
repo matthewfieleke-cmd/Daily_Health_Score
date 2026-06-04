@@ -308,7 +308,7 @@ struct TodayView: View {
     private var syncingBanner: some View {
         HStack(spacing: 10) {
             ProgressView().controlSize(.small)
-            Text("Syncing from Apple Health…")
+            Text("Syncing from Apple Health (updating history)…")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)

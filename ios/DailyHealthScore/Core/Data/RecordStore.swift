@@ -31,12 +31,29 @@ final class RecordStore: ObservableObject {
     }
 
     func save(_ record: DailyRecord) {
+        upsert(record)
+        trimRetention()
+        try? modelContext.save()
+        reload()
+    }
+
+    /// Upserts many records with a single reload (used after Health history backfill).
+    func saveBatch(_ records: [DailyRecord]) {
+        guard !records.isEmpty else { return }
+        for record in records {
+            upsert(record)
+        }
+        trimRetention()
+        try? modelContext.save()
+        reload()
+    }
+
+    private func upsert(_ record: DailyRecord) {
         let descriptor = FetchDescriptor<DailyRecordEntity>(
             predicate: #Predicate { $0.date == record.date }
         )
         if let existing = try? modelContext.fetch(descriptor).first {
-            var merged = record
-            merged = DailyRecord(
+            let merged = DailyRecord(
                 date: record.date,
                 sleepHours: record.sleepHours,
                 fiberGrams: record.fiberGrams,
@@ -60,9 +77,6 @@ final class RecordStore: ObservableObject {
         } else {
             modelContext.insert(DailyRecordEntity(record: record))
         }
-        trimRetention()
-        try? modelContext.save()
-        reload()
     }
 
     func deleteAll() {

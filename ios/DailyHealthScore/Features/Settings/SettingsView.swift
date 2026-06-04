@@ -35,7 +35,7 @@ struct SettingsView: View {
                     Button {
                         Task { await appState.syncTodayFromHealth(userInitiated: true) }
                     } label: {
-                        Label("Refresh today from Health", systemImage: "arrow.clockwise")
+                        Label("Refresh from Apple Health", systemImage: "arrow.clockwise")
                     }
                     Button {
                         showEditDay = true

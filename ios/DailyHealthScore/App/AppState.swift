@@ -35,6 +35,7 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Syncs today and backfills/updates stored days in the retention window from Apple Health.
     func syncTodayFromHealth(userInitiated: Bool = false) async {
         isSyncingHealth = true
         defer { isSyncingHealth = false }
@@ -43,21 +44,35 @@ final class AppState: ObservableObject {
                 try await healthKit.requestAuthorization()
                 healthAuthorized = true
             }
+
             let today = DateHelpers.localDateKey()
-            let existing = recordStore.records.first { $0.date == today }
-            let metrics = try await healthKit.fetchMetrics(forDateKey: today)
-            let record = RecordBuilder.build(
-                date: today,
-                metrics: DailyMetrics(
-                    sleepHours: metrics.sleepHours,
-                    fiberGrams: metrics.fiberGrams,
-                    exerciseMinutes: metrics.exerciseMinutes
-                ),
-                settings: settingsStore.settings,
-                settingsStore: settingsStore,
-                existing: existing
+            let windowKeys = DateHelpers.rollingDateKeys(days: DateHelpers.retentionDays)
+            var existingByDate = Dictionary(
+                uniqueKeysWithValues: recordStore.records.map { ($0.date, $0) }
             )
-            recordStore.save(record)
+
+            if let todayRecord = try await buildRecordIfNeeded(
+                dateKey: today,
+                todayKey: today,
+                existingByDate: existingByDate
+            ) {
+                recordStore.save(todayRecord)
+                existingByDate[today] = todayRecord
+            } else {
+                throw HealthKitError.queryFailed("Could not load today's Health data.")
+            }
+
+            var backfillBatch: [DailyRecord] = []
+            for dateKey in windowKeys where dateKey != today {
+                guard let record = await buildRecordIfNeeded(
+                    dateKey: dateKey,
+                    todayKey: today,
+                    existingByDate: existingByDate
+                ) else { continue }
+                backfillBatch.append(record)
+                existingByDate[dateKey] = record
+            }
+            recordStore.saveBatch(backfillBatch)
             lastSyncError = nil
             if userInitiated {
                 userRefreshToken &+= 1
@@ -105,6 +120,38 @@ final class AppState: ObservableObject {
         await syncTodayFromHealth(userInitiated: true)
         if lastSyncError != nil {
             applyGoalChangesToTodayRecord()
+        }
+    }
+
+    private func buildRecordIfNeeded(
+        dateKey: String,
+        todayKey: String,
+        existingByDate: [String: DailyRecord]
+    ) async -> DailyRecord? {
+        do {
+            let healthMetrics = try await healthKit.fetchMetrics(forDateKey: dateKey)
+            let existing = existingByDate[dateKey]
+            guard HealthSyncPolicy.shouldPersistDay(
+                dateKey: dateKey,
+                todayKey: todayKey,
+                metrics: healthMetrics,
+                hasExistingRecord: existing != nil
+            ) else {
+                return nil
+            }
+            return RecordBuilder.build(
+                date: dateKey,
+                metrics: DailyMetrics(
+                    sleepHours: healthMetrics.sleepHours,
+                    fiberGrams: healthMetrics.fiberGrams,
+                    exerciseMinutes: healthMetrics.exerciseMinutes
+                ),
+                settings: settingsStore.settings,
+                settingsStore: settingsStore,
+                existing: existing
+            )
+        } catch {
+            return nil
         }
     }
 
