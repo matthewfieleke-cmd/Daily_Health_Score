@@ -1,6 +1,6 @@
 import Foundation
 
-/// `@MainActor` because `build` calls `SettingsStore.nextSuggestion(for:)` to
+/// `@MainActor` because `build` calls `SettingsStore.nextSuggestion(for:phase:)` to
 /// advance the rotating suggestion text, and `SettingsStore` is itself
 /// MainActor-isolated. The only call sites of `build` are on `AppState`, which
 /// is also MainActor, so the constraint costs us nothing.
@@ -11,11 +11,18 @@ enum RecordBuilder {
         metrics: DailyMetrics,
         settings: UserSettings,
         settingsStore: SettingsStore,
+        existing: DailyRecord? = nil,
         now: Date = Date()
     ) -> DailyRecord {
         let computed = ScoreCalculator.calculate(metrics: metrics, settings: settings)
         let focus = ScoreCalculator.determinePrimaryFocus(computed)
-        let suggestion = settingsStore.nextSuggestion(for: focus)
+        let resolved = SuggestionResolver.resolve(
+            date: date,
+            focus: focus,
+            existing: existing?.date == date ? existing : nil,
+            settingsStore: settingsStore,
+            now: now
+        )
         return DailyRecord(
             date: date,
             sleepHours: metrics.sleepHours,
@@ -31,8 +38,9 @@ enum RecordBuilder {
             fiberPercent: computed.fiberPercent,
             exercisePercent: computed.exercisePercent,
             primaryFocus: focus,
-            suggestion: suggestion,
-            createdAt: now,
+            suggestion: resolved.text,
+            suggestionPhase: resolved.phase,
+            createdAt: existing?.createdAt ?? now,
             updatedAt: now
         )
     }

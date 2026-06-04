@@ -57,22 +57,22 @@ final class SettingsStoreLoadTests: XCTestCase {
         writeStandard(nil, forKey: usedSuggestionsKey)
         let store = SettingsStore()
         // First call ever — used to crash on assignment back into the dictionary.
-        let text = store.nextSuggestion(for: .fiber)
+        let text = store.nextSuggestion(for: .fiber, phase: .day)
         XCTAssertFalse(text.isEmpty)
     }
 
     func test_load_storedAsValidStringDictionary_isPreserved() {
         writeStandard(
-            ["fiber": ["fiber-01", "fiber-02"]],
+            ["fiber-evening": ["fiber-01", "fiber-02"]],
             forKey: usedSuggestionsKey
         )
         let store = SettingsStore()
-        // The next suggestion for fiber should be fiber-03 since 01 and 02 are recorded as used.
-        let text = store.nextSuggestion(for: .fiber)
+        // The next suggestion for fiber (evening) should be fiber-03 since 01 and 02 are recorded as used.
+        let text = store.nextSuggestion(for: .fiber, phase: .evening)
         XCTAssertFalse(text.isEmpty)
         // Indirect check: calling it 18 more times must not crash and must not return empty.
         for _ in 0..<18 {
-            XCTAssertFalse(store.nextSuggestion(for: .fiber).isEmpty)
+            XCTAssertFalse(store.nextSuggestion(for: .fiber, phase: .evening).isEmpty)
         }
     }
 
@@ -91,9 +91,9 @@ final class SettingsStoreLoadTests: XCTestCase {
 
         let store = SettingsStore()
         // None of these may crash. Each must return a non-empty suggestion.
-        XCTAssertFalse(store.nextSuggestion(for: .sleep).isEmpty)
-        XCTAssertFalse(store.nextSuggestion(for: .fiber).isEmpty)
-        XCTAssertFalse(store.nextSuggestion(for: .exercise).isEmpty)
-        XCTAssertFalse(store.nextSuggestion(for: .maintain).isEmpty)
+        XCTAssertFalse(store.nextSuggestion(for: .sleep, phase: .day).isEmpty)
+        XCTAssertFalse(store.nextSuggestion(for: .fiber, phase: .day).isEmpty)
+        XCTAssertFalse(store.nextSuggestion(for: .exercise, phase: .day).isEmpty)
+        XCTAssertFalse(store.nextSuggestion(for: .maintain, phase: .day).isEmpty)
     }
 }

@@ -1,16 +1,45 @@
 import Foundation
 
 enum SuggestionLibrary {
-    static func pool(for focus: PrimaryFocus) -> [ContentEntry] {
-        switch focus {
-        case .sleep: return sleep
-        case .fiber: return fiber
-        case .exercise: return exercise
-        case .maintain: return maintain
+    static func pool(for focus: PrimaryFocus, phase: DayPhase) -> [ContentEntry] {
+        switch (focus, phase) {
+        case (.sleep, .day): return sleepDay
+        case (.sleep, .evening): return sleepEvening
+        case (.fiber, .day): return fiberDay
+        case (.fiber, .evening): return fiberEvening
+        case (.exercise, .day): return exerciseDay
+        case (.exercise, .evening): return exerciseEvening
+        case (.maintain, .day): return maintainDay
+        case (.maintain, .evening): return maintainEvening
         }
     }
 
-    private static let sleep: [ContentEntry] = [
+    // MARK: - Sleep (day) — caffeine, light, walks; fuel today for tonight
+
+    private static let sleepDay: [ContentEntry] = [
+        ContentEntry(id: "sleep-day-01", text: "Today, cut caffeine by mid‑afternoon if you can—your future self at bedtime will notice."),
+        ContentEntry(id: "sleep-day-02", text: "Take a 10–15 minute walk outside today; daylight and movement both support tonight’s sleep."),
+        ContentEntry(id: "sleep-day-03", text: "You’re building sleep for people you care about—steady days make kinder evenings. Plan one calm block tonight."),
+        ContentEntry(id: "sleep-day-04", text: "If you’re tempted to nap today, keep it short (about 20 minutes) and finish before mid‑afternoon."),
+        ContentEntry(id: "sleep-day-05", text: "Today, swap an extra coffee for water after lunch—small fuel choices change how you feel at night."),
+        ContentEntry(id: "sleep-day-06", text: "A brief walk after a meal today can ease stress without reaching for snacks—protect the evening you want."),
+        ContentEntry(id: "sleep-day-07", text: "Think bigger picture: rested you shows up better in relationships. Today, guard your afternoon energy."),
+        ContentEntry(id: "sleep-day-08", text: "Today, notice stress rising—and try a slow exhale and a glass of water before more caffeine."),
+        ContentEntry(id: "sleep-day-09", text: "Get a few minutes of outdoor light today, even on a cloudy day; it helps anchor your body clock."),
+        ContentEntry(id: "sleep-day-10", text: "Today, avoid stacking heavy meals and late espresso—give your body an easier path to sleep tonight."),
+        ContentEntry(id: "sleep-day-11", text: "When tired this afternoon, a short walk may restore you more than scrolling—try it once today."),
+        ContentEntry(id: "sleep-day-12", text: "Healthy bodies support healthy connections. Today, choose one habit that makes tonight’s wind‑down realistic."),
+        ContentEntry(id: "sleep-day-13", text: "If evening snacking is your stress default, plan a satisfying lunch with protein and fiber today."),
+        ContentEntry(id: "sleep-day-14", text: "Today, move your body at a comfortable pace—gentle activity today often means an easier time falling asleep."),
+        ContentEntry(id: "sleep-day-15", text: "Set a loose ‘last caffeine’ time today and stick to it—direct, kind boundary for tonight."),
+        ContentEntry(id: "sleep-day-16", text: "Pause before afternoon treats: are you hungry, tired, or seeking comfort? Name it, then choose on purpose."),
+        ContentEntry(id: "sleep-day-17", text: "Today, keep hydration steady—dehydration and fatigue can masquerade as ‘need sugar now.’"),
+        ContentEntry(id: "sleep-day-18", text: "You don’t have to earn rest tonight—start supporting it now with light, movement, and calmer fuel today."),
+    ]
+
+    // MARK: - Sleep (evening)
+
+    private static let sleepEvening: [ContentEntry] = [
         ContentEntry(id: "sleep-01", text: "Tonight, set a phone charging station outside the bedroom and start wind‑down 45 minutes before lights out."),
         ContentEntry(id: "sleep-02", text: "Tomorrow morning, get 5–10 minutes of outdoor light soon after waking to anchor your clock."),
         ContentEntry(id: "sleep-03", text: "Pick a fixed wake time for the next 3 days; adjust bedtime—not the alarm—to protect sleep pressure."),
@@ -33,7 +62,32 @@ enum SuggestionLibrary {
         ContentEntry(id: "sleep-20", text: "Tonight, trial blackout curtains or an eye mask if daylight or streetlights enter your room."),
     ]
 
-    private static let fiber: [ContentEntry] = [
+    // MARK: - Fiber (day) — today fuel, mindful eating, evening slip risk
+
+    private static let fiberDay: [ContentEntry] = [
+        ContentEntry(id: "fiber-day-01", text: "Today, add one high‑fiber side to your next meal—beans, berries, or vegetables—before evening hunger hits."),
+        ContentEntry(id: "fiber-day-02", text: "When you fuel your body well today, it works with you tonight. Plan lunch fiber now, not after you’re exhausted."),
+        ContentEntry(id: "fiber-day-03", text: "Later today, tired-you may snack on autopilot. Choose one intentional snack this afternoon (fruit, nuts, hummus) and skip mindless grazing."),
+        ContentEntry(id: "fiber-day-04", text: "Pause before opening the pantry: hungry, stressed, or bored? One honest check can save the evening."),
+        ContentEntry(id: "fiber-day-05", text: "Healthy relationships need steady energy—you’re allowed to prioritize whole‑food fuel today over quick comfort."),
+        ContentEntry(id: "fiber-day-06", text: "Today, build your plate around plants at one meal: half vegetables, some beans or lentils, intact grains if you like."),
+        ContentEntry(id: "fiber-day-07", text: "If you’re on track this morning, protect the afternoon—that’s when many people drift. Add fiber at lunch on purpose."),
+        ContentEntry(id: "fiber-day-08", text: "Stress wants immediate relief; fiber and protein today give calmer energy for the people you care about tonight."),
+        ContentEntry(id: "fiber-day-09", text: "Today, keep a water bottle visible—thirst often masquerades as ‘need chips now.’"),
+        ContentEntry(id: "fiber-day-10", text: "Before evening, prep one easy fiber option (washed fruit, carrot sticks, bean leftovers) so comfort food isn’t the only option."),
+        ContentEntry(id: "fiber-day-11", text: "Choose the higher‑fiber option today when it’s close—whole fruit over juice, beans over refined sides."),
+        ContentEntry(id: "fiber-day-12", text: "A short walk today can blunt stress eating—movement first, then decide if you still want a snack."),
+        ContentEntry(id: "fiber-day-13", text: "You’re not behind forever—you have hours left. One fiber‑rich meal today still moves the score and your body."),
+        ContentEntry(id: "fiber-day-14", text: "Today, eat slowly enough to notice fullness—mindless eating steals fiber goals and evening calm."),
+        ContentEntry(id: "fiber-day-15", text: "Think week‑scale, not bite‑scale: today’s choices are how you show up for family, work, and yourself tomorrow."),
+        ContentEntry(id: "fiber-day-16", text: "If cravings spike this afternoon, try protein plus fiber together (e.g. apple with almonds) before ultra‑processed snacks."),
+        ContentEntry(id: "fiber-day-17", text: "Today, add vegetables to whatever you already planned—low effort, real fiber, fewer empty evening calories."),
+        ContentEntry(id: "fiber-day-18", text: "Tonight will feel easier if you front‑load plants today—gentle reminder, not guilt: one good meal still counts."),
+    ]
+
+    // MARK: - Fiber (evening)
+
+    private static let fiberEvening: [ContentEntry] = [
         ContentEntry(id: "fiber-01", text: "Tomorrow, add ½ cup cooked lentils or black beans to lunch or dinner."),
         ContentEntry(id: "fiber-02", text: "Stir 1–2 tablespoons ground flaxseed into oatmeal or a smoothie tomorrow morning."),
         ContentEntry(id: "fiber-03", text: "Build one meal tomorrow around beans, leafy greens, and an intact whole grain like barley or brown rice."),
@@ -56,7 +110,32 @@ enum SuggestionLibrary {
         ContentEntry(id: "fiber-20", text: "Tomorrow, build a dinner plate that is half vegetables (mixed colors), one‑quarter intact grains, one‑quarter beans."),
     ]
 
-    private static let exercise: [ContentEntry] = [
+    // MARK: - Exercise (day)
+
+    private static let exerciseDay: [ContentEntry] = [
+        ContentEntry(id: "exercise-day-01", text: "Today, take a 10‑minute walk before you reach for stress snacks—movement can reset the urge."),
+        ContentEntry(id: "exercise-day-02", text: "You still have time on the clock: one brisk walk this afternoon counts toward your goal and your mood."),
+        ContentEntry(id: "exercise-day-03", text: "Healthy bodies support patience in relationships. Today, move once on purpose, even if it’s modest."),
+        ContentEntry(id: "exercise-day-04", text: "If you’re partly on track, don’t coast—evening fatigue steals minutes. Schedule a short walk before dinner."),
+        ContentEntry(id: "exercise-day-05", text: "Today, choose stairs once or park a little farther—small bursts add up without a ‘perfect workout.’"),
+        ContentEntry(id: "exercise-day-06", text: "Stress relief doesn’t have to be food. A quick walk today is immediate gratification that still fits the bigger picture."),
+        ContentEntry(id: "exercise-day-07", text: "Today, stand and pace during one call or meeting—exercise minutes can be woven in, not postponed."),
+        ContentEntry(id: "exercise-day-08", text: "When tired this afternoon, try walking first for five minutes—then decide if you still need a couch snack."),
+        ContentEntry(id: "exercise-day-09", text: "Invite someone you care about on a short walk today—movement plus connection beats solo scrolling."),
+        ContentEntry(id: "exercise-day-10", text: "Today, protect a 15‑minute movement window like an appointment—you’re worth the calendar block."),
+        ContentEntry(id: "exercise-day-11", text: "Immediate comfort is loud; long‑term health is quiet. Today, add quiet minutes on your feet."),
+        ContentEntry(id: "exercise-day-12", text: "If weather is poor, march in place during one break today—effort still counts."),
+        ContentEntry(id: "exercise-day-13", text: "Today, finish one errand on foot if safe—practical minutes beat waiting for motivation tonight."),
+        ContentEntry(id: "exercise-day-14", text: "You’re building a body that can play, work, and rest well—today’s walk is part of that story."),
+        ContentEntry(id: "exercise-day-15", text: "Before evening slump, drink water and walk once—hydration plus movement blunts ‘I give up’ snacking."),
+        ContentEntry(id: "exercise-day-16", text: "Today, try music only during a walk—pair pleasure with movement instead of ultra‑processed comfort food."),
+        ContentEntry(id: "exercise-day-17", text: "Gentle and direct: six 5‑minute walks today still move the needle if a single 30‑minute block feels heavy."),
+        ContentEntry(id: "exercise-day-18", text: "Tonight-you will be tired. Earn calmer evenings by moving while you still have daylight and choice."),
+    ]
+
+    // MARK: - Exercise (evening)
+
+    private static let exerciseEvening: [ContentEntry] = [
         ContentEntry(id: "exercise-01", text: "Tomorrow, complete two 15‑minute brisk walks—one mid‑morning and one after lunch."),
         ContentEntry(id: "exercise-02", text: "After one meal tomorrow, take a 10‑minute walk before sitting back down."),
         ContentEntry(id: "exercise-03", text: "Block 30 minutes on your calendar tomorrow for walking—protect it like a meeting."),
@@ -79,7 +158,32 @@ enum SuggestionLibrary {
         ContentEntry(id: "exercise-20", text: "If short on time tomorrow, do six 5‑minute brisk walks—equal effort adds up."),
     ]
 
-    private static let maintain: [ContentEntry] = [
+    // MARK: - Maintain (day) — protect evening, slip risk even when on track
+
+    private static let maintainDay: [ContentEntry] = [
+        ContentEntry(id: "maintain-day-01", text: "You’re on track today—still plan for tonight, when fatigue invites comfort snacking. Decide one gentle evening snack now."),
+        ContentEntry(id: "maintain-day-02", text: "Strong morning doesn’t guarantee strong night. Today, keep meals steady so you don’t ‘reward’ yourself into a slip."),
+        ContentEntry(id: "maintain-day-03", text: "Healthy bodies help healthy relationships—maintain with kindness, not rigidity, if stress rises later."),
+        ContentEntry(id: "maintain-day-04", text: "Today, take a short walk even though you’re doing well—movement buffers stress before it becomes mindless eating."),
+        ContentEntry(id: "maintain-day-05", text: "When you fuel correctly today, everything works smoother tonight. Repeat what already worked at lunch."),
+        ContentEntry(id: "maintain-day-06", text: "Immediate gratification is tempting this evening. Remember the bigger picture: how you want to feel waking up tomorrow."),
+        ContentEntry(id: "maintain-day-07", text: "You matched targets so far—protect the afternoon with water, fiber, and one planned snack instead of grazing."),
+        ContentEntry(id: "maintain-day-08", text: "Today, notice pride without complacency—many slips happen after a good day. Stay present at dinner."),
+        ContentEntry(id: "maintain-day-09", text: "Call or text someone you care about and take a brief walk—connection plus movement beat solo stress eating."),
+        ContentEntry(id: "maintain-day-10", text: "Maintain mode is quiet discipline. Today, choose the healthier option when it’s a close call."),
+        ContentEntry(id: "maintain-day-11", text: "If you’re ahead on goals, invest the margin: prep vegetables or beans for tonight so exhaustion doesn’t decide dinner."),
+        ContentEntry(id: "maintain-day-12", text: "Today, pause before second servings—mindless extras are how ‘on track’ days unravel."),
+        ContentEntry(id: "maintain-day-13", text: "You’re building trust with yourself. Honor it by walking once before you settle in for the evening."),
+        ContentEntry(id: "maintain-day-14", text: "Stress will show up; you get to choose the response. Walk, breathe, then eat if you’re still hungry."),
+        ContentEntry(id: "maintain-day-15", text: "Keep caffeine reasonable today if sleep is part of your success stack—even in maintain mode."),
+        ContentEntry(id: "maintain-day-16", text: "Today’s stability supports people who rely on you. Eat enough at lunch so the pantry isn’t dinner."),
+        ContentEntry(id: "maintain-day-17", text: "Celebrate quietly: note one habit that worked, and repeat it through the second half of today."),
+        ContentEntry(id: "maintain-day-18", text: "Tonight will test you with tiredness. Front‑load a satisfying, fiber‑rich meal today while you have judgment."),
+    ]
+
+    // MARK: - Maintain (evening)
+
+    private static let maintainEvening: [ContentEntry] = [
         ContentEntry(id: "maintain-01", text: "Strong day. Keep the routine stable and take two quiet minutes tonight to notice what helped."),
         ContentEntry(id: "maintain-02", text: "All goals were met. Maintain consistency; a short breathing practice before bed can reinforce the routine."),
         ContentEntry(id: "maintain-03", text: "You matched today’s targets—repeat the same meal timing patterns tomorrow if they felt sustainable."),

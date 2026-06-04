@@ -28,9 +28,10 @@ final class SettingsStore: ObservableObject {
         loadRotationState()
     }
 
-    func nextSuggestion(for focus: PrimaryFocus) -> String {
-        let category = focus == .maintain ? "maintain" : focus.rawValue
-        let pool = SuggestionLibrary.pool(for: focus)
+    func nextSuggestion(for focus: PrimaryFocus, phase: DayPhase) -> String {
+        let focusKey = focus == .maintain ? "maintain" : focus.rawValue
+        let category = "\(focusKey)-\(phase.rawValue)"
+        let pool = SuggestionLibrary.pool(for: focus, phase: phase)
         var used = usedSuggestions[category] ?? []
         var unused = pool.filter { !used.contains($0.id) }
         if unused.isEmpty {

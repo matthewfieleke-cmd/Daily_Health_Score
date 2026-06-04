@@ -44,6 +44,7 @@ final class AppState: ObservableObject {
                 healthAuthorized = true
             }
             let today = DateHelpers.localDateKey()
+            let existing = recordStore.records.first { $0.date == today }
             let metrics = try await healthKit.fetchMetrics(forDateKey: today)
             let record = RecordBuilder.build(
                 date: today,
@@ -53,7 +54,8 @@ final class AppState: ObservableObject {
                     exerciseMinutes: metrics.exerciseMinutes
                 ),
                 settings: settingsStore.settings,
-                settingsStore: settingsStore
+                settingsStore: settingsStore,
+                existing: existing
             )
             recordStore.save(record)
             lastSyncError = nil
@@ -66,13 +68,37 @@ final class AppState: ObservableObject {
     }
 
     func saveManualDay(date: String, metrics: DailyMetrics) {
+        let existing = recordStore.records.first { $0.date == date }
         let record = RecordBuilder.build(
             date: date,
             metrics: metrics,
             settings: settingsStore.settings,
-            settingsStore: settingsStore
+            settingsStore: settingsStore,
+            existing: existing
         )
         recordStore.save(record)
+    }
+
+    /// Refreshes today's suggestion when the day/evening phase changes (e.g. after 7:30 PM).
+    func refreshTodaySuggestionForDisplayIfNeeded() {
+        let todayKey = DateHelpers.localDateKey()
+        guard let existing = recordStore.records.first(where: { $0.date == todayKey }) else { return }
+
+        let phase = DayPhase.current()
+        guard existing.suggestionPhase != phase else { return }
+
+        let resolved = SuggestionResolver.resolve(
+            date: todayKey,
+            focus: existing.primaryFocus,
+            existing: nil,
+            settingsStore: settingsStore
+        )
+
+        var updated = existing
+        updated.suggestion = resolved.text
+        updated.suggestionPhase = resolved.phase
+        updated.updatedAt = Date()
+        recordStore.save(updated)
     }
 
     func refreshTodayAfterGoalChange() async {
@@ -93,9 +119,12 @@ final class AppState: ObservableObject {
         )
         let computed = ScoreCalculator.calculate(metrics: metrics, settings: settingsStore.settings)
         let focus = ScoreCalculator.determinePrimaryFocus(computed)
-        let suggestion = (focus == existing.primaryFocus)
-            ? existing.suggestion
-            : settingsStore.nextSuggestion(for: focus)
+        let resolved = SuggestionResolver.resolve(
+            date: existing.date,
+            focus: focus,
+            existing: existing,
+            settingsStore: settingsStore
+        )
 
         let updated = DailyRecord(
             date: existing.date,
@@ -112,7 +141,8 @@ final class AppState: ObservableObject {
             fiberPercent: computed.fiberPercent,
             exercisePercent: computed.exercisePercent,
             primaryFocus: focus,
-            suggestion: suggestion,
+            suggestion: resolved.text,
+            suggestionPhase: resolved.phase,
             createdAt: existing.createdAt,
             updatedAt: Date()
         )

@@ -52,6 +52,7 @@ final class RecordStore: ObservableObject {
                 exercisePercent: record.exercisePercent,
                 primaryFocus: record.primaryFocus,
                 suggestion: record.suggestion,
+                suggestionPhase: record.suggestionPhase,
                 createdAt: existing.createdAt,
                 updatedAt: record.updatedAt
             )

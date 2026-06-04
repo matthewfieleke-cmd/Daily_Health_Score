@@ -72,6 +72,8 @@ struct DailyRecord: Identifiable, Equatable, Codable {
     var exercisePercent: Double
     var primaryFocus: PrimaryFocus
     var suggestion: String
+    /// Which day/evening pool produced `suggestion`; nil on older records until refreshed.
+    var suggestionPhase: DayPhase? = nil
     var createdAt: Date
     var updatedAt: Date
 }

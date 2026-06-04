@@ -7,6 +7,7 @@ import SwiftUI
 /// actions (refresh, support messages) live in the navigation bar.
 struct TodayView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var showDiscouragement = false
     @State private var showMotivation = false
@@ -37,6 +38,11 @@ struct TodayView: View {
             .toolbar { toolbarContent }
         }
         .task { await playLaunchDialUpIfNeeded() }
+        .onAppear { appState.refreshTodaySuggestionForDisplayIfNeeded() }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            appState.refreshTodaySuggestionForDisplayIfNeeded()
+        }
         .onChange(of: displayRecord?.date) { oldDate, newDate in
             guard oldDate == nil, newDate != nil else { return }
             Task { await playLaunchDialUpIfNeeded() }

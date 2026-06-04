@@ -18,6 +18,7 @@ final class DailyRecordEntity {
     var exercisePercent: Double
     var primaryFocusRaw: String
     var suggestion: String
+    var suggestionPhaseRaw: String?
     var createdAt: Date
     var updatedAt: Date
 
@@ -37,6 +38,7 @@ final class DailyRecordEntity {
         exercisePercent = record.exercisePercent
         primaryFocusRaw = record.primaryFocus.rawValue
         suggestion = record.suggestion
+        suggestionPhaseRaw = record.suggestionPhase?.rawValue
         createdAt = record.createdAt
         updatedAt = record.updatedAt
     }
@@ -58,6 +60,7 @@ final class DailyRecordEntity {
             exercisePercent: exercisePercent,
             primaryFocus: PrimaryFocus(rawValue: primaryFocusRaw) ?? .sleep,
             suggestion: suggestion,
+            suggestionPhase: suggestionPhaseRaw.flatMap { DayPhase(rawValue: $0) },
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -78,6 +81,7 @@ final class DailyRecordEntity {
         exercisePercent = record.exercisePercent
         primaryFocusRaw = record.primaryFocus.rawValue
         suggestion = record.suggestion
+        suggestionPhaseRaw = record.suggestionPhase?.rawValue
         updatedAt = record.updatedAt
     }
 }
