@@ -7,14 +7,18 @@ struct HealthSyncBannerOverlay: View {
     var body: some View {
         VStack(spacing: 0) {
             if appState.healthSyncBannerPhase != .hidden {
-                banner
-                    .padding(.horizontal, 16)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .opacity
-                        )
+                HStack {
+                    Spacer(minLength: 0)
+                    banner
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .transition(
+                    .asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .opacity
                     )
+                )
             }
             Spacer(minLength: 0)
         }
@@ -43,12 +47,12 @@ struct HealthSyncBannerOverlay: View {
             Text("Syncing from Apple Health")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(AppTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .fixedSize()
         .accessibilityLabel("Syncing from Apple Health")
     }
 
@@ -59,12 +63,12 @@ struct HealthSyncBannerOverlay: View {
             Text("Sync complete!")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.white)
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(AppTheme.leaf)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .fixedSize()
         .accessibilityLabel("Sync complete")
     }
 }

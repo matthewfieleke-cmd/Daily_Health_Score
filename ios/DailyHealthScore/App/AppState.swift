@@ -16,8 +16,8 @@ enum HealthSyncBannerPhase: Equatable {
 @MainActor
 final class AppState: ObservableObject {
     private enum SyncBannerTiming {
-        static let minimumSyncingDuration: TimeInterval = 1.5
-        static let completeDuration: TimeInterval = 1
+        static let minimumSyncingDuration: TimeInterval = 2.5
+        static let completeDuration: TimeInterval = 1.5
     }
 
     let healthKit = HealthKitService()
