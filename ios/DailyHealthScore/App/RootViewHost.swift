@@ -34,6 +34,10 @@ private struct AppRootContent: View {
         }
         .environmentObject(appState)
         .tint(AppTheme.primary)
+        .overlay {
+            HealthSyncBannerOverlay()
+                .environmentObject(appState)
+        }
         .task {
             await appState.requestHealthAccess()
             await appState.syncTodayFromHealth()

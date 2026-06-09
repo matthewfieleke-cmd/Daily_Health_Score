@@ -69,35 +69,26 @@ struct TodayView: View {
     @ViewBuilder
     private var content: some View {
         if let record = displayRecord {
-            ZStack(alignment: .top) {
-                VStack(spacing: 14) {
-                    if let error = appState.lastSyncError {
-                        errorBanner(error)
-                    }
+            VStack(spacing: 14) {
+                if let error = appState.lastSyncError {
+                    errorBanner(error)
+                }
 
-                    heroCard(for: record)
+                heroCard(for: record)
 
-                    metricRow(for: record)
-                        .animation(DialUpAnimation.timing, value: dialUpProgress)
+                metricRow(for: record)
+                    .animation(DialUpAnimation.timing, value: dialUpProgress)
 
-                    focusCard(for: record)
+                focusCard(for: record)
 
-                    TodaySMARTGoalsCard(
-                        attentionCount: SMARTGoalLogic.attentionCount(
-                            goals: appState.smartGoalStore.goals
-                        )
+                TodaySMARTGoalsCard(
+                    attentionCount: SMARTGoalLogic.attentionCount(
+                        goals: appState.smartGoalStore.goals
                     )
+                )
 
-                    Spacer(minLength: 0)
-                }
-
-                if appState.isSyncingHealth {
-                    syncingBanner
-                        .padding(.top, 4)
-                        .transition(.opacity)
-                }
+                Spacer(minLength: 0)
             }
-            .animation(.easeInOut(duration: 0.2), value: appState.isSyncingHealth)
         } else if hasAnyRecords || appState.isSyncingHealth {
             // Returning user (or first sync in flight): build today's record before
             // showing anything, rather than flashing stale data or the connect prompt.
@@ -305,20 +296,6 @@ struct TodayView: View {
 
     // MARK: - Banners
 
-    private var syncingBanner: some View {
-        HStack(spacing: 10) {
-            ProgressView().controlSize(.small)
-            Text("Syncing from Apple Health (updating history)…")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(AppTheme.cardSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
     private func errorBanner(_ error: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -339,11 +316,6 @@ struct TodayView: View {
     private var preparingTodayState: some View {
         VStack(spacing: 16) {
             Spacer()
-            ProgressView()
-                .controlSize(.large)
-            Text("Updating today's score…")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
             if let error = appState.lastSyncError {
                 errorBanner(error)
                     .padding(.horizontal, 8)

@@ -7,18 +7,33 @@ import SwiftData
 /// guarantee static — without it, Combine falls back to `unsafeForcedSync` when
 /// a Task running off-main mutates an `@Published` property, which Xcode's
 /// concurrency diagnostics flag at runtime.
+enum HealthSyncBannerPhase: Equatable {
+    case hidden
+    case syncing
+    case complete
+}
+
 @MainActor
 final class AppState: ObservableObject {
+    private enum SyncBannerTiming {
+        static let minimumSyncingDuration: TimeInterval = 1.5
+        static let completeDuration: TimeInterval = 1
+    }
+
     let healthKit = HealthKitService()
     let settingsStore = SettingsStore()
     let recordStore: RecordStore
     let smartGoalStore: SMARTGoalStore
 
+    @Published var healthSyncBannerPhase: HealthSyncBannerPhase = .hidden
+    /// True while sync work runs and through the minimum syncing-banner display window.
     @Published var isSyncingHealth = false
     @Published var lastSyncError: String?
     @Published var healthAuthorized = false
     /// Incremented when a user-initiated refresh completes (toolbar / settings).
     @Published private(set) var userRefreshToken: UInt = 0
+
+    private var activeSyncGeneration: UInt = 0
 
     init(modelContext: ModelContext) {
         recordStore = RecordStore(modelContext: modelContext)
@@ -37,8 +52,14 @@ final class AppState: ObservableObject {
 
     /// Syncs today and backfills/updates stored days in the retention window from Apple Health.
     func syncTodayFromHealth(userInitiated: Bool = false) async {
+        activeSyncGeneration &+= 1
+        let generation = activeSyncGeneration
+        let syncStartedAt = Date()
+
+        healthSyncBannerPhase = .syncing
         isSyncingHealth = true
-        defer { isSyncingHealth = false }
+
+        var succeeded = false
         do {
             if !healthAuthorized {
                 try await healthKit.requestAuthorization()
@@ -74,12 +95,33 @@ final class AppState: ObservableObject {
             }
             recordStore.saveBatch(backfillBatch)
             lastSyncError = nil
+            succeeded = true
             if userInitiated {
                 userRefreshToken &+= 1
             }
         } catch {
             lastSyncError = error.localizedDescription
         }
+
+        await waitForMinimumSyncingBannerDuration(since: syncStartedAt)
+        guard generation == activeSyncGeneration else { return }
+
+        healthSyncBannerPhase = .hidden
+        isSyncingHealth = false
+
+        guard succeeded else { return }
+
+        healthSyncBannerPhase = .complete
+        try? await Task.sleep(for: .seconds(SyncBannerTiming.completeDuration))
+        guard generation == activeSyncGeneration else { return }
+        healthSyncBannerPhase = .hidden
+    }
+
+    private func waitForMinimumSyncingBannerDuration(since start: Date) async {
+        let elapsed = Date().timeIntervalSince(start)
+        let remaining = SyncBannerTiming.minimumSyncingDuration - elapsed
+        guard remaining > 0 else { return }
+        try? await Task.sleep(for: .seconds(remaining))
     }
 
     func saveManualDay(date: String, metrics: DailyMetrics) {
