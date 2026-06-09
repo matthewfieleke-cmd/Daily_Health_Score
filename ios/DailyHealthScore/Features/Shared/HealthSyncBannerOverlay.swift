@@ -44,13 +44,14 @@ struct HealthSyncBannerOverlay: View {
         HStack(spacing: 10) {
             ProgressView()
                 .controlSize(.small)
+                .tint(.white)
             Text("Syncing from Apple Health")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.white)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(AppTheme.cardSurface)
+        .background(AppTheme.backgroundDeep)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .fixedSize()
         .accessibilityLabel("Syncing from Apple Health")
