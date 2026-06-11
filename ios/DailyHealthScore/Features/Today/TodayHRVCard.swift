@@ -5,23 +5,23 @@ struct TodayHRVCard: View {
     let onInfoTap: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 10) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 8) {
                 Image(systemName: "waveform.path.ecg")
-                    .font(.callout.weight(.semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.primary)
-                    .frame(width: 32, height: 32)
+                    .frame(width: 28, height: 28)
                     .background(Circle().fill(AppTheme.primary.opacity(0.12)))
 
-                Text("Heart Rate Variability")
-                    .font(.subheadline.weight(.semibold))
+                Text("HRV")
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.primary)
 
                 Spacer(minLength: 0)
 
                 Button(action: onInfoTap) {
                     Image(systemName: "info.circle")
-                        .font(.body)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -30,25 +30,26 @@ struct TodayHRVCard: View {
 
             if let averageLine = averageLine {
                 Text(averageLine)
-                    .font(.footnote.weight(.medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
                     .monospacedDigit()
             } else {
                 Text("No HRV data yet")
-                    .font(.footnote.weight(.medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
             }
 
             Text(trendLine)
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .padding(14)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
         .cardShadow()
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("Heart Rate Variability")
     }
 
     private var averageLine: String? {

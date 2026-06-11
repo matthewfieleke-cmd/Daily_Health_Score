@@ -8,19 +8,19 @@ struct TodaySMARTGoalsCard: View {
         NavigationLink {
             SMARTGoalsListView()
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Image(systemName: "target")
-                    .font(.title3.weight(.semibold))
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(AppTheme.primary)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 28, height: 28)
                     .background(Circle().fill(AppTheme.primary.opacity(0.12)))
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text("SMART Goals")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(.primary)
                     Text("Set and track accountable goals")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
 
@@ -39,7 +39,7 @@ struct TodaySMARTGoalsCard: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
-            .padding(14)
+            .padding(10)
             .background(AppTheme.cardSurface)
             .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
             .cardShadow()

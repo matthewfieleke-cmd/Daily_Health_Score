@@ -1,10 +1,8 @@
 import SwiftUI
 
-/// Today is a single-screen dashboard — never scrolls. Everything the user
-/// needs to see for the current day fits inside the safe area:
-/// brand-gradient hero card with date and animated score ring, a row of
-/// three metric cards, and a primary-focus suggestion card. Secondary
-/// actions (refresh, support messages) live in the navigation bar.
+/// Today dashboard: hero score, metric row, focus suggestion, SMART Goals,
+/// and HRV. Scrolls when content exceeds the safe area. Secondary actions
+/// (refresh, support messages) live in the navigation bar.
 struct TodayView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
@@ -33,8 +31,8 @@ struct TodayView: View {
                 AppTheme.screenBackground.ignoresSafeArea()
                 content
                     .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
@@ -63,10 +61,9 @@ struct TodayView: View {
             title: "Need motivation?",
             text: motivText
         )
-        .paragraphDialog(
+        .infoScrollDialog(
             isPresented: $showHRVTrendsInfo,
             title: HRVEducationLibrary.title,
-            subtitle: nil,
             text: HRVEducationLibrary.body
         )
     }
@@ -83,17 +80,18 @@ struct TodayView: View {
     @ViewBuilder
     private var content: some View {
         if let record = displayRecord {
-            VStack(spacing: 14) {
-                if let error = appState.lastSyncError {
-                    errorBanner(error)
-                }
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 10) {
+                    if let error = appState.lastSyncError {
+                        errorBanner(error)
+                    }
 
-                heroCard(for: record)
+                    heroCard(for: record)
 
-                metricRow(for: record)
-                    .animation(DialUpAnimation.timing, value: dialUpProgress)
+                    metricRow(for: record)
+                        .animation(DialUpAnimation.timing, value: dialUpProgress)
 
-                focusCard(for: record)
+                    focusCard(for: record)
 
                     TodaySMARTGoalsCard(
                         attentionCount: SMARTGoalLogic.attentionCount(
@@ -104,8 +102,8 @@ struct TodayView: View {
                     TodayHRVCard(summary: hrvSummary) {
                         withAnimation { showHRVTrendsInfo = true }
                     }
-
-                    Spacer(minLength: 0)
+                }
+                .padding(.bottom, 8)
             }
         } else if hasAnyRecords || appState.isSyncingHealth {
             // Returning user (or first sync in flight): build today's record before
@@ -146,7 +144,7 @@ struct TodayView: View {
                 Image("BrandMark")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 46, height: 46)
+                    .frame(width: 40, height: 40)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .accessibilityHidden(true)
                 Text("Daily Health Score")
@@ -190,8 +188,8 @@ struct TodayView: View {
     // MARK: - Hero card (date + score ring)
 
     private func heroCard(for record: DailyRecord) -> some View {
-        VStack(spacing: 14) {
-            HStack(alignment: .center, spacing: 12) {
+        VStack(spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Today")
                         .font(.caption2.weight(.semibold))
@@ -199,7 +197,7 @@ struct TodayView: View {
                         .textCase(.uppercase)
                         .tracking(1)
                     Text(DateHelpers.formatDisplayDate(record.date))
-                        .font(.subheadline.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -210,19 +208,19 @@ struct TodayView: View {
             ScoreRingView(
                 score: record.totalScore,
                 animationProgress: dialUpProgress,
-                lineWidth: 12,
-                size: 140
+                lineWidth: 10,
+                size: 118
             )
 
             Text(focusHeadline(for: record))
-                .font(.footnote.weight(.medium))
+                .font(.caption.weight(.medium))
                 .foregroundStyle(.white.opacity(0.9))
                 .multilineTextAlignment(.center)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
         .background(
             AppTheme.heroGradient
@@ -247,7 +245,7 @@ struct TodayView: View {
     // MARK: - Three compact metric cards in a single row
 
     private func metricRow(for record: DailyRecord) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             CompactMetricCard(
                 title: "Sleep",
                 metricValue: record.sleepHours,
@@ -291,25 +289,25 @@ struct TodayView: View {
 
     private func focusCard(for record: DailyRecord) -> some View {
         let tint = AppTheme.tint(for: record.primaryFocus)
-        return HStack(alignment: .top, spacing: 12) {
+        return HStack(alignment: .top, spacing: 10) {
             Image(systemName: AppTheme.symbol(for: record.primaryFocus))
-                .font(.callout.weight(.semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(tint)
-                .frame(width: 32, height: 32)
+                .frame(width: 28, height: 28)
                 .background(Circle().fill(tint.opacity(0.15)))
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text("PRIMARY FOCUS · \(ScoreCalculator.primaryFocusLabel(record.primaryFocus).uppercased())")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .tracking(0.6)
                 Text(record.suggestion)
-                    .font(.subheadline)
+                    .font(.footnote)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
-        .dhsCard(padding: 14)
+        .dhsCard(padding: 10)
     }
 
     // MARK: - Banners
@@ -430,15 +428,15 @@ private struct CompactMetricCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
                 Image(systemName: systemImage)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(tint)
-                    .frame(width: 22, height: 22)
+                    .frame(width: 20, height: 20)
                     .background(Circle().fill(tint.opacity(0.15)))
                 Text(title)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -446,7 +444,7 @@ private struct CompactMetricCard: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(metricDisplayText)
-                    .font(.title3.weight(.bold))
+                    .font(.headline.weight(.bold))
                     .monospacedDigit()
                     .contentTransition(.numericText(value: displayedMetric))
                 Text(unitSuffix)
@@ -461,7 +459,7 @@ private struct CompactMetricCard: View {
                         .frame(width: geo.size.width * animatedBarFraction)
                 }
             }
-            .frame(height: 5)
+            .frame(height: 4)
 
             HStack(alignment: .center, spacing: 4) {
                 Text(scoreDisplayText)
@@ -479,7 +477,7 @@ private struct CompactMetricCard: View {
             }
         }
         .animation(DialUpAnimation.timing, value: animationProgress)
-        .padding(12)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
