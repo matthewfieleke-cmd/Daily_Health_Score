@@ -12,6 +12,7 @@ enum RecordBuilder {
         settings: UserSettings,
         settingsStore: SettingsStore,
         existing: DailyRecord? = nil,
+        sleepHrvSDNNMs: Double? = nil,
         now: Date = Date()
     ) -> DailyRecord {
         let computed = ScoreCalculator.calculate(metrics: metrics, settings: settings)
@@ -28,6 +29,7 @@ enum RecordBuilder {
             sleepHours: metrics.sleepHours,
             fiberGrams: metrics.fiberGrams,
             exerciseMinutes: metrics.exerciseMinutes,
+            sleepHrvSDNNMs: sleepHrvSDNNMs,
             sleepGoal: settings.sleepGoal,
             fiberGoal: settings.fiberGoal,
             sleepScore: computed.sleepScore,

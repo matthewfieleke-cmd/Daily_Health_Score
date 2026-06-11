@@ -180,7 +180,8 @@ final class AppState: ObservableObject {
             ),
             settings: settingsStore.settings,
             settingsStore: settingsStore,
-            existing: existing
+            existing: existing,
+            sleepHrvSDNNMs: healthMetrics.sleepHrvSDNNMs
         )
     }
 
@@ -209,7 +210,8 @@ final class AppState: ObservableObject {
                 ),
                 settings: settingsStore.settings,
                 settingsStore: settingsStore,
-                existing: existing
+                existing: existing,
+                sleepHrvSDNNMs: healthMetrics.sleepHrvSDNNMs
             )
         } catch {
             return nil
@@ -239,6 +241,7 @@ final class AppState: ObservableObject {
             sleepHours: existing.sleepHours,
             fiberGrams: existing.fiberGrams,
             exerciseMinutes: existing.exerciseMinutes,
+            sleepHrvSDNNMs: existing.sleepHrvSDNNMs,
             sleepGoal: settingsStore.settings.sleepGoal,
             fiberGoal: settingsStore.settings.fiberGoal,
             sleepScore: computed.sleepScore,

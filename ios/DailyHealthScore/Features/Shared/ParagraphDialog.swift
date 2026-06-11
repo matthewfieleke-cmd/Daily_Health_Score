@@ -4,6 +4,7 @@ import SwiftUI
 /// "Need motivation?" paragraphs.
 struct ParagraphDialog: View {
     let title: String
+    var subtitle: String? = "Take a breath."
     let text: String
     let onDismiss: () -> Void
 
@@ -41,7 +42,7 @@ struct ParagraphDialog: View {
                 ScrollView {
                     paragraphBody
                 }
-                .frame(maxHeight: 240)
+                .frame(maxHeight: 360)
             }
             footer
         }
@@ -78,9 +79,11 @@ struct ParagraphDialog: View {
             Text(title)
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
-            Text("Take a breath.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, sectionSpacing)
@@ -110,12 +113,13 @@ extension View {
     func paragraphDialog(
         isPresented: Binding<Bool>,
         title: String,
+        subtitle: String? = "Take a breath.",
         text: String
     ) -> some View {
         ZStack {
             self
             if isPresented.wrappedValue {
-                ParagraphDialog(title: title, text: text) {
+                ParagraphDialog(title: title, subtitle: subtitle, text: text) {
                     withAnimation(.easeOut(duration: 0.18)) {
                         isPresented.wrappedValue = false
                     }
