@@ -7,6 +7,7 @@ final class DailyRecordEntity {
     var sleepHours: Double
     var fiberGrams: Double
     var exerciseMinutes: Double
+    var sleepHrvSDNNMs: Double?
     var sleepGoalRaw: Double
     var fiberGoalRaw: Int
     var sleepScore: Double
@@ -27,6 +28,7 @@ final class DailyRecordEntity {
         sleepHours = record.sleepHours
         fiberGrams = record.fiberGrams
         exerciseMinutes = record.exerciseMinutes
+        sleepHrvSDNNMs = record.sleepHrvSDNNMs
         sleepGoalRaw = record.sleepGoal.rawValue
         fiberGoalRaw = record.fiberGoal.rawValue
         sleepScore = record.sleepScore
@@ -49,6 +51,7 @@ final class DailyRecordEntity {
             sleepHours: sleepHours,
             fiberGrams: fiberGrams,
             exerciseMinutes: exerciseMinutes,
+            sleepHrvSDNNMs: sleepHrvSDNNMs,
             sleepGoal: SleepGoalHours(rawValue: sleepGoalRaw) ?? .sevenHalf,
             fiberGoal: FiberGoalGrams(rawValue: fiberGoalRaw) ?? .forty,
             sleepScore: sleepScore,
@@ -70,6 +73,7 @@ final class DailyRecordEntity {
         sleepHours = record.sleepHours
         fiberGrams = record.fiberGrams
         exerciseMinutes = record.exerciseMinutes
+        sleepHrvSDNNMs = record.sleepHrvSDNNMs
         sleepGoalRaw = record.sleepGoal.rawValue
         fiberGoalRaw = record.fiberGoal.rawValue
         sleepScore = record.sleepScore

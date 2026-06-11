@@ -57,6 +57,8 @@ struct DailyRecord: Identifiable, Equatable, Codable {
     var sleepHours: Double
     var fiberGrams: Double
     var exerciseMinutes: Double
+    /// Average SDNN (ms) from HRV readings during attributed sleep; not part of the score.
+    var sleepHrvSDNNMs: Double? = nil
     var sleepGoal: SleepGoalHours
     var fiberGoal: FiberGoalGrams
     // `var` (not `let`) so `Codable` decoding can override the default value.

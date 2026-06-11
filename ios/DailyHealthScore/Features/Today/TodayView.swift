@@ -11,6 +11,7 @@ struct TodayView: View {
 
     @State private var showDiscouragement = false
     @State private var showMotivation = false
+    @State private var showHRVTrendsInfo = false
     @State private var discText: String = ""
     @State private var motivText: String = ""
     /// Shared 0…1 progress for coordinated dial-up (ring, numbers, bars).
@@ -62,6 +63,19 @@ struct TodayView: View {
             title: "Need motivation?",
             text: motivText
         )
+        .paragraphDialog(
+            isPresented: $showHRVTrendsInfo,
+            title: HRVEducationLibrary.title,
+            subtitle: nil,
+            text: HRVEducationLibrary.body
+        )
+    }
+
+    private var hrvSummary: HRVRollingSummary {
+        HRVRollingCalculator.compute(
+            records: appState.recordStore.records,
+            todayKey: todayKey
+        )
     }
 
     // MARK: - Body content
@@ -81,13 +95,17 @@ struct TodayView: View {
 
                 focusCard(for: record)
 
-                TodaySMARTGoalsCard(
-                    attentionCount: SMARTGoalLogic.attentionCount(
-                        goals: appState.smartGoalStore.goals
+                    TodaySMARTGoalsCard(
+                        attentionCount: SMARTGoalLogic.attentionCount(
+                            goals: appState.smartGoalStore.goals
+                        )
                     )
-                )
 
-                Spacer(minLength: 0)
+                    TodayHRVCard(summary: hrvSummary) {
+                        withAnimation { showHRVTrendsInfo = true }
+                    }
+
+                    Spacer(minLength: 0)
             }
         } else if hasAnyRecords || appState.isSyncingHealth {
             // Returning user (or first sync in flight): build today's record before

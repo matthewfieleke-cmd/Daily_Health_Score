@@ -5,6 +5,7 @@ struct HealthDayMetrics: Equatable {
     var sleepHours: Double
     var fiberGrams: Double
     var exerciseMinutes: Double
+    var sleepHrvSDNNMs: Double? = nil
 }
 
 enum HealthKitError: LocalizedError {
@@ -15,7 +16,7 @@ enum HealthKitError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unavailable: return "Health data is not available on this device."
-        case .unauthorized: return "Allow Daily Health Score to read Sleep, Fiber, and Exercise in Settings → Health."
+        case .unauthorized: return "Allow Daily Health Score to read Sleep, Fiber, Exercise, and Heart Rate Variability in Settings → Health."
         case .queryFailed(let detail): return detail
         }
     }
@@ -30,17 +31,15 @@ final class HealthKitService {
         guard isAvailable else { throw HealthKitError.unavailable }
         guard let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis),
               let fiber = HKObjectType.quantityType(forIdentifier: .dietaryFiber),
-              let exercise = HKObjectType.quantityType(forIdentifier: .appleExerciseTime) else {
+              let exercise = HKObjectType.quantityType(forIdentifier: .appleExerciseTime),
+              let hrv = HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else {
             throw HealthKitError.unavailable
         }
-        try await store.requestAuthorization(toShare: [], read: [sleep, fiber, exercise])
+        try await store.requestAuthorization(toShare: [], read: [sleep, fiber, exercise, hrv])
     }
 
-    /// Reads sleep, fiber, and exercise for a day. Each metric is fetched
-    /// independently and resolves to 0 if its individual query fails or returns
-    /// nothing, so one missing/erroring metric never blocks the day's score.
-    /// Throwing is reserved for cases where Health is unavailable or the date is
-    /// invalid — situations where no metric could possibly be read.
+    /// Reads sleep, fiber, exercise, and optional sleep HRV for a day. Score
+    /// metrics resolve to 0 if their query fails; HRV resolves to nil when absent.
     func fetchMetrics(forDateKey dateKey: String) async throws -> HealthDayMetrics {
         guard isAvailable else { throw HealthKitError.unavailable }
         guard let dayStart = DateHelpers.date(from: dateKey) else {
@@ -48,13 +47,30 @@ final class HealthKitService {
         }
         let calendar = Calendar.current
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
-        async let sleepHours = resilient { try await self.fetchSleepHours(dayStart: dayStart, dayEnd: dayEnd, calendar: calendar) }
+
+        async let sleepBundle = resilientSleepBundle(dayStart: dayStart, calendar: calendar)
         async let fiberGrams = resilient { try await self.fetchFiberGrams(dayStart: dayStart, dayEnd: dayEnd) }
-        async let exerciseMinutes = resilient { try await self.fetchExerciseMinutes(dayStart: dayStart, dayEnd: dayEnd) }
+        async let exerciseMinutes = resilient {
+            try await self.fetchExerciseMinutes(dayStart: dayStart, dayEnd: dayEnd)
+        }
+
+        let bundle = await sleepBundle
+        let sleepHrvSDNNMs = await resilientOptional {
+            guard let bundle else { return nil }
+            return try await self.fetchSleepHRVSDNNMs(
+                asleepIntervals: bundle.asleepIntervals,
+                dayStart: dayStart,
+                windowStart: bundle.windowStart,
+                windowEnd: bundle.windowEnd,
+                calendar: calendar
+            )
+        }
+
         return await HealthDayMetrics(
-            sleepHours: sleepHours,
+            sleepHours: bundle?.hours ?? 0,
             fiberGrams: fiberGrams,
-            exerciseMinutes: exerciseMinutes
+            exerciseMinutes: exerciseMinutes,
+            sleepHrvSDNNMs: sleepHrvSDNNMs
         )
     }
 
@@ -65,53 +81,6 @@ final class HealthKitService {
             return try await operation()
         } catch {
             return 0
-        }
-    }
-
-    /// Sleep attributed to the wake calendar day. The HealthKit query fetches
-    /// every asleep sub-sample from any source in a wide window around the
-    /// wake day; `SleepAttribution` does the rest — grouping sub-samples into
-    /// sessions, attributing whole sessions to the day in which they ENDED,
-    /// merging overlapping intervals across sources, and clipping to the
-    /// safety window.
-    ///
-    /// This is the single source of truth for the Today score's sleep value
-    /// and must stay in lockstep with `sleepDiagnostic(forDateKey:)`.
-    private func fetchSleepHours(dayStart: Date, dayEnd: Date, calendar: Calendar) async throws -> Double {
-        guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
-            throw HealthKitError.unavailable
-        }
-        // Window: 6 PM previous day through 6 PM wake day. Wide enough to
-        // capture late wake-ups (sleep-in days, recovery sleep, etc.) and
-        // matches what SleepAttribution clips to by default.
-        let windowStart = calendar.date(byAdding: .hour, value: -6, to: dayStart)!
-        let windowEnd = calendar.date(byAdding: .hour, value: 18, to: dayStart)!
-        let predicate = HKQuery.predicateForSamples(withStart: windowStart, end: windowEnd, options: .strictStartDate)
-
-        return try await withCheckedThrowingContinuation { continuation in
-            let query = HKSampleQuery(
-                sampleType: sleepType,
-                predicate: predicate,
-                limit: HKObjectQueryNoLimit,
-                sortDescriptors: nil
-            ) { _, samples, error in
-                if let error {
-                    continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
-                    return
-                }
-                let categories = (samples as? [HKCategorySample]) ?? []
-                let intervals: [SleepInterval] = categories.compactMap { sample in
-                    guard HealthKitService.asleepCategoryValues.contains(sample.value) else { return nil }
-                    return SleepInterval(start: sample.startDate, end: sample.endDate)
-                }
-                let hours = SleepAttribution.attributedHours(
-                    intervals: intervals,
-                    dayStart: dayStart,
-                    calendar: calendar
-                )
-                continuation.resume(returning: hours)
-            }
-            store.execute(query)
         }
     }
 

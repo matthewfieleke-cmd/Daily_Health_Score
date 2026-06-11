@@ -66,12 +66,34 @@ enum SleepAttribution {
         sessionGapToleranceMinutes: Int = 60,
         calendar: Calendar = .current
     ) -> Double {
+        let clipped = attributedSleepIntervals(
+            intervals: intervals,
+            dayStart: dayStart,
+            windowHoursBefore: windowHoursBefore,
+            windowHoursAfter: windowHoursAfter,
+            sessionGapToleranceMinutes: sessionGapToleranceMinutes,
+            calendar: calendar
+        )
+        let totalSeconds = clipped.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
+        return max(0, totalSeconds / 3600.0)
+    }
+
+    /// Merged, window-clipped asleep intervals attributed to the wake day at `dayStart`.
+    /// Used for sleep-hour totals and for filtering HRV samples to sleep time.
+    static func attributedSleepIntervals(
+        intervals: [SleepInterval],
+        dayStart: Date,
+        windowHoursBefore: Int = 6,
+        windowHoursAfter: Int = 18,
+        sessionGapToleranceMinutes: Int = 60,
+        calendar: Calendar = .current
+    ) -> [SleepInterval] {
         guard
             let windowStart = calendar.date(byAdding: .hour, value: -windowHoursBefore, to: dayStart),
             let windowEnd = calendar.date(byAdding: .hour, value: windowHoursAfter, to: dayStart),
             let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)
         else {
-            return 0
+            return []
         }
 
         let sessions = groupIntoSessions(
@@ -79,26 +101,19 @@ enum SleepAttribution {
             gapTolerance: TimeInterval(sessionGapToleranceMinutes * 60)
         )
 
-        var totalSeconds: TimeInterval = 0
+        var attributed: [SleepInterval] = []
         for session in sessions {
-            // Wake-day attribution: the whole session counts toward the day in which it ENDED.
-            // This is what lets pre-midnight sub-samples contribute to today's total.
             guard session.end >= dayStart, session.end < dayEnd else { continue }
 
-            // Within a qualifying session, sum the *union* of asleep sub-samples,
-            // clipped to the safety window. The union excludes the brief Awake
-            // gaps Apple Watch interleaves inside a session (those aren't passed
-            // to us — caller filters out `.awake`), so the total matches
-            // Apple Health's "Time Asleep" (which also excludes Awake).
             for interval in mergeOverlapping(session.intervals) {
                 let clippedStart = max(interval.start, windowStart)
                 let clippedEnd = min(interval.end, windowEnd)
                 guard clippedEnd > clippedStart else { continue }
-                totalSeconds += clippedEnd.timeIntervalSince(clippedStart)
+                attributed.append(SleepInterval(start: clippedStart, end: clippedEnd))
             }
         }
 
-        return max(0, totalSeconds / 3600.0)
+        return mergeOverlapping(attributed)
     }
 
     // MARK: - Sessionization
