@@ -34,8 +34,22 @@ struct TodayView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 4)
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { toolbarContent }
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                TodayTopBar(
+                    onDiscouragement: {
+                        discText = appState.settingsStore.nextDiscouragement()
+                        withAnimation { showDiscouragement = true }
+                    },
+                    onMotivation: {
+                        motivText = appState.settingsStore.nextMotivation()
+                        withAnimation { showMotivation = true }
+                    },
+                    onRefresh: {
+                        Task { await appState.syncTodayFromHealth(userInitiated: true) }
+                    }
+                )
+            }
         }
         .task { await playLaunchDialUpIfNeeded() }
         .onAppear { appState.refreshTodaySuggestionForDisplayIfNeeded() }
@@ -132,61 +146,6 @@ struct TodayView: View {
         dialUpTask?.cancel()
         dialUpTask = Task { @MainActor in
             await DialUpAnimation.animate { dialUpProgress = $0 }
-        }
-    }
-
-    // MARK: - Toolbar
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            HStack(spacing: 12) {
-                Image("BrandMark")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 40, height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .accessibilityHidden(true)
-                Text("Daily Health Score")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-            .frame(minHeight: AppTheme.Layout.navigationBarRowHeight)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Daily Health Score")
-        }
-        ToolbarItemGroup(placement: .topBarTrailing) {
-            HStack(spacing: 16) {
-                Button {
-                    discText = appState.settingsStore.nextDiscouragement()
-                    withAnimation { showDiscouragement = true }
-                } label: {
-                    Image(systemName: "heart.text.square")
-                }
-                .accessibilityLabel("Feeling discouraged")
-
-                Button {
-                    motivText = appState.settingsStore.nextMotivation()
-                    withAnimation { showMotivation = true }
-                } label: {
-                    Image("HikerOnHill")
-                        .renderingMode(.template)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 22, height: 22)
-                }
-                .accessibilityLabel("Need motivation")
-
-                Button {
-                    Task { await appState.syncTodayFromHealth(userInitiated: true) }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .accessibilityLabel("Refresh from Apple Health")
-            }
-            .frame(minHeight: AppTheme.Layout.navigationBarRowHeight)
         }
     }
 
