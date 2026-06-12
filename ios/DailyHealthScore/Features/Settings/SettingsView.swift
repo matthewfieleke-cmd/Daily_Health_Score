@@ -67,8 +67,7 @@ struct SettingsView: View {
                     }
                 }
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
+            .enlargedAppNavigationBar(title: "Settings")
             .tint(AppTheme.primary)
             .onAppear {
                 selectedSleepGoal = appState.settingsStore.settings.sleepGoal

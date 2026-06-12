@@ -5,24 +5,22 @@ struct HealthSyncBannerOverlay: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        VStack(spacing: 0) {
+        GeometryReader { geometry in
             if appState.healthSyncBannerPhase != .hidden {
-                HStack {
-                    Spacer(minLength: 0)
-                    banner
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 16)
-                .transition(
-                    .asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity),
-                        removal: .opacity
+                banner
+                    .position(
+                        x: geometry.size.width / 2,
+                        y: geometry.safeAreaInsets.top + AppTheme.Layout.navigationBarRowHeight / 2
                     )
-                )
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .opacity
+                        )
+                    )
             }
-            Spacer(minLength: 0)
         }
-        .safeAreaPadding(.top, 8)
+        .ignoresSafeArea()
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: appState.healthSyncBannerPhase)
         .allowsHitTesting(false)
         .accessibilityElement(children: .contain)

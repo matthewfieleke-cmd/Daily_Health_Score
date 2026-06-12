@@ -93,6 +93,8 @@ enum AppTheme {
         static let sectionSpacing: CGFloat = 20
         static let stackSpacing: CGFloat = 12
         static let heroCornerRadius: CGFloat = 24
+        /// Taller than the system default so sync status pills can sit centered in the nav row.
+        static let navigationBarRowHeight: CGFloat = 60
     }
 
     enum Shadow {

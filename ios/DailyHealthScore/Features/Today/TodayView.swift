@@ -153,35 +153,40 @@ struct TodayView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
+            .frame(minHeight: AppTheme.Layout.navigationBarRowHeight)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Daily Health Score")
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
-            Button {
-                discText = appState.settingsStore.nextDiscouragement()
-                withAnimation { showDiscouragement = true }
-            } label: {
-                Image(systemName: "heart.text.square")
-            }
-            .accessibilityLabel("Feeling discouraged")
+            HStack(spacing: 16) {
+                Button {
+                    discText = appState.settingsStore.nextDiscouragement()
+                    withAnimation { showDiscouragement = true }
+                } label: {
+                    Image(systemName: "heart.text.square")
+                }
+                .accessibilityLabel("Feeling discouraged")
 
-            Button {
-                motivText = appState.settingsStore.nextMotivation()
-                withAnimation { showMotivation = true }
-            } label: {
-                Image("HikerOnHill")
-                    .renderingMode(.template)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-            }
-            .accessibilityLabel("Need motivation")
+                Button {
+                    motivText = appState.settingsStore.nextMotivation()
+                    withAnimation { showMotivation = true }
+                } label: {
+                    Image("HikerOnHill")
+                        .renderingMode(.template)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 22, height: 22)
+                }
+                .accessibilityLabel("Need motivation")
 
-            Button {
-                Task { await appState.syncTodayFromHealth(userInitiated: true) }
-            } label: {
-                Image(systemName: "arrow.clockwise")
+                Button {
+                    Task { await appState.syncTodayFromHealth(userInitiated: true) }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .accessibilityLabel("Refresh from Apple Health")
             }
-            .accessibilityLabel("Refresh from Apple Health")
+            .frame(minHeight: AppTheme.Layout.navigationBarRowHeight)
         }
     }
 

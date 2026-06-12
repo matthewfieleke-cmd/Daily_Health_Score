@@ -32,7 +32,7 @@ struct RollingSummaryView: View {
                     }
                 }
             }
-            .navigationTitle(title)
+            .enlargedAppNavigationBar(title: title)
         }
     }
 
