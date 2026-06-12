@@ -113,9 +113,17 @@ struct TodayView: View {
                         )
                     )
 
-                    TodayHRVCard(summary: hrvSummary) {
-                        withAnimation { showHRVTrendsInfo = true }
+                    NavigationLink {
+                        HRVGraphView(
+                            records: appState.recordStore.records,
+                            todayKey: todayKey
+                        )
+                    } label: {
+                        TodayHRVCard(summary: hrvSummary) {
+                            withAnimation { showHRVTrendsInfo = true }
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
                 .padding(.bottom, 8)
             }
