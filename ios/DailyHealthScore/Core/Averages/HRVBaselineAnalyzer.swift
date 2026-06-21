@@ -63,6 +63,17 @@ enum HRVBaselineState: Equatable {
     case ready(HRVBaselineResult)
 }
 
+/// Full result of an analysis pass. `acuteAverageMs` is the 7-day mean shown on
+/// the Today card and as the latest point of the graph's trend line — the single
+/// source of truth for "your recent HRV" regardless of whether a corridor exists
+/// yet. When `state` is `.ready`, `acuteAverageMs` equals the result's `trendMean`.
+struct HRVAnalysis: Equatable {
+    var acuteAverageMs: Double?
+    var acuteNightsWithData: Int
+    var acuteWindowNights: Int
+    var state: HRVBaselineState
+}
+
 /// Personalized HRV baseline-vs-trend engine operating on stored daily SDNN
 /// aggregates (`DailyRecord.sleepHrvSDNNMs`). Pure and dependency-free: callers
 /// pass records in; nothing here touches HealthKit or SwiftData.
@@ -81,19 +92,39 @@ enum HRVBaselineAnalyzer {
         records: [DailyRecord],
         todayKey: String,
         sensitivity: HRVSensitivity
-    ) -> HRVBaselineState {
+    ) -> HRVAnalysis {
         let byDate = valuesByDate(records)
-
         let baseline = baselineValues(byDate: byDate, anchorKey: todayKey)
         let acute = acuteValues(byDate: byDate, anchorKey: todayKey)
-        let totalValid = baseline.count + acute.count
+        let acuteAverage = mean(acute)
 
+        let state = baselineState(
+            baseline: baseline,
+            acute: acute,
+            acuteAverage: acuteAverage,
+            sensitivity: sensitivity
+        )
+
+        return HRVAnalysis(
+            acuteAverageMs: acuteAverage,
+            acuteNightsWithData: acute.count,
+            acuteWindowNights: acuteWindowDays,
+            state: state
+        )
+    }
+
+    private static func baselineState(
+        baseline: [Double],
+        acute: [Double],
+        acuteAverage: Double?,
+        sensitivity: HRVSensitivity
+    ) -> HRVBaselineState {
         guard baseline.count >= minBaselineNights,
               acute.count >= minAcuteNights,
               let baselineMean = mean(baseline), baselineMean > 0,
               let baselineSD = sampleStandardDeviation(baseline),
-              let trendMean = mean(acute) else {
-            return .buildingBaseline(validNights: totalValid)
+              let trendMean = acuteAverage else {
+            return .buildingBaseline(validNights: baseline.count + acute.count)
         }
 
         let k = sensitivity.multiplier

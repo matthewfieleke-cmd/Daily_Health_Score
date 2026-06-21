@@ -82,14 +82,7 @@ struct TodayView: View {
         )
     }
 
-    private var hrvSummary: HRVRollingSummary {
-        HRVRollingCalculator.compute(
-            records: appState.recordStore.records,
-            todayKey: todayKey
-        )
-    }
-
-    private var hrvState: HRVBaselineState {
+    private var hrvAnalysis: HRVAnalysis {
         HRVBaselineAnalyzer.analyze(
             records: appState.recordStore.records,
             todayKey: todayKey,
@@ -127,7 +120,7 @@ struct TodayView: View {
                             todayKey: todayKey
                         )
                     } label: {
-                        TodayHRVCard(summary: hrvSummary, state: hrvState) {
+                        TodayHRVCard(analysis: hrvAnalysis) {
                             withAnimation { showHRVTrendsInfo = true }
                         }
                     }

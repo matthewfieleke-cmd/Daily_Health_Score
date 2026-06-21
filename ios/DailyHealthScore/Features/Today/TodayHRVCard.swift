@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct TodayHRVCard: View {
-    let summary: HRVRollingSummary
-    let state: HRVBaselineState
+    let analysis: HRVAnalysis
     let onInfoTap: () -> Void
 
     var body: some View {
@@ -64,18 +63,18 @@ struct TodayHRVCard: View {
     }
 
     private var averageLine: String? {
-        guard let averageMs = summary.averageMs else { return nil }
+        guard let averageMs = analysis.acuteAverageMs else { return nil }
         let rounded = Int(averageMs.rounded())
-        if summary.nightsWithData < summary.nightsInWindow {
-            return "7-day average: \(rounded) ms (\(summary.nightsWithData) of \(summary.nightsInWindow) nights)"
+        if analysis.acuteNightsWithData < analysis.acuteWindowNights {
+            return "7-day average: \(rounded) ms (\(analysis.acuteNightsWithData) of \(analysis.acuteWindowNights) nights)"
         }
         return "7-day average: \(rounded) ms"
     }
 
     private var trendLine: String {
-        switch state {
+        switch analysis.state {
         case .buildingBaseline:
-            if summary.averageMs == nil {
+            if analysis.acuteAverageMs == nil {
                 return "Wear your Apple Watch during sleep to build history."
             }
             return "Building your usual range"

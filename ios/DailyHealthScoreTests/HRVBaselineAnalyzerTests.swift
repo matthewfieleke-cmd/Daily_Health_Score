@@ -52,27 +52,53 @@ final class HRVBaselineAnalyzerTests: XCTestCase {
         return records
     }
 
+    private func analyze(_ records: [DailyRecord], sensitivity: HRVSensitivity = .balanced) -> HRVAnalysis {
+        HRVBaselineAnalyzer.analyze(records: records, todayKey: anchor, sensitivity: sensitivity)
+    }
+
     // MARK: - Cold start
 
     func test_coldStart_tooFewBaselineNights_buildsBaseline() {
         let recent = keys(endingOn: anchor, days: 5).map { record(date: $0, hrv: 50) }
-        let state = HRVBaselineAnalyzer.analyze(records: recent, todayKey: anchor, sensitivity: .balanced)
-        XCTAssertEqual(state, .buildingBaseline(validNights: 5))
+        let analysis = analyze(recent)
+        XCTAssertEqual(analysis.state, .buildingBaseline(validNights: 5))
     }
 
     func test_coldStart_thirteenBaselineNights_stillBuilding() {
         var records: [DailyRecord] = []
         for key in baselineKeys.prefix(13) { records.append(record(date: key, hrv: 50)) }
         for key in acuteKeys { records.append(record(date: key, hrv: 50)) }
-        let state = HRVBaselineAnalyzer.analyze(records: records, todayKey: anchor, sensitivity: .balanced)
-        XCTAssertEqual(state, .buildingBaseline(validNights: 13 + acuteKeys.count))
+        let analysis = analyze(records)
+        XCTAssertEqual(analysis.state, .buildingBaseline(validNights: 13 + acuteKeys.count))
+    }
+
+    // MARK: - Acute average (single source of truth for "recent HRV")
+
+    func test_acuteAverage_availableDuringColdStart() {
+        let recent = keys(endingOn: anchor, days: 5).map { record(date: $0, hrv: 48) }
+        let analysis = analyze(recent)
+        XCTAssertEqual(analysis.acuteAverageMs ?? 0, 48, accuracy: 0.001)
+        XCTAssertEqual(analysis.acuteNightsWithData, 5)
+        XCTAssertEqual(analysis.acuteWindowNights, 7)
+    }
+
+    func test_acuteAverage_matchesTrendMeanWhenReady() {
+        let analysis = analyze(standardRecords(acute: 50))
+        guard case .ready(let result) = analysis.state else { return XCTFail("expected ready") }
+        XCTAssertEqual(analysis.acuteAverageMs ?? 0, result.trendMean, accuracy: 0.001)
+    }
+
+    func test_acuteAverage_nilWhenNoData() {
+        let analysis = analyze([])
+        XCTAssertNil(analysis.acuteAverageMs)
+        XCTAssertEqual(analysis.acuteNightsWithData, 0)
     }
 
     // MARK: - Classification
 
     func test_withinRange_whenTrendNearBaselineMean() {
-        let state = HRVBaselineAnalyzer.analyze(records: standardRecords(acute: 50), todayKey: anchor, sensitivity: .balanced)
-        guard case .ready(let result) = state else { return XCTFail("expected ready") }
+        let analysis = analyze(standardRecords(acute: 50))
+        guard case .ready(let result) = analysis.state else { return XCTFail("expected ready") }
         XCTAssertEqual(result.status, .withinRange)
         XCTAssertEqual(result.baselineMean, 50, accuracy: 0.001)
         XCTAssertEqual(result.trendMean, 50, accuracy: 0.001)
@@ -80,23 +106,23 @@ final class HRVBaselineAnalyzerTests: XCTestCase {
     }
 
     func test_belowRange_whenTrendDropsBelowCorridor() {
-        let state = HRVBaselineAnalyzer.analyze(records: standardRecords(acute: 40), todayKey: anchor, sensitivity: .balanced)
-        guard case .ready(let result) = state else { return XCTFail("expected ready") }
+        let analysis = analyze(standardRecords(acute: 40))
+        guard case .ready(let result) = analysis.state else { return XCTFail("expected ready") }
         XCTAssertEqual(result.status, .belowRange)
     }
 
     func test_aboveRange_whenTrendExceedsCorridor() {
-        let state = HRVBaselineAnalyzer.analyze(records: standardRecords(acute: 62), todayKey: anchor, sensitivity: .balanced)
-        guard case .ready(let result) = state else { return XCTFail("expected ready") }
+        let analysis = analyze(standardRecords(acute: 62))
+        guard case .ready(let result) = analysis.state else { return XCTFail("expected ready") }
         XCTAssertEqual(result.status, .aboveRange)
     }
 
     func test_sensitivityWidensCorridor() {
         // Trend of 43 sits below the Balanced corridor but inside the wider Low corridor.
-        let balanced = HRVBaselineAnalyzer.analyze(records: standardRecords(acute: 43), todayKey: anchor, sensitivity: .balanced)
-        let low = HRVBaselineAnalyzer.analyze(records: standardRecords(acute: 43), todayKey: anchor, sensitivity: .low)
-        guard case .ready(let balancedResult) = balanced,
-              case .ready(let lowResult) = low else { return XCTFail("expected ready") }
+        let balanced = analyze(standardRecords(acute: 43), sensitivity: .balanced)
+        let low = analyze(standardRecords(acute: 43), sensitivity: .low)
+        guard case .ready(let balancedResult) = balanced.state,
+              case .ready(let lowResult) = low.state else { return XCTFail("expected ready") }
         XCTAssertEqual(balancedResult.status, .belowRange)
         XCTAssertEqual(lowResult.status, .withinRange)
         XCTAssertLessThan(lowResult.lowerBound, balancedResult.lowerBound)
@@ -105,8 +131,8 @@ final class HRVBaselineAnalyzerTests: XCTestCase {
     // MARK: - Statistics
 
     func test_coefficientOfVariation() {
-        let state = HRVBaselineAnalyzer.analyze(records: standardRecords(acute: 50), todayKey: anchor, sensitivity: .balanced)
-        guard case .ready(let result) = state else { return XCTFail("expected ready") }
+        let analysis = analyze(standardRecords(acute: 50))
+        guard case .ready(let result) = analysis.state else { return XCTFail("expected ready") }
         // SD ≈ 5.09 on a mean of 50 → CV ≈ 10.2%.
         XCTAssertEqual(result.cvPercent, 10.18, accuracy: 0.3)
     }
@@ -120,8 +146,8 @@ final class HRVBaselineAnalyzerTests: XCTestCase {
         for (index, key) in acuteKeys.enumerated() {
             records.append(record(date: key, hrv: volatile[index % volatile.count]))
         }
-        let state = HRVBaselineAnalyzer.analyze(records: records, todayKey: anchor, sensitivity: .balanced)
-        guard case .ready(let result) = state else { return XCTFail("expected ready") }
+        let analysis = analyze(records)
+        guard case .ready(let result) = analysis.state else { return XCTFail("expected ready") }
         XCTAssertTrue(result.isHighVariability)
     }
 
@@ -131,8 +157,8 @@ final class HRVBaselineAnalyzerTests: XCTestCase {
         var records: [DailyRecord] = []
         for key in baselineKeys { records.append(record(date: key, hrv: 60)) }
         for key in acuteKeys { records.append(record(date: key, hrv: 40)) }
-        let state = HRVBaselineAnalyzer.analyze(records: records, todayKey: anchor, sensitivity: .balanced)
-        guard case .ready(let result) = state else { return XCTFail("expected ready") }
+        let analysis = analyze(records)
+        guard case .ready(let result) = analysis.state else { return XCTFail("expected ready") }
         // Pooling would blur these; separation keeps baseline at 60 and trend at 40.
         XCTAssertEqual(result.baselineMean, 60, accuracy: 0.001)
         XCTAssertEqual(result.trendMean, 40, accuracy: 0.001)
@@ -143,8 +169,8 @@ final class HRVBaselineAnalyzerTests: XCTestCase {
         var records: [DailyRecord] = []
         for key in baselineKeys.prefix(14) { records.append(record(date: key, hrv: 50)) }
         for key in acuteKeys.prefix(4) { records.append(record(date: key, hrv: 50)) }
-        let state = HRVBaselineAnalyzer.analyze(records: records, todayKey: anchor, sensitivity: .balanced)
-        guard case .ready(let result) = state else { return XCTFail("expected ready at 14/4 nights") }
+        let analysis = analyze(records)
+        guard case .ready(let result) = analysis.state else { return XCTFail("expected ready at 14/4 nights") }
         XCTAssertEqual(result.status, .withinRange)
     }
 }

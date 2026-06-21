@@ -43,7 +43,7 @@ struct HRVGraphView: View {
         )
     }
 
-    private var state: HRVBaselineState {
+    private var analysis: HRVAnalysis {
         HRVBaselineAnalyzer.analyze(
             records: records,
             todayKey: todayKey,
@@ -131,7 +131,7 @@ struct HRVGraphView: View {
     }
 
     private var statusColor: Color {
-        switch state {
+        switch analysis.state {
         case .buildingBaseline:
             return .secondary
         case .ready(let result):
@@ -143,7 +143,7 @@ struct HRVGraphView: View {
     }
 
     private var statusTitle: String {
-        switch state {
+        switch analysis.state {
         case .buildingBaseline:
             return "Building your range"
         case .ready(let result):
@@ -156,7 +156,7 @@ struct HRVGraphView: View {
     }
 
     private var statusDetail: String {
-        switch state {
+        switch analysis.state {
         case .buildingBaseline(let validNights):
             return "\(validNights) night\(validNights == 1 ? "" : "s") tracked so far. Keep wearing your Apple Watch during sleep — your personalized range appears after about three weeks of data."
         case .ready(let result):
