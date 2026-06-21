@@ -9,10 +9,19 @@ final class SettingsStore: ObservableObject {
         static let usedSuggestions = "dhs.usedSuggestions"
         static let usedDiscouragement = "dhs.usedDiscouragement"
         static let usedMotivation = "dhs.usedMotivation"
+        static let hrvSensitivity = "dhs.hrvSensitivity"
     }
 
     @Published var settings: UserSettings {
         didSet { persistSettings() }
+    }
+
+    /// HRV usual-range sensitivity. Persisted independently of `settings`
+    /// because it has no bearing on the daily score.
+    @Published var hrvSensitivity: HRVSensitivity {
+        didSet {
+            UserDefaults.standard.set(hrvSensitivity.rawValue, forKey: Keys.hrvSensitivity)
+        }
     }
 
     private var usedSuggestions: [String: [String]] = [:]
@@ -25,6 +34,8 @@ final class SettingsStore: ObservableObject {
         let sleep = SleepGoalHours(rawValue: sleepRaw == 0 ? 7.5 : sleepRaw) ?? .sevenHalf
         let fiber = FiberGoalGrams(rawValue: fiberRaw == 0 ? 40 : fiberRaw) ?? .forty
         settings = UserSettings(sleepGoal: sleep, fiberGoal: fiber)
+        hrvSensitivity = UserDefaults.standard.string(forKey: Keys.hrvSensitivity)
+            .flatMap(HRVSensitivity.init(rawValue:)) ?? .balanced
         loadRotationState()
     }
 

@@ -24,9 +24,23 @@ What makes HRV go down?
 
 • Note: A single hard workout may briefly lower HRV for 1–2 days — this is normal and not a cause for concern.
 
-How to use your 7-day average
+What is my "usual range"?
 
-Your 7-day rolling average smooths out daily fluctuations. Look for gradual trends over weeks, not day-to-day changes. A rising trend suggests your healthy habits are working. A sustained downward trend — especially if you're sleeping well and staying active — may be worth discussing with your doctor.
+Higher HRV isn't always better and lower isn't always worse — what matters is your own pattern over time. Your usual range comes from your last several weeks of sleep HRV: the shaded band on the graph is your typical night-to-night spread around your baseline.
+
+When your recent 7-day trend sits inside the band, your body is handling its current load about as it normally does. A dip below the band can show up after poor sleep, stress, illness, or hard training. A jump above can follow deep recovery or heavy fatigue. The "more variable than usual" note simply means your recent nights are bouncing around more than your own baseline — your average can look fine while your body works harder to hold it there.
+
+Adjusting sensitivity
+
+Sensitivity controls how easily the app flags a change, not your health:
+
+• High — a narrow band that flags smaller shifts earlier. Best if your nights are usually steady.
+• Balanced — one standard deviation around your baseline. Flags meaningful changes for most people.
+• Low — a wider band. Best if your HRV is naturally variable and you only want to see larger swings.
+
+Building your range
+
+Your range needs about three weeks of sleep HRV before it appears. Until then the app shows your nightly readings and counts the nights tracked. Wear your Apple Watch during sleep for the most reliable picture.
 
 Important limitations
 

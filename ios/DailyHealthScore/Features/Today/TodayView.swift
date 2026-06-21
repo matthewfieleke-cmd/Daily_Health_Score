@@ -89,6 +89,14 @@ struct TodayView: View {
         )
     }
 
+    private var hrvState: HRVBaselineState {
+        HRVBaselineAnalyzer.analyze(
+            records: appState.recordStore.records,
+            todayKey: todayKey,
+            sensitivity: appState.settingsStore.hrvSensitivity
+        )
+    }
+
     // MARK: - Body content
 
     @ViewBuilder
@@ -119,7 +127,7 @@ struct TodayView: View {
                             todayKey: todayKey
                         )
                     } label: {
-                        TodayHRVCard(summary: hrvSummary) {
+                        TodayHRVCard(summary: hrvSummary, state: hrvState) {
                             withAnimation { showHRVTrendsInfo = true }
                         }
                     }

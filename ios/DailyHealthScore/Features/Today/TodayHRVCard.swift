@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TodayHRVCard: View {
     let summary: HRVRollingSummary
+    let state: HRVBaselineState
     let onInfoTap: () -> Void
 
     var body: some View {
@@ -72,18 +73,20 @@ struct TodayHRVCard: View {
     }
 
     private var trendLine: String {
-        switch summary.trend {
-        case .up:
-            return "↑ Trending up"
-        case .down:
-            return "↓ Trending down"
-        case .steady:
-            return "→ Holding steady"
-        case .needsMoreHistory:
+        switch state {
+        case .buildingBaseline:
             if summary.averageMs == nil {
                 return "Wear your Apple Watch during sleep to build history."
             }
-            return "Trend needs more history"
+            return "Building your usual range"
+        case .ready(let result):
+            let base: String
+            switch result.status {
+            case .withinRange: base = "In your usual range"
+            case .belowRange: base = "Below your usual range"
+            case .aboveRange: base = "Above your usual range"
+            }
+            return result.isHighVariability ? "\(base) · more variable than usual" : base
         }
     }
 }

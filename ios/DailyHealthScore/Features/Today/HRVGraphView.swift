@@ -29,13 +29,25 @@ struct HRVGraphView: View {
     let records: [DailyRecord]
     let todayKey: String
 
-    @State private var selectedRange: HRVGraphRange = .seven
+    @EnvironmentObject private var appState: AppState
+    @State private var selectedRange: HRVGraphRange = .thirty
+    @State private var sensitivity: HRVSensitivity = .balanced
+    @State private var showSensitivityInfo = false
 
-    private var series: HRVChartSeries {
-        HRVChartSeriesBuilder.build(
+    private var series: HRVTrendSeries {
+        HRVTrendSeriesBuilder.build(
             records: records,
             todayKey: todayKey,
-            days: selectedRange.rawValue
+            days: selectedRange.rawValue,
+            sensitivity: sensitivity
+        )
+    }
+
+    private var state: HRVBaselineState {
+        HRVBaselineAnalyzer.analyze(
+            records: records,
+            todayKey: todayKey,
+            sensitivity: sensitivity
         )
     }
 
@@ -43,70 +55,226 @@ struct HRVGraphView: View {
         ZStack {
             AppTheme.screenBackground.ignoresSafeArea()
 
-            VStack(spacing: 16) {
-                Picker("Range", selection: $selectedRange) {
-                    ForEach(HRVGraphRange.allCases) { range in
-                        Text(range.title).tag(range)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 16) {
+                    rangePicker
+
+                    if series.points.allSatisfy({ $0.rawMs == nil && $0.trendMs == nil }) {
+                        emptyState
+                    } else {
+                        statusCard
+                        chartCard
+                        sensitivityCard
                     }
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
                 .padding(.top, 8)
-
-                if series.points.isEmpty {
-                    emptyState
-                } else {
-                    chartCard
-                }
-
-                Spacer(minLength: 0)
+                .padding(.bottom, 24)
             }
         }
         .navigationTitle("HRV")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+        .onAppear { sensitivity = appState.settingsStore.hrvSensitivity }
+        .onChange(of: sensitivity) { _, newValue in
+            appState.settingsStore.hrvSensitivity = newValue
+        }
+        .infoScrollDialog(
+            isPresented: $showSensitivityInfo,
+            title: HRVEducationLibrary.title,
+            text: HRVEducationLibrary.body
+        )
     }
+
+    private var rangePicker: some View {
+        Picker("Range", selection: $selectedRange) {
+            ForEach(HRVGraphRange.allCases) { range in
+                Text(range.title).tag(range)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 16)
+    }
+
+    // MARK: - Status
+
+    private var statusCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 10, height: 10)
+                Text(statusTitle)
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 0)
+                Button {
+                    withAnimation { showSensitivityInfo = true }
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("About your usual HRV range")
+            }
+
+            Text(statusDetail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
+        .cardShadow()
+        .padding(.horizontal, 16)
+    }
+
+    private var statusColor: Color {
+        switch state {
+        case .buildingBaseline:
+            return .secondary
+        case .ready(let result):
+            switch result.status {
+            case .withinRange: return AppTheme.leaf
+            case .belowRange, .aboveRange: return AppTheme.primary
+            }
+        }
+    }
+
+    private var statusTitle: String {
+        switch state {
+        case .buildingBaseline:
+            return "Building your range"
+        case .ready(let result):
+            switch result.status {
+            case .withinRange: return "In your usual range"
+            case .belowRange: return "Below your usual range"
+            case .aboveRange: return "Above your usual range"
+            }
+        }
+    }
+
+    private var statusDetail: String {
+        switch state {
+        case .buildingBaseline(let validNights):
+            return "\(validNights) night\(validNights == 1 ? "" : "s") tracked so far. Keep wearing your Apple Watch during sleep — your personalized range appears after about three weeks of data."
+        case .ready(let result):
+            let trend = Int(result.trendMean.rounded())
+            let low = Int(result.lowerBound.rounded())
+            let high = Int(result.upperBound.rounded())
+            var detail = "7-day trend \(trend) ms · usual range \(low)–\(high) ms"
+            if result.isHighVariability {
+                detail += " · More variable than usual"
+            }
+            return detail
+        }
+    }
+
+    // MARK: - Chart
 
     private var chartCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let averageMs = series.averageMs {
-                Text("Average: \(Int(averageMs.rounded())) ms")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-
             Chart {
                 ForEach(series.points) { point in
-                    LineMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("HRV", point.valueMs)
-                    )
-                    .interpolationMethod(.linear)
-                    .foregroundStyle(AppTheme.primary)
-
-                    PointMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("HRV", point.valueMs)
-                    )
-                    .foregroundStyle(AppTheme.primary)
+                    if let lower = point.lowerMs, let upper = point.upperMs {
+                        AreaMark(
+                            x: .value("Date", point.date, unit: .day),
+                            yStart: .value("Lower", lower),
+                            yEnd: .value("Upper", upper)
+                        )
+                        .foregroundStyle(AppTheme.primary.opacity(0.12))
+                    }
                 }
 
-                if let averageMs = series.averageMs {
-                    RuleMark(y: .value("Average", averageMs))
+                ForEach(series.points) { point in
+                    if let raw = point.rawMs {
+                        PointMark(
+                            x: .value("Date", point.date, unit: .day),
+                            y: .value("Nightly", raw)
+                        )
+                        .foregroundStyle(AppTheme.primary.opacity(0.28))
+                        .symbolSize(16)
+                    }
+                }
+
+                ForEach(series.points) { point in
+                    if let trend = point.trendMs {
+                        LineMark(
+                            x: .value("Date", point.date, unit: .day),
+                            y: .value("Trend", trend),
+                            series: .value("Series", "trend")
+                        )
+                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(AppTheme.primary)
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+                    }
+                }
+
+                if let baselineMean = series.baselineMeanMs {
+                    RuleMark(y: .value("Baseline", baselineMean))
                         .foregroundStyle(.secondary)
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
                 }
             }
             .chartYAxisLabel("ms")
             .chartXAxis {
-                AxisMarks(values: .stride(by: .day, count: selectedRange.xAxisStrideDays)) { value in
+                AxisMarks(values: .stride(by: .day, count: selectedRange.xAxisStrideDays)) { _ in
                     AxisGridLine()
                     AxisValueLabel(format: xAxisLabelFormat)
                 }
             }
             .frame(height: 240)
+
+            legend
         }
         .padding(16)
+        .background(AppTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
+        .cardShadow()
+        .padding(.horizontal, 16)
+    }
+
+    private var legend: some View {
+        HStack(spacing: 14) {
+            legendItem(color: AppTheme.primary, label: "7-day trend")
+            legendItem(color: AppTheme.primary.opacity(0.18), label: "Usual range")
+            Spacer(minLength: 0)
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+    }
+
+    private func legendItem(color: Color, label: String) -> some View {
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(color)
+                .frame(width: 14, height: 8)
+            Text(label)
+        }
+    }
+
+    // MARK: - Sensitivity
+
+    private var sensitivityCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Sensitivity")
+                .font(.footnote.weight(.semibold))
+
+            Picker("Sensitivity", selection: $sensitivity) {
+                ForEach(HRVSensitivity.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Text(sensitivity.shortDescription)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
         .cardShadow()
