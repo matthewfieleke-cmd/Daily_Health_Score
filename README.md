@@ -2,7 +2,7 @@
 
 A native iOS app that scores each day on three pillars — **sleep**, **dietary fiber**, and **exercise minutes** — against adjustable goals (10 points max), with **Today** and **7 / 30 / 90-day** rolling views.
 
-All metrics are read directly from **Apple Health**. Data stays on the device (SwiftData, 90-day retention). No server, no account, no Apple Shortcut required.
+All metrics are read directly from **Apple Health**. Data stays on the device (SwiftData, roughly 125-day retention). No server, no account, no Apple Shortcut required.
 
 See **[ios/README.md](ios/README.md)** for Xcode setup and run instructions.
 

@@ -45,7 +45,7 @@ The app stores locally, on your iPhone:
 - Optional SMART goals and check-in state
 - App preferences (e.g. rotation of encouragement/motivation text)
 
-Local retention is limited to approximately **90 days** of daily records, after which older records may be removed by the app’s storage rules.
+Local retention is limited to approximately **125 days** of daily records, after which older records may be removed by the app’s storage rules.
 
 ### Notifications (optional)
 
@@ -88,7 +88,7 @@ If you use **export** in Settings, you choose where exported files go (e.g. File
 
 ## Data retention and deletion
 
-- **On device:** Records are kept for about 90 days, then pruned according to app logic.
+- **On device:** Records are kept for about 125 days, then pruned according to app logic.
 - **Delete:** Use in-app **Settings** to clear local app data.
 - **Revoke Health access:** Use iOS Health privacy settings; the app will no longer read new Health data.
 

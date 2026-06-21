@@ -1,8 +1,8 @@
 import Foundation
 
 /// One day on the HRV chart: the actual nightly value (if any), the rolling
-/// 7-day trend ending that day, and the personalized corridor bounds as of that
-/// day. Bounds are nil until enough baseline history exists for the date.
+/// average ending that day, and the personalized corridor bounds as of that day.
+/// Bounds are nil until enough baseline history exists for the date.
 struct HRVTrendPoint: Identifiable, Equatable {
     var id: String { dateKey }
     var dateKey: String

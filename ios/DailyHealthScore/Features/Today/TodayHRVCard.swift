@@ -66,9 +66,9 @@ struct TodayHRVCard: View {
         guard let averageMs = analysis.acuteAverageMs else { return nil }
         let rounded = Int(averageMs.rounded())
         if analysis.acuteNightsWithData < analysis.acuteWindowNights {
-            return "7-day average: \(rounded) ms (\(analysis.acuteNightsWithData) of \(analysis.acuteWindowNights) nights)"
+            return "Recent 7-day average: \(rounded) ms (\(analysis.acuteNightsWithData) of \(analysis.acuteWindowNights) nights)"
         }
-        return "7-day average: \(rounded) ms"
+        return "Recent 7-day average: \(rounded) ms"
     }
 
     private var trendLine: String {
@@ -85,7 +85,7 @@ struct TodayHRVCard: View {
             case .belowRange: base = "Below your usual range"
             case .aboveRange: base = "Above your usual range"
             }
-            return result.isHighVariability ? "\(base) · more variable than usual" : base
+            return result.isHighVariability ? "\(base) · less consistent than usual" : base
         }
     }
 }

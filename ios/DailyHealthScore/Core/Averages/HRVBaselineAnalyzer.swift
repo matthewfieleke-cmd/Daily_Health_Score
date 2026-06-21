@@ -36,7 +36,7 @@ enum HRVSensitivity: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-/// Where the recent 7-day trend sits relative to the personalized corridor.
+/// Where the recent 7-day rolling average sits relative to the personalized corridor.
 enum HRVStatus: Equatable {
     case withinRange
     case belowRange
@@ -51,7 +51,7 @@ struct HRVBaselineResult: Equatable {
     var upperBound: Double
     var cvPercent: Double
     var status: HRVStatus
-    /// True when the recent week is much more variable than the user's own baseline,
+    /// True when the recent week is much less consistent than the user's own baseline,
     /// not an absolute CV cut-off (night-to-night SDNN CV of 10–20% is normal).
     var isHighVariability: Bool
 }
@@ -79,7 +79,7 @@ struct HRVAnalysis: Equatable {
 /// pass records in; nothing here touches HealthKit or SwiftData.
 ///
 /// The baseline window deliberately ends the day before the acute window starts,
-/// so the recent 7-day trend is never compared against a corridor that contains it.
+/// so the recent 7-day rolling average is never compared against a corridor that contains it.
 enum HRVBaselineAnalyzer {
     static let baselineWindowDays = 28
     static let acuteWindowDays = 7

@@ -65,7 +65,7 @@ Your **primary focus** highlights the weakest area for the day. When all goals a
 
 ### Where is my data stored?
 
-On your **iPhone only** (local storage). This version does not sync to a cloud account operated by the developer. The app retains roughly **90 days** of history locally.
+On your **iPhone only** (local storage). This version does not sync to a cloud account operated by the developer. The app retains roughly **125 days** of history locally.
 
 You can **export** or **clear** data from **Settings** in the app.
 

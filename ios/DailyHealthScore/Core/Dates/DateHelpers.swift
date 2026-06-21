@@ -1,7 +1,10 @@
 import Foundation
 
 enum DateHelpers {
-    static let retentionDays = 90
+    /// Keep enough history to draw a complete 90-day HRV usual-range band.
+    /// The earliest visible day needs its prior 28-day baseline plus the
+    /// 7-day acute offset, so 90 visible days requires roughly 125 stored days.
+    static let retentionDays = 125
 
     static func localDateKey(from date: Date = Date()) -> String {
         let calendar = Calendar.current

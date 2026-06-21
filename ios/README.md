@@ -45,7 +45,7 @@ open DailyHealthScore.xcodeproj
 
 ## Data
 
-- Stored locally with **SwiftData** (last **90** days).
+- Stored locally with **SwiftData** (roughly the last **125** days).
 - No cloud sync in v1.
 
 ## HealthKit notes

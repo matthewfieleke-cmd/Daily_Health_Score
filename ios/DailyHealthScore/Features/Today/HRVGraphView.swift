@@ -163,9 +163,17 @@ struct HRVGraphView: View {
             let trend = Int(result.trendMean.rounded())
             let low = Int(result.lowerBound.rounded())
             let high = Int(result.upperBound.rounded())
-            var detail = "7-day trend \(trend) ms · usual range \(low)–\(high) ms"
+            var detail = "Recent 7-day average \(trend) ms · usual range \(low)–\(high) ms"
+            switch result.status {
+            case .withinRange:
+                break
+            case .belowRange:
+                detail += " · often reflects strain or reduced recovery"
+            case .aboveRange:
+                detail += " · often reflects strong recovery"
+            }
             if result.isHighVariability {
-                detail += " · More variable than usual"
+                detail += " · less consistent than usual"
             }
             return detail
         }
@@ -237,7 +245,7 @@ struct HRVGraphView: View {
 
     private var legend: some View {
         HStack(spacing: 14) {
-            legendItem(color: AppTheme.primary, label: "7-day trend")
+            legendItem(color: AppTheme.primary, label: "Rolling average")
             legendItem(color: AppTheme.primary.opacity(0.18), label: "Usual range")
             Spacer(minLength: 0)
         }
