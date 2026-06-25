@@ -1,75 +1,33 @@
 import Foundation
 
 enum HRVEducationLibrary {
-    static let title = "Understanding Your HRV Trends"
+    static let title = "Heart Rate Variability"
 
     static let body = """
+Heart Rate Variability: What It Means for Your Health
+
 What is HRV?
 
-Heart rate variability (HRV) measures the tiny changes in timing between heartbeats. It reflects how flexibly your autonomic nervous system shifts between activation and recovery. In general, a higher resting or sleep HRV trend is a positive sign: your body is adapting well, recovering, and handling stress effectively.
+Your heart doesn't beat like a metronome. There are tiny, natural differences in the timing between each heartbeat - sometimes a little faster, sometimes a little slower. Heart rate variability, or HRV, measures these small fluctuations. HRV is controlled by your autonomic nervous system - the part of your nervous system that automatically regulates functions like breathing, digestion, and heart rate without you having to think about it.
 
-Lower HRV does not automatically mean something is wrong. A lower trend can happen after poor sleep, illness, alcohol, dehydration, emotional stress, hard training, travel, or a disrupted routine. The most useful signal is your personal pattern over time, not one night by itself.
+How is HRV related to health?
 
-How to read the graph
+A higher HRV generally reflects a healthy, adaptable nervous system - one that can respond flexibly to the demands of daily life. Research has consistently shown that people with higher HRV tend to have lower rates of heart disease and cardiovascular death. Lower HRV, on the other hand, has been linked to higher risk of heart disease, diabetes, depression, and overall mortality. HRV naturally declines with age, so your personal trend over time matters more than any single number or comparison to others.
 
-• Dots are individual sleep HRV readings for each night with data.
+Lifestyle factors that affect HRV
 
-• The blue line is your rolling average. It smooths the nightly readings so you can see the direction of your trend more clearly.
+• Exercise has the strongest effect. Regular physical activity - whether walking, running, swimming, or strength training - has been shown to increase HRV over weeks to months. A single intense workout may temporarily lower HRV for a day or two, which is normal.
 
-• The shaded band is your usual range. It is based on your recent baseline and your sensitivity setting.
+• Sleep plays a major role. Poor sleep quality and getting fewer than 6 hours per night have been linked to lower HRV. Prioritizing consistent, restful sleep of 7 or more hours supports a healthy HRV.
 
-• The 7 / 30 / 90-day buttons change how much history you are viewing. They do not change what HRV means.
+• Diet matters too. Eating patterns rich in fruits, vegetables, fish, and omega-3 fatty acids have been associated with higher HRV. Diets high in saturated fat and processed foods may lower it.
 
-Higher vs. lower trends
+• Stress is a key factor. Chronic psychological stress shifts your nervous system toward a "fight or flight" state, which lowers HRV. Mindfulness, meditation, and relaxation techniques have been shown to improve HRV.
 
-• Trending up usually suggests better recovery, fitness adaptation, lower stress load, or more consistent sleep.
+• Other factors that can temporarily lower HRV include dehydration, excess caffeine or alcohol, illness, and smoking.
 
-• Trending down can suggest reduced recovery or increased strain, especially if it lasts several days and lines up with poor sleep, stress, illness, alcohol, or unusually hard exercise.
+The bottom line
 
-• Inside your usual range means your recent HRV is behaving similarly to your baseline.
-
-• Above your usual range is often a good sign, especially when you feel rested and your sleep is consistent.
-
-• Below your usual range may be a cue to recover more intentionally.
-
-What does "less consistent than usual" mean?
-
-This means your nightly HRV has been bouncing around more than it usually does for you. It is not automatically good or bad. It often shows up when sleep timing changes, stress is uneven, alcohol or late caffeine affects sleep, illness is developing, or workouts are harder than usual.
-
-If you see this message, look for patterns: recent sleep quality, hydration, alcohol, training load, stress, travel, and how you feel. Helpful responses include keeping a consistent bedtime, prioritizing sleep, hydrating, easing intense workouts for a day or two if you feel run down, and watching whether the trend settles back into range.
-
-Adjusting sensitivity
-
-Sensitivity controls how easily the app flags a change:
-
-• High — a narrow band that flags smaller shifts earlier. Best if your nights are usually steady.
-
-• Balanced — one standard deviation around your baseline. Good for most people.
-
-• Low — a wider band. Best if your HRV naturally varies a lot and you only want larger changes flagged.
-
-What makes HRV go up?
-
-• Regular exercise is the strongest factor. Over weeks of consistent physical activity, HRV tends to rise, reflecting improved heart health.
-
-• Good sleep supports healthy HRV. Getting 7 or more hours of quality sleep helps maintain the balance of your nervous system.
-
-• A diet rich in fruits, vegetables, and omega-3 fatty acids (found in fish, walnuts, and flaxseed) has been linked to higher HRV.
-
-What makes HRV go down?
-
-• Poor sleep or sleep deprivation can lower HRV within just a few nights.
-
-• High stress, illness, dehydration, and excess caffeine or alcohol can all temporarily reduce HRV.
-
-• Note: A single hard workout may briefly lower HRV for 1–2 days — this is normal and not a cause for concern.
-
-Building your range
-
-Your range needs about three weeks of sleep HRV before it appears. Until then the app shows your nightly readings and counts the nights tracked. Wear your Apple Watch during sleep for the most reliable picture.
-
-Important limitations
-
-HRV varies widely between individuals. Your personal trend matters more than any single number. Many factors beyond heart health affect HRV, so it should be viewed as one piece of the puzzle, not a diagnosis.
+HRV is one useful window into your overall health. The habits that improve HRV - regular exercise, quality sleep, a balanced diet, and stress management - are the same habits that support long-term heart health and well-being.
 """
 }

@@ -82,11 +82,10 @@ struct TodayView: View {
         )
     }
 
-    private var hrvAnalysis: HRVAnalysis {
-        HRVBaselineAnalyzer.analyze(
+    private var dhsHRVStudyResult: DHSHRVStudyResult? {
+        DHSHRVStudyAnalyzer.analyze(
             records: appState.recordStore.records,
-            todayKey: todayKey,
-            sensitivity: appState.settingsStore.hrvSensitivity
+            todayKey: todayKey
         )
     }
 
@@ -115,12 +114,12 @@ struct TodayView: View {
                     )
 
                     NavigationLink {
-                        HRVGraphView(
+                        DHSHRVStudyView(
                             records: appState.recordStore.records,
                             todayKey: todayKey
                         )
                     } label: {
-                        TodayHRVCard(analysis: hrvAnalysis) {
+                        TodayHRVCard(result: dhsHRVStudyResult) {
                             withAnimation { showHRVTrendsInfo = true }
                         }
                     }

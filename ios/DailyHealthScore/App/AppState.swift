@@ -131,7 +131,8 @@ final class AppState: ObservableObject {
             metrics: metrics,
             settings: settingsStore.settings,
             settingsStore: settingsStore,
-            existing: existing
+            existing: existing,
+            sleepHrvSDNNMs: existing?.sleepHrvSDNNMs
         )
         recordStore.save(record)
     }
