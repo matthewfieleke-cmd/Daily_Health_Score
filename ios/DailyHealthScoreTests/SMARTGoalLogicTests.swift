@@ -36,4 +36,31 @@ final class SMARTGoalLogicTests: XCTestCase {
         XCTAssertTrue(summary.contains("12 days"))
         XCTAssertTrue(summary.contains("relationships"))
     }
+
+    func test_setFilled_canUncheckCompletedCheckIn() {
+        var goal = SMARTGoal(
+            id: UUID(),
+            specificText: "yoga before work",
+            targetCount: 4,
+            relevantTheme: .health,
+            timeWindowDays: 5,
+            endDate: Date(timeIntervalSince1970: 0),
+            createdAt: Date(timeIntervalSince1970: 0),
+            generatedSummary: "",
+            filledMask: 0,
+            status: .active,
+            remindersEnabled: false,
+            reminderHour: 7,
+            reminderMinute: 0,
+            reminderWeekdaysMask: 0
+        )
+
+        goal.setFilled(2, filled: true)
+        XCTAssertTrue(goal.isFilled(2))
+        XCTAssertEqual(goal.filledCount, 1)
+
+        goal.setFilled(2, filled: false)
+        XCTAssertFalse(goal.isFilled(2))
+        XCTAssertEqual(goal.filledCount, 0)
+    }
 }

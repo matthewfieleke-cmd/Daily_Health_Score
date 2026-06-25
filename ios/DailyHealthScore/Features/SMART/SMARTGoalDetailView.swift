@@ -36,11 +36,12 @@ struct SMARTGoalDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { reload() }
         .alert("Goal complete!", isPresented: $showCelebration) {
-            Button("Great") {
+            Button("Keep editing", role: .cancel) {}
+            Button("Done") {
                 dismiss()
             }
         } message: {
-            Text("You finished “\(goal?.specificText ?? "your goal")”. Nice work.")
+            Text("You finished “\(goal?.specificText ?? "your goal")”. Nice work. If you checked one by accident, tap it again to uncheck it.")
         }
     }
 
@@ -118,12 +119,12 @@ struct SMARTGoalDetailView: View {
 
     private func handleCircleTap(index: Int) {
         guard var current = goal, current.status == .active, !current.isExpired else { return }
-        guard !current.isFilled(index) else { return }
 
-        current.setFilled(index, filled: true)
+        let shouldFill = !current.isFilled(index)
+        current.setFilled(index, filled: shouldFill)
         if current.isComplete {
             goal = current
-            appState.smartGoalStore.completeAndRemove(id: current.id)
+            appState.smartGoalStore.save(current)
             showCelebration = true
         } else {
             persist(current)
