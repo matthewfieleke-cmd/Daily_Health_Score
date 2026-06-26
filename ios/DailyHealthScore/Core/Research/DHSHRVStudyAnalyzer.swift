@@ -1,10 +1,43 @@
 import Foundation
 
 enum DHSHRVStudyAnalyzer {
+    private struct WindowComputation {
+        var todayKey: String
+        var dhsStartDate: String
+        var dhsEndDate: String
+        var hrvStartDate: String
+        var hrvEndDate: String
+        var dailyPairs: [DHSHRVDailyPair]
+        var weeklyPoints: [DHSHRVWeeklyPoint]
+        var zScorePoints: [DHSHRVZScorePoint]
+        var scatterPoints: [DHSHRVScatterPoint]
+        var correlation: DHSHRVCorrelationResult
+    }
+
     static func analyze(
         records: [DailyRecord],
         todayKey: String = DateHelpers.localDateKey()
     ) -> DHSHRVStudyResult? {
+        guard let current = computeWindow(records: records, todayKey: todayKey) else {
+            return nil
+        }
+
+        return DHSHRVStudyResult(
+            todayKey: current.todayKey,
+            dhsStartDate: current.dhsStartDate,
+            dhsEndDate: current.dhsEndDate,
+            hrvStartDate: current.hrvStartDate,
+            hrvEndDate: current.hrvEndDate,
+            dailyPairs: current.dailyPairs,
+            weeklyPoints: current.weeklyPoints,
+            zScorePoints: current.zScorePoints,
+            scatterPoints: current.scatterPoints,
+            correlation: current.correlation,
+            alignmentPoints: alignmentPoints(records: records, endingOnTodayKey: todayKey)
+        )
+    }
+
+    private static func computeWindow(records: [DailyRecord], todayKey: String) -> WindowComputation? {
         guard let yesterdayKey = DateHelpers.addDays(to: todayKey, days: -1),
               let yesterday = DateHelpers.date(from: yesterdayKey) else {
             return nil
@@ -46,7 +79,7 @@ enum DHSHRVStudyAnalyzer {
             )
         }
 
-        return DHSHRVStudyResult(
+        return WindowComputation(
             todayKey: todayKey,
             dhsStartDate: dhsStart,
             dhsEndDate: dhsEnd,
@@ -58,6 +91,23 @@ enum DHSHRVStudyAnalyzer {
             scatterPoints: scatterPoints,
             correlation: correlation(for: scatterPoints)
         )
+    }
+
+    private static func alignmentPoints(records: [DailyRecord], endingOnTodayKey todayKey: String) -> [DHSHRVAlignmentPoint] {
+        (0 ..< DHSHRVStudyResult.alignmentWindowCount).reversed().compactMap { offset in
+            guard let windowTodayKey = DateHelpers.addDays(to: todayKey, days: -offset),
+                  let window = computeWindow(records: records, todayKey: windowTodayKey) else {
+                return nil
+            }
+            return DHSHRVAlignmentPoint(
+                index: DHSHRVStudyResult.alignmentWindowCount - offset,
+                windowStartDate: window.dhsStartDate,
+                windowEndDate: window.dhsEndDate,
+                spearman: window.correlation.spearman,
+                pearson: window.correlation.pearson,
+                pairedWeeks: window.correlation.pairedWeeks
+            )
+        }
     }
 
     private static func weeklyPoints(from dailyPairs: [DHSHRVDailyPair]) -> [DHSHRVWeeklyPoint] {

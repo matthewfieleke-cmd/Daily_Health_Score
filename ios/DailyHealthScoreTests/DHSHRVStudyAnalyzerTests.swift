@@ -134,6 +134,38 @@ final class DHSHRVStudyAnalyzerTests: XCTestCase {
         XCTAssertEqual(Set(result?.zScorePoints.map(\.series) ?? []), ["DHS", "HRV"])
     }
 
+    func test_alignmentPoints_includeLastThirtyMovingWindows() {
+        var scores: [String: Double] = [:]
+        var hrvs: [String: Double] = [:]
+        let dhsKeys = keys(endingOn: "2026-06-24", days: 120)
+        for (index, key) in dhsKeys.enumerated() {
+            let week = index / 7
+            scores[key] = Double(week + 1)
+            if let hrvKey = DateHelpers.addDays(to: key, days: 1) {
+                hrvs[hrvKey] = Double(40 + week)
+            }
+        }
+
+        let result = DHSHRVStudyAnalyzer.analyze(
+            records: records(scores: scores, hrvs: hrvs),
+            todayKey: "2026-06-25"
+        )
+
+        XCTAssertEqual(result?.alignmentPoints.count, 30)
+        XCTAssertEqual(result?.alignmentPoints.first?.index, 1)
+        XCTAssertEqual(result?.alignmentPoints.last?.index, 30)
+        XCTAssertEqual(result?.alignmentPoints.last?.windowEndDate, "2026-06-24")
+        XCTAssertEqual(result?.alignmentPoints.last?.spearman ?? 0, 1, accuracy: 0.001)
+    }
+
+    func test_correlationChange_comparesCurrentToPreviousWindow() {
+        let change = DHSHRVCorrelationChange(current: 0.34, previous: 0.05)
+
+        XCTAssertEqual(change.delta ?? 0, 0.29, accuracy: 0.001)
+        XCTAssertEqual(change.formattedDelta, "+0.29")
+        XCTAssertEqual(change.directionText, "More positive than the previous window")
+    }
+
     @MainActor
     func test_saveManualDay_preservesExistingHRV() throws {
         let container = try ModelContainer(

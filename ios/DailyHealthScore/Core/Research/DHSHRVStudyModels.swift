@@ -55,6 +55,38 @@ struct DHSHRVScatterPoint: Identifiable, Equatable {
     var averageHRV: Double
 }
 
+struct DHSHRVAlignmentPoint: Identifiable, Equatable {
+    var id: String { windowEndDate }
+    var index: Int
+    var windowStartDate: String
+    var windowEndDate: String
+    var spearman: Double?
+    var pearson: Double?
+    var pairedWeeks: Int
+}
+
+struct DHSHRVCorrelationChange: Equatable {
+    var current: Double?
+    var previous: Double?
+
+    var delta: Double? {
+        guard let current, let previous else { return nil }
+        return current - previous
+    }
+
+    var directionText: String {
+        guard let delta else { return "No previous window yet" }
+        if abs(delta) < 0.01 { return "About the same as the previous window" }
+        return delta > 0 ? "More positive than the previous window" : "Less positive than the previous window"
+    }
+
+    var formattedDelta: String? {
+        guard let delta else { return nil }
+        let sign = delta >= 0 ? "+" : ""
+        return "\(sign)\(String(format: "%.2f", delta))"
+    }
+}
+
 struct DHSHRVCorrelationResult: Equatable {
     var spearman: Double?
     var pearson: Double?
@@ -86,6 +118,7 @@ struct DHSHRVStudyResult: Equatable {
     static let studyWindowDays = 91
     static let blockDays = 7
     static let weeklyPointCount = 13
+    static let alignmentWindowCount = 30
 
     var todayKey: String
     var dhsStartDate: String
@@ -97,9 +130,29 @@ struct DHSHRVStudyResult: Equatable {
     var zScorePoints: [DHSHRVZScorePoint]
     var scatterPoints: [DHSHRVScatterPoint]
     var correlation: DHSHRVCorrelationResult
+    var alignmentPoints: [DHSHRVAlignmentPoint]
 
     var hasAnyWeeklyData: Bool {
         weeklyPoints.contains { $0.averageDHS != nil || $0.averageHRV != nil }
+    }
+
+    var previousAlignmentPoint: DHSHRVAlignmentPoint? {
+        guard alignmentPoints.count >= 2 else { return nil }
+        return alignmentPoints[alignmentPoints.count - 2]
+    }
+
+    var spearmanChange: DHSHRVCorrelationChange {
+        DHSHRVCorrelationChange(
+            current: correlation.spearman,
+            previous: previousAlignmentPoint?.spearman
+        )
+    }
+
+    var pearsonChange: DHSHRVCorrelationChange {
+        DHSHRVCorrelationChange(
+            current: correlation.pearson,
+            previous: previousAlignmentPoint?.pearson
+        )
     }
 
     var relationshipSummary: String {
@@ -110,11 +163,29 @@ struct DHSHRVStudyResult: Equatable {
         let formatted = String(format: "%.2f", value)
         switch correlation.direction {
         case "positive":
-            return "Your habits and HRV appear to be moving in the same direction over this 91-day window. Spearman \(formatted) suggests a \(correlation.strength) positive relationship."
+            return "Your Daily Health Score and sleep HRV are moving in the same direction over this 91-day window. Spearman \(formatted) suggests a \(correlation.strength) positive relationship."
         case "negative":
-            return "Your DHS and HRV are not moving together in the expected direction over this 91-day window. Spearman \(formatted) suggests a \(correlation.strength) negative relationship."
+            return "Your Daily Health Score and sleep HRV are not moving together in the expected direction over this 91-day window. Spearman \(formatted) suggests a \(correlation.strength) negative relationship."
         default:
-            return "Your DHS and HRV do not show a clear weekly relationship over this 91-day window. Spearman \(formatted) suggests a weak relationship."
+            return "Your Daily Health Score and sleep HRV do not show a clear weekly relationship over this 91-day window. Spearman \(formatted) suggests a weak relationship."
         }
+    }
+
+    var alignmentSummary: String {
+        let validSpearman = alignmentPoints.compactMap(\.spearman)
+        guard !validSpearman.isEmpty else {
+            return "Keep collecting data to see whether the DHS-HRV relationship stays positive over time."
+        }
+
+        let positiveCount = validSpearman.filter { $0 > 0 }.count
+        let percentPositive = Double(positiveCount) / Double(validSpearman.count)
+
+        if percentPositive >= 0.75 {
+            return "The relationship has been positive in most recent windows, which is encouraging because higher HRV trends are linked in research with better cardiovascular fitness and lower cardiovascular risk."
+        }
+        if percentPositive >= 0.50 {
+            return "The relationship has been positive in about half of recent windows. This suggests some alignment, but the pattern is still developing."
+        }
+        return "The relationship has not been consistently positive yet. This can happen when HRV is being influenced by sleep disruption, stress, illness, alcohol, or training strain."
     }
 }
