@@ -427,7 +427,7 @@ struct DHSHRVStudyResult: Equatable {
 
         let percentPositive = Double(stats.positiveCount) / Double(stats.total)
         if percentPositive >= 0.75 {
-            return "The closer these lines stay to +1 across many overlapping windows, the more dependable the \u201chigher DHS, higher HRV\u201d link is — far more convincing than one good window alone. That is encouraging, because higher HRV trends are linked in research with better cardiovascular fitness and lower cardiovascular risk."
+            return "The closer these lines stay to +1 across many overlapping windows, the more dependable the “higher DHS, higher HRV” link is — far more convincing than one good window alone. That is encouraging, because higher HRV trends are linked in research with better cardiovascular fitness and lower cardiovascular risk."
         }
         if percentPositive >= 0.50 {
             return "Higher DHS has lined up with higher HRV in about half of recent windows, so the link is showing but still settling. The closer the lines climb toward +1 and stay there, the more dependable that link becomes."

@@ -833,7 +833,7 @@ struct DHSHRVStudyView: View {
 
             interpretationBlock(
                 shows: "How strongly your higher-DHS weeks lined up with higher overnight HRV, recalculated across the last 30 windows (each shifted one day). The closer a line sits to +1, the more reliably higher DHS came with higher HRV.",
-                matters: "One good 91-day window could be luck. Watching the line as the window slides day by day shows whether \u201chigher DHS, higher HRV\u201d is a stable feature of your data or just a passing coincidence.",
+                matters: "One good 91-day window could be luck. Watching the line as the window slides day by day shows whether “higher DHS, higher HRV” is a stable feature of your data or just a passing coincidence.",
                 conclude: "A line that holds high and positive across most windows is strong personal evidence that higher DHS is associated with higher overnight HRV for you. It shows association, not proof of cause, and neighboring windows share most of their data — so read the overall level, not single-day jumps."
             )
         }
