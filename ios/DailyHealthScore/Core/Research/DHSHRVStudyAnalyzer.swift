@@ -32,8 +32,32 @@ enum DHSHRVStudyAnalyzer {
             weeklyPoints: current.weeklyPoints,
             zScorePoints: current.zScorePoints,
             scatterPoints: current.scatterPoints,
+            scatterFit: scatterFit(for: current.scatterPoints),
             correlation: current.correlation,
             alignmentPoints: alignmentPoints(records: records, endingOnTodayKey: todayKey)
+        )
+    }
+
+    private static func scatterFit(for points: [DHSHRVScatterPoint]) -> DHSHRVScatterFit? {
+        guard points.count >= 2 else { return nil }
+        let xs = points.map(\.averageDHS)
+        let ys = points.map(\.averageHRV)
+        guard let meanX = mean(xs), let meanY = mean(ys) else { return nil }
+
+        var numerator = 0.0
+        var denominator = 0.0
+        for (x, y) in zip(xs, ys) {
+            numerator += (x - meanX) * (y - meanY)
+            denominator += (x - meanX) * (x - meanX)
+        }
+        guard denominator > 0 else { return nil }
+
+        let slope = numerator / denominator
+        return DHSHRVScatterFit(
+            slope: slope,
+            intercept: meanY - slope * meanX,
+            xMin: xs.min() ?? meanX,
+            xMax: xs.max() ?? meanX
         )
     }
 

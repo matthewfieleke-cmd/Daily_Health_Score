@@ -55,6 +55,129 @@ struct DHSHRVScatterPoint: Identifiable, Equatable {
     var averageHRV: Double
 }
 
+/// Least-squares best-fit line for the weekly scatterplot (HRV regressed on DHS).
+struct DHSHRVScatterFit: Equatable {
+    var slope: Double
+    var intercept: Double
+    var xMin: Double
+    var xMax: Double
+
+    func y(at x: Double) -> Double { intercept + slope * x }
+}
+
+/// Statistical helpers shared by the study models. These follow standard
+/// methods so the output can withstand expert review.
+enum DHSHRVStatistics {
+    /// Fisher r-to-z confidence interval for a correlation coefficient.
+    /// For Spearman we widen the standard error using the Bonett-Wright
+    /// approximation, which is the accepted method for rank correlations.
+    static func confidenceInterval(spearman r: Double, n: Int) -> (lower: Double, upper: Double)? {
+        guard n >= 6, abs(r) < 0.999 else { return nil }
+        let z = atanh(r)
+        let standardError = sqrt((1 + (r * r) / 2) / Double(n - 3))
+        let lower = tanh(z - 1.96 * standardError)
+        let upper = tanh(z + 1.96 * standardError)
+        return (min(lower, upper), max(lower, upper))
+    }
+
+    /// Maps a correlation magnitude to a plain-language strength word.
+    static func strengthWord(forMagnitude magnitude: Double) -> String {
+        if magnitude < 0.30 { return "weak" }
+        if magnitude < 0.60 { return "moderate" }
+        return "strong"
+    }
+
+    /// Plain-language label for a single correlation value, e.g. "moderate positive".
+    static func label(for value: Double) -> String {
+        if abs(value) < 0.05 { return "no" }
+        let direction = value > 0 ? "positive" : "negative"
+        return "\(strengthWord(forMagnitude: abs(value))) \(direction)"
+    }
+
+    static func median(_ values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
+        let sorted = values.sorted()
+        let mid = sorted.count / 2
+        if sorted.count.isMultiple(of: 2) {
+            return (sorted[mid - 1] + sorted[mid]) / 2
+        }
+        return sorted[mid]
+    }
+
+    /// Slope of a simple linear regression of `values` against their index.
+    static func slopeOverIndex(_ values: [Double]) -> Double? {
+        guard values.count >= 2 else { return nil }
+        let n = Double(values.count)
+        let xs = (0 ..< values.count).map(Double.init)
+        let meanX = xs.reduce(0, +) / n
+        let meanY = values.reduce(0, +) / n
+        var numerator = 0.0
+        var denominator = 0.0
+        for (x, y) in zip(xs, values) {
+            numerator += (x - meanX) * (y - meanY)
+            denominator += (x - meanX) * (x - meanX)
+        }
+        guard denominator > 0 else { return nil }
+        return numerator / denominator
+    }
+}
+
+enum DHSHRVTrendDirection: Equatable {
+    case strengthening
+    case steady
+    case easing
+
+    var label: String {
+        switch self {
+        case .strengthening: return "Strengthening"
+        case .steady: return "Holding steady"
+        case .easing: return "Easing"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .strengthening: return "arrow.up.right"
+        case .steady: return "arrow.right"
+        case .easing: return "arrow.down.right"
+        }
+    }
+}
+
+/// A confidence interval expressed in plain language for the current window.
+struct DHSHRVConfidence: Equatable {
+    var pointValue: Double
+    var lower: Double
+    var upper: Double
+    var pairedWeeks: Int
+
+    var isClearlyPositive: Bool { lower > 0.05 }
+    var isClearlyNegative: Bool { upper < -0.05 }
+    var crossesZero: Bool { lower <= 0 && upper >= 0 }
+
+    /// e.g. "likely somewhere between weak and moderate positive"
+    var rangeText: String {
+        let lowLabel = DHSHRVStatistics.label(for: lower)
+        let highLabel = DHSHRVStatistics.label(for: upper)
+        if lowLabel == highLabel {
+            return "The relationship is likely \(lowLabel)."
+        }
+        return "The true relationship is likely somewhere between \(lowLabel) and \(highLabel)."
+    }
+}
+
+/// Summary statistics across the alignment (relationship-over-time) windows.
+struct DHSHRVAlignmentStats: Equatable {
+    var median: Double
+    var minValue: Double
+    var maxValue: Double
+    var positiveCount: Int
+    var total: Int
+    var direction: DHSHRVTrendDirection
+
+    var typicalLabel: String { DHSHRVStatistics.label(for: median) }
+}
+
 struct DHSHRVAlignmentPoint: Identifiable, Equatable {
     var id: String { windowEndDate }
     var index: Int
@@ -129,11 +252,125 @@ struct DHSHRVStudyResult: Equatable {
     var weeklyPoints: [DHSHRVWeeklyPoint]
     var zScorePoints: [DHSHRVZScorePoint]
     var scatterPoints: [DHSHRVScatterPoint]
+    var scatterFit: DHSHRVScatterFit?
     var correlation: DHSHRVCorrelationResult
     var alignmentPoints: [DHSHRVAlignmentPoint]
 
     var hasAnyWeeklyData: Bool {
         weeklyPoints.contains { $0.averageDHS != nil || $0.averageHRV != nil }
+    }
+
+    /// Number of weekly points whose HRV average is based on 4-7 nights.
+    var solidHRVWeekCount: Int {
+        weeklyPoints.filter { $0.hrvCompleteness == .solid }.count
+    }
+
+    /// Number of weekly points that contributed a usable HRV average.
+    var hrvWeekCount: Int {
+        weeklyPoints.filter { $0.averageHRV != nil }.count
+    }
+
+    /// True when enough weeks rest on sparse data that confidence should soften.
+    var hasLimitedData: Bool {
+        guard hrvWeekCount > 0 else { return true }
+        return solidHRVWeekCount < 8
+    }
+
+    /// Plain-language confidence interval for the primary (Spearman) statistic.
+    var confidence: DHSHRVConfidence? {
+        guard let value = correlation.spearman,
+              let interval = DHSHRVStatistics.confidenceInterval(
+                  spearman: value,
+                  n: correlation.pairedWeeks
+              ) else {
+            return nil
+        }
+        return DHSHRVConfidence(
+            pointValue: value,
+            lower: interval.lower,
+            upper: interval.upper,
+            pairedWeeks: correlation.pairedWeeks
+        )
+    }
+
+    /// Honest-but-encouraging note about statistical certainty.
+    var significanceText: String {
+        guard let confidence else {
+            return "Keep logging DHS and sleep HRV so the app can estimate how confident this relationship is."
+        }
+
+        if confidence.isClearlyPositive {
+            let base = "This positive relationship is statistically clear for this 91-day window."
+            return hasLimitedData
+                ? base + " A few weeks rest on only a handful of nights, so keep wearing your watch to firm it up."
+                : base
+        }
+
+        if confidence.isClearlyNegative {
+            return "For this window the values lean negative. With only 13 weekly points this is not conclusive, and HRV can be pushed down by sleep loss, stress, illness, alcohol, or training strain."
+        }
+
+        // Crosses zero: suggestive, not conclusive — framed encouragingly.
+        var text = "With 13 weekly points this pattern is suggestive rather than statistically conclusive, which is normal. It is still encouraging: it draws on a full 91 days of data, and the link between higher HRV and better health is well established in research."
+        if hasLimitedData {
+            text += " Some weeks rest on only a few nights, so treat it as preliminary."
+        }
+        return text
+    }
+
+    var alignmentStats: DHSHRVAlignmentStats? {
+        let values = alignmentPoints.compactMap(\.spearman)
+        guard let median = DHSHRVStatistics.median(values),
+              let minValue = values.min(),
+              let maxValue = values.max() else {
+            return nil
+        }
+
+        let direction: DHSHRVTrendDirection
+        if let slope = DHSHRVStatistics.slopeOverIndex(values) {
+            let totalChange = slope * Double(values.count - 1)
+            if totalChange > 0.10 {
+                direction = .strengthening
+            } else if totalChange < -0.10 {
+                direction = .easing
+            } else {
+                direction = .steady
+            }
+        } else {
+            direction = .steady
+        }
+
+        return DHSHRVAlignmentStats(
+            median: median,
+            minValue: minValue,
+            maxValue: maxValue,
+            positiveCount: values.filter { $0 > 0 }.count,
+            total: values.count,
+            direction: direction
+        )
+    }
+
+    /// One data-driven sentence summarizing the whole study for the top of the screen.
+    var headline: String {
+        guard let value = correlation.primaryValue else {
+            return "Keep logging DHS and sleep HRV. Once the app has enough data it will tell you, in plain English, whether your healthier weeks line up with higher overnight HRV."
+        }
+
+        let label = DHSHRVStatistics.label(for: value)
+        let core: String
+        switch correlation.direction {
+        case "positive":
+            core = "Over your latest 91 days, higher-DHS weeks have tended to be followed by higher sleep HRV — a \(label) pattern."
+        case "negative":
+            core = "Over your latest 91 days, higher-DHS weeks have tended to be followed by lower sleep HRV — a \(label) pattern."
+        default:
+            core = "Over your latest 91 days, DHS and sleep HRV have not shown a clear weekly pattern yet."
+        }
+
+        if let stats = alignmentStats {
+            return core + " Across the last \(stats.total) windows it stayed positive \(stats.positiveCount) of \(stats.total) times."
+        }
+        return core
     }
 
     var previousAlignmentPoint: DHSHRVAlignmentPoint? {
@@ -171,21 +408,30 @@ struct DHSHRVStudyResult: Equatable {
         }
     }
 
-    var alignmentSummary: String {
-        let validSpearman = alignmentPoints.compactMap(\.spearman)
-        guard !validSpearman.isEmpty else {
+    /// How strongly and how consistently positive the relationship has been.
+    var alignmentStrengthText: String {
+        guard let stats = alignmentStats else {
             return "Keep collecting data to see whether the DHS-HRV relationship stays positive over time."
         }
 
-        let positiveCount = validSpearman.filter { $0 > 0 }.count
-        let percentPositive = Double(positiveCount) / Double(validSpearman.count)
+        let medianText = String(format: "%.2f", stats.median)
+        let rangeText = "\(String(format: "%.2f", stats.minValue)) to \(String(format: "%.2f", stats.maxValue))"
+        return "It has been positive in \(stats.positiveCount) of the last \(stats.total) windows. Typically it sits around a \(stats.typicalLabel) relationship (Spearman \(medianText)), ranging from \(rangeText). The trend is \(stats.direction.label.lowercased())."
+    }
 
+    /// Why this stability view matters, with health framing.
+    var alignmentSummary: String {
+        guard let stats = alignmentStats else {
+            return "Keep collecting data to see whether the DHS-HRV relationship stays positive over time."
+        }
+
+        let percentPositive = Double(stats.positiveCount) / Double(stats.total)
         if percentPositive >= 0.75 {
-            return "The relationship has been positive in most recent windows, which is encouraging because higher HRV trends are linked in research with better cardiovascular fitness and lower cardiovascular risk."
+            return "A relationship that stays positive across many overlapping windows is more trustworthy than one good window alone. That consistency is encouraging, because higher HRV trends are linked in research with better cardiovascular fitness and lower cardiovascular risk."
         }
         if percentPositive >= 0.50 {
-            return "The relationship has been positive in about half of recent windows. This suggests some alignment, but the pattern is still developing."
+            return "The relationship has been positive in about half of recent windows, so some alignment is showing but the pattern is still settling. Watching it across windows tells you whether it is real and durable rather than a one-window fluke."
         }
-        return "The relationship has not been consistently positive yet. This can happen when HRV is being influenced by sleep disruption, stress, illness, alcohol, or training strain."
+        return "The relationship has not been consistently positive yet. Tracking it across windows helps you see whether that changes as your habits do — HRV can be pushed down by sleep disruption, stress, illness, alcohol, or training strain."
     }
 }

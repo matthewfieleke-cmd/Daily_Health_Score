@@ -166,6 +166,92 @@ final class DHSHRVStudyAnalyzerTests: XCTestCase {
         XCTAssertEqual(change.directionText, "More positive than the previous window")
     }
 
+    func test_confidenceInterval_bracketsValueAndWidensForSmallN() throws {
+        let interval = try XCTUnwrap(DHSHRVStatistics.confidenceInterval(spearman: 0.5, n: 13))
+
+        XCTAssertLessThan(interval.lower, 0.5)
+        XCTAssertGreaterThan(interval.upper, 0.5)
+        XCTAssertLessThan(interval.lower, 0, "With only 13 points a moderate value should still allow a negative lower bound")
+        XCTAssertNil(DHSHRVStatistics.confidenceInterval(spearman: 0.5, n: 4))
+        XCTAssertNil(DHSHRVStatistics.confidenceInterval(spearman: 1.0, n: 13))
+    }
+
+    func test_statisticsLabel_mapsMagnitudeAndDirection() {
+        XCTAssertEqual(DHSHRVStatistics.label(for: 0.0), "no")
+        XCTAssertEqual(DHSHRVStatistics.label(for: 0.2), "weak positive")
+        XCTAssertEqual(DHSHRVStatistics.label(for: 0.45), "moderate positive")
+        XCTAssertEqual(DHSHRVStatistics.label(for: -0.8), "strong negative")
+    }
+
+    func test_scatterFit_hasPositiveSlopeWhenHRVRisesWithDHS() {
+        var scores: [String: Double] = [:]
+        var hrvs: [String: Double] = [:]
+        let dhsKeys = keys(endingOn: "2026-06-24", days: 91)
+        for (index, key) in dhsKeys.enumerated() {
+            let week = index / 7
+            scores[key] = Double(week + 1)
+            if let hrvKey = DateHelpers.addDays(to: key, days: 1) {
+                hrvs[hrvKey] = Double(40 + week)
+            }
+        }
+
+        let fit = DHSHRVStudyAnalyzer.analyze(
+            records: records(scores: scores, hrvs: hrvs),
+            todayKey: "2026-06-25"
+        )?.scatterFit
+
+        XCTAssertNotNil(fit)
+        XCTAssertGreaterThan(fit?.slope ?? 0, 0)
+    }
+
+    func test_alignmentStats_summarizeMedianRangeAndDirection() {
+        var scores: [String: Double] = [:]
+        var hrvs: [String: Double] = [:]
+        let dhsKeys = keys(endingOn: "2026-06-24", days: 120)
+        for (index, key) in dhsKeys.enumerated() {
+            let week = index / 7
+            scores[key] = Double(week + 1)
+            if let hrvKey = DateHelpers.addDays(to: key, days: 1) {
+                hrvs[hrvKey] = Double(40 + week)
+            }
+        }
+
+        let result = DHSHRVStudyAnalyzer.analyze(
+            records: records(scores: scores, hrvs: hrvs),
+            todayKey: "2026-06-25"
+        )
+        let stats = result?.alignmentStats
+
+        XCTAssertEqual(stats?.total, 30)
+        XCTAssertEqual(stats?.positiveCount, 30)
+        XCTAssertEqual(stats?.median ?? 0, 1, accuracy: 0.001)
+        XCTAssertEqual(stats?.minValue ?? 0, 1, accuracy: 0.001)
+        XCTAssertEqual(stats?.maxValue ?? 0, 1, accuracy: 0.001)
+        XCTAssertEqual(stats?.direction, .steady)
+    }
+
+    func test_significanceText_isEncouragingWhenIntervalCrossesZero() {
+        var scores: [String: Double] = [:]
+        var hrvs: [String: Double] = [:]
+        let dhsKeys = keys(endingOn: "2026-06-24", days: 91)
+        // Mild positive pairing so the 91-day window produces a non-clear interval.
+        for (index, key) in dhsKeys.enumerated() {
+            let week = index / 7
+            scores[key] = Double((week % 3) + 1)
+            if let hrvKey = DateHelpers.addDays(to: key, days: 1) {
+                hrvs[hrvKey] = Double(45 + (week % 2))
+            }
+        }
+
+        let result = DHSHRVStudyAnalyzer.analyze(
+            records: records(scores: scores, hrvs: hrvs),
+            todayKey: "2026-06-25"
+        )
+
+        XCTAssertNotNil(result?.confidence)
+        XCTAssertFalse(result?.significanceText.isEmpty ?? true)
+    }
+
     @MainActor
     func test_saveManualDay_preservesExistingHRV() throws {
         let container = try ModelContainer(

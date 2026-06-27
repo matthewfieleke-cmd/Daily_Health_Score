@@ -9,6 +9,8 @@ struct DHSHRVStudyView: View {
     @State private var showMethods = false
     @State private var selectedWeek: Int?
 
+    private let cautionColor = Color(red: 0.94, green: 0.55, blue: 0.32)
+
     private var result: DHSHRVStudyResult? {
         DHSHRVStudyAnalyzer.analyze(records: records, todayKey: todayKey)
     }
@@ -24,14 +26,14 @@ struct DHSHRVStudyView: View {
                     VStack(spacing: 16) {
                         if let result {
                             headerCard(result)
-                            summaryCard(result)
+                            headlineCard(result)
+                            correlationSummaryCard(result)
                             stackedTrendCard(result, isLandscape: isLandscape)
                             selectedWeekCard(result)
-                            methodsCard
                             overlayCard(result, isLandscape: isLandscape)
-                            correlationCard(result)
-                            alignmentOverTimeCard(result, isLandscape: isLandscape)
                             scatterplotCard(result, isLandscape: isLandscape)
+                            alignmentOverTimeCard(result, isLandscape: isLandscape)
+                            methodsCard
                         } else {
                             emptyState
                         }
@@ -65,6 +67,8 @@ struct DHSHRVStudyView: View {
             text: methodsText
         )
     }
+
+    // MARK: - Header
 
     private func headerCard(_ result: DHSHRVStudyResult) -> some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -101,40 +105,200 @@ struct DHSHRVStudyView: View {
         .dhsCard()
     }
 
-    private func summaryCard(_ result: DHSHRVStudyResult) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(result.correlation.displayLabel)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(summaryColor(result.correlation))
+    // MARK: - Headline
 
-            Text(result.relationshipSummary)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
+    private func headlineCard(_ result: DHSHRVStudyResult) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(summaryColor(result.correlation))
+                .frame(width: 4)
 
-            Text("This is a personal trend view, not a diagnosis. HRV is one useful signal, and many factors can affect it.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if result.correlation.direction == "positive" {
-                whyThisMatters(
-                    "Positive HRV trends are encouraging because higher HRV has been linked in research with better cardiovascular fitness, greater stress resilience, and lower risk of cardiovascular disease."
-                )
+            VStack(alignment: .leading, spacing: 6) {
+                Text("The big picture")
+                    .font(.caption2.weight(.bold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(.secondary)
+                Text(result.headline)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .dhsCard()
     }
 
+    // MARK: - Correlation summary (gauge + confidence)
+
+    private func correlationSummaryCard(_ result: DHSHRVStudyResult) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("How Strong Is the Relationship?")
+                    .font(.headline.weight(.semibold))
+                Spacer(minLength: 0)
+                Text(result.correlation.displayLabel)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(summaryColor(result.correlation))
+            }
+
+            correlationGauge(result)
+
+            if let confidence = result.confidence {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("How sure can you be?")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(confidence.rangeText)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Text(result.significanceText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                statisticPill(
+                    title: "Spearman (primary)",
+                    value: result.correlation.spearman,
+                    change: result.spearmanChange
+                )
+                statisticPill(
+                    title: "Pearson (secondary)",
+                    value: result.correlation.pearson,
+                    change: result.pearsonChange
+                )
+            }
+
+            if result.correlation.direction == "positive" {
+                healthTieIn(
+                    "Higher HRV trends are linked in research with better cardiovascular fitness, greater stress resilience, and lower risk of cardiovascular disease. Lower HRV has been linked with higher risk of heart disease, diabetes, and depression — so a positive DHS-HRV pattern is a genuinely good sign."
+                )
+            }
+
+            interpretationBlock(
+                shows: "A single score from −1 to +1 for how closely your 13 weekly DHS and HRV points move together. Spearman is primary; Pearson is a cross-check.",
+                matters: "It condenses three months of paired data into one number you can track, instead of eyeballing two wiggly lines.",
+                conclude: "You can say whether the weeks line up and how strongly. You cannot conclude that DHS causes HRV — this is an association in your own data, not proof of cause."
+            )
+        }
+        .dhsCard()
+    }
+
+    private func correlationGauge(_ result: DHSHRVStudyResult) -> some View {
+        let value = result.correlation.spearman
+        let confidence = result.confidence
+
+        return VStack(alignment: .leading, spacing: 8) {
+            GeometryReader { geo in
+                let width = geo.size.width
+                let position: (Double) -> CGFloat = { v in
+                    CGFloat((max(-1, min(1, v)) + 1) / 2) * width
+                }
+
+                ZStack(alignment: .leading) {
+                    HStack(spacing: 0) {
+                        gaugeZone(cautionColor.opacity(0.55), fraction: 0.20, width: width)
+                        gaugeZone(cautionColor.opacity(0.30), fraction: 0.15, width: width)
+                        gaugeZone(Color.secondary.opacity(0.22), fraction: 0.30, width: width)
+                        gaugeZone(AppTheme.leaf.opacity(0.45), fraction: 0.15, width: width)
+                        gaugeZone(AppTheme.leaf.opacity(0.75), fraction: 0.20, width: width)
+                    }
+                    .frame(height: 14)
+                    .clipShape(Capsule())
+
+                    if let confidence {
+                        let lo = position(confidence.lower)
+                        let hi = position(confidence.upper)
+                        Capsule()
+                            .fill(AppTheme.primary.opacity(0.22))
+                            .overlay(Capsule().stroke(AppTheme.primary.opacity(0.45), lineWidth: 1))
+                            .frame(width: max(2, hi - lo), height: 14)
+                            .offset(x: lo)
+                    }
+
+                    if let value {
+                        Capsule()
+                            .fill(.primary)
+                            .frame(width: 3, height: 26)
+                            .offset(x: position(value) - 1.5)
+                    }
+                }
+                .frame(height: 26)
+            }
+            .frame(height: 26)
+
+            HStack {
+                Text("−1")
+                Spacer()
+                Text("0")
+                Spacer()
+                Text("+1")
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+
+            Text(gaugeCaption(value: value, confidence: confidence))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func gaugeZone(_ color: Color, fraction: CGFloat, width: CGFloat) -> some View {
+        Rectangle()
+            .fill(color)
+            .frame(width: width * fraction)
+    }
+
+    private func gaugeCaption(value: Double?, confidence: DHSHRVConfidence?) -> String {
+        guard let value else {
+            return "Left of center is negative, the middle band is no clear relationship, and the green zones to the right are positive."
+        }
+        let formatted = String(format: "%.2f", value)
+        var text = "The black marker sits at your Spearman value (\(formatted)). Green zones are positive; the orange zones to the left are negative."
+        if confidence != nil {
+            text += " The shaded band is the likely range given only 13 weekly points."
+        }
+        return text
+    }
+
+    private func statisticPill(title: String, value: Double?, change: DHSHRVCorrelationChange) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(value.map { String(format: "%.2f", $0) } ?? "--")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .monospacedDigit()
+                if let formattedDelta = change.formattedDelta {
+                    Text(formattedDelta)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle((change.delta ?? 0) >= 0 ? AppTheme.leaf : cautionColor)
+                        .monospacedDigit()
+                }
+            }
+            Text(change.directionText)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.primary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    // MARK: - Weekly trend lines
+
     private func stackedTrendCard(_ result: DHSHRVStudyResult, isLandscape: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("13 Weekly Trend Points")
                 .font(.headline.weight(.semibold))
-
-            Text("Each point summarizes one 7-day block. The DHS point averages your scores from those 7 days. The HRV point averages sleep HRV from the nights that followed those same days.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
 
             VStack(spacing: 16) {
                 weeklyLineChart(
@@ -160,8 +324,10 @@ struct DHSHRVStudyView: View {
 
             legend
 
-            whyThisMatters(
-                "Weekly averages reduce day-to-day noise and help you see whether healthier DHS weeks line up with higher sleep HRV from the nights that followed those same days."
+            interpretationBlock(
+                shows: "Two stacked lines. Each point averages one 7-day block: DHS from those days, and sleep HRV from the nights that followed them. Faded points rest on only 1–3 values.",
+                matters: "Weekly averaging strips out day-to-day noise so real multi-week trends become visible.",
+                conclude: "You can spot whether healthier DHS weeks tend to sit alongside higher HRV weeks. Tap any point for that week's exact dates and counts. Treat faded points cautiously."
             )
         }
         .dhsCard()
@@ -261,35 +427,12 @@ struct DHSHRVStudyView: View {
         }
     }
 
-    private var methodsCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("How the Trend Is Built")
-                    .font(.headline.weight(.semibold))
-                Spacer(minLength: 0)
-                Button("Learn more") {
-                    withAnimation { showMethods = true }
-                }
-                .font(.caption.weight(.semibold))
-            }
-
-            Text("We use your latest 91 complete DHS days, pair each day with the sleep HRV from the night that followed it, then group those 91 pairs into 13 weekly points.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .dhsCard()
-    }
+    // MARK: - Normalized overlay
 
     private func overlayCard(_ result: DHSHRVStudyResult, isLandscape: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Do They Rise and Fall Together?")
                 .font(.headline.weight(.semibold))
-
-            Text("This view puts DHS and HRV on the same personal scale. Values above zero are above your 91-day average; values below zero are below your 91-day average.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
 
             Chart {
                 ForEach(result.zScorePoints) { point in
@@ -302,91 +445,107 @@ struct DHSHRVStudyView: View {
                     .foregroundStyle(by: .value("Series", point.series))
                     .lineStyle(StrokeStyle(lineWidth: 2.4))
                 }
+                RuleMark(y: .value("Average", 0))
+                    .foregroundStyle(.secondary.opacity(0.4))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
             }
             .chartForegroundStyleScale(["DHS": AppTheme.primary, "HRV": AppTheme.leaf])
             .chartYAxisLabel("Relative to average")
             .chartXAxis { weekAxisMarks }
             .frame(height: isLandscape ? 260 : 220)
 
-            whyThisMatters(
-                "Putting both trends on the same personal scale makes shared rises and dips easier to spot, even though DHS and HRV use different units."
+            interpretationBlock(
+                shows: "The same two trends rescaled so they share one axis. Above the dashed line is above your 91-day average; below it is below average.",
+                matters: "DHS (0–10) and HRV (milliseconds) use different units, so on their own they are hard to compare. Putting them on one scale makes shared rises and dips obvious.",
+                conclude: "When the two lines move up and down together, your healthier and less-healthy weeks are tracking your overnight HRV. Crossings and gaps show the weeks where they parted ways."
             )
         }
         .dhsCard()
     }
 
-    private func correlationCard(_ result: DHSHRVStudyResult) -> some View {
+    // MARK: - Scatterplot
+
+    private func scatterplotCard(_ result: DHSHRVStudyResult, isLandscape: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Correlation Summary")
+            Text("Weekly Points Scatterplot")
                 .font(.headline.weight(.semibold))
 
-            VStack(spacing: 10) {
-                statisticPill(
-                    title: "Spearman: do the trends move together?",
-                    value: result.correlation.spearman,
-                    change: result.spearmanChange,
-                    subtitle: "Spearman looks at the order of your 13 weekly points. If higher-DHS weeks also tend to be higher-HRV weeks, Spearman moves upward."
-                )
-                statisticPill(
-                    title: "Pearson: how straight is the relationship?",
-                    value: result.correlation.pearson,
-                    change: result.pearsonChange,
-                    subtitle: "Pearson looks at the exact values and asks whether the weekly points form a straight-line pattern. It can move more when one week is unusual."
-                )
+            Chart {
+                if let fit = result.scatterFit {
+                    LineMark(
+                        x: .value("DHS", fit.xMin),
+                        y: .value("HRV", fit.y(at: fit.xMin)),
+                        series: .value("Series", "fit")
+                    )
+                    .foregroundStyle(AppTheme.leaf.opacity(0.7))
+                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                    LineMark(
+                        x: .value("DHS", fit.xMax),
+                        y: .value("HRV", fit.y(at: fit.xMax)),
+                        series: .value("Series", "fit")
+                    )
+                    .foregroundStyle(AppTheme.leaf.opacity(0.7))
+                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                }
+
+                ForEach(result.scatterPoints) { point in
+                    PointMark(
+                        x: .value("DHS", point.averageDHS),
+                        y: .value("HRV", point.averageHRV)
+                    )
+                    .foregroundStyle(AppTheme.primary)
+                    .symbolSize(52)
+                    .annotation(position: .top, alignment: .center) {
+                        Text("\(point.weekIndex)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
+            .chartXAxisLabel("Weekly DHS")
+            .chartYAxisLabel("Weekly HRV (ms)")
+            .frame(height: isLandscape ? 260 : 220)
 
-            Text("When these values rise, the current 91-day window is showing a more positive DHS-HRV relationship. When they fall, the relationship is weaker, noisier, or less positive.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            whyThisMatters(
-                "A positive relationship means higher-DHS weeks tended to align with higher sleep HRV. That is encouraging because higher HRV is associated with healthier autonomic and cardiovascular patterns."
+            interpretationBlock(
+                shows: "Each dot is one 7-day block, placed by its DHS average (left–right) and HRV average (up–down). The dashed line is the best fit through those dots.",
+                matters: "This is the most direct check of the hypothesis: it asks, week by week, whether higher DHS came with higher HRV — no smoothing or trend lines in between.",
+                conclude: scatterConclusion(result)
             )
         }
         .dhsCard()
     }
 
-    private func statisticPill(title: String, value: Double?, change: DHSHRVCorrelationChange, subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(value.map { String(format: "%.2f", $0) } ?? "--")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .monospacedDigit()
-                if let formattedDelta = change.formattedDelta {
-                    Text(formattedDelta)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle((change.delta ?? 0) >= 0 ? AppTheme.leaf : Color(red: 0.94, green: 0.55, blue: 0.32))
-                        .monospacedDigit()
-                }
-            }
-            Text(change.directionText)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(subtitle)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+    private func scatterConclusion(_ result: DHSHRVStudyResult) -> String {
+        guard let fit = result.scatterFit else {
+            return "Once a few more weeks have both DHS and HRV, the dots and best-fit line will show whether higher-DHS weeks were also higher-HRV weeks."
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.primary.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        if fit.slope > 0 {
+            return "The line tilts upward, so higher-DHS weeks tended to be higher-HRV weeks. Scatter around the line is normal — many things besides DHS move HRV."
+        }
+        if fit.slope < 0 {
+            return "The line tilts downward in this window, so higher-DHS weeks did not come with higher HRV here. With 13 points this can shift as more data arrives."
+        }
+        return "The line is roughly flat, so DHS and HRV did not track each other clearly in this window."
     }
+
+    // MARK: - Alignment over time
 
     private func alignmentOverTimeCard(_ result: DHSHRVStudyResult, isLandscape: Bool) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("DHS-HRV Alignment Over Time")
-                .font(.headline.weight(.semibold))
+            HStack(alignment: .firstTextBaseline) {
+                Text("DHS-HRV Alignment Over Time")
+                    .font(.headline.weight(.semibold))
+                Spacer(minLength: 0)
+                if let stats = result.alignmentStats {
+                    Label(stats.direction.label, systemImage: stats.direction.symbolName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(trendColor(stats.direction))
+                }
+            }
 
-            Text("This repeats the same 91-day analysis across the last 30 available windows. It shows whether the relationship is staying positive, strengthening, weakening, or bouncing around.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if let stats = result.alignmentStats {
+                alignmentMetricRow(stats)
+            }
 
             Chart {
                 ForEach(result.alignmentPoints) { point in
@@ -411,11 +570,22 @@ struct DHSHRVStudyView: View {
                         .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 4]))
                     }
                 }
+                if let median = result.alignmentStats?.median {
+                    RuleMark(y: .value("Typical", median))
+                        .foregroundStyle(AppTheme.primary.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                        .annotation(position: .top, alignment: .leading) {
+                            Text("typical")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                }
                 RuleMark(y: .value("No relationship", 0))
                     .foregroundStyle(.secondary.opacity(0.5))
             }
             .chartForegroundStyleScale(["Spearman": AppTheme.primary, "Pearson": AppTheme.leaf])
             .chartYAxisLabel("Correlation")
+            .chartXAxisLabel("Older → Newer windows")
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 6)) { _ in
                     AxisGridLine()
@@ -426,15 +596,60 @@ struct DHSHRVStudyView: View {
             .frame(height: isLandscape ? 260 : 220)
 
             alignmentCallout(result)
+
+            interpretationBlock(
+                shows: "The correlation recalculated across the last 30 overlapping 91-day windows, each shifted by one day. Higher on the chart means a more positive relationship.",
+                matters: "One good window could be luck. Seeing the value stay positive as the window slides day by day tells you the relationship is stable and trustworthy, not a fluke.",
+                conclude: "A line that holds above zero across most windows is strong personal evidence the relationship is real. Neighboring windows share almost all their data, so look at the overall level and drift, not single-day jumps."
+            )
         }
         .dhsCard()
     }
 
+    private func alignmentMetricRow(_ stats: DHSHRVAlignmentStats) -> some View {
+        HStack(spacing: 10) {
+            alignmentMetric(
+                value: "\(stats.positiveCount)/\(stats.total)",
+                label: "Windows positive"
+            )
+            alignmentMetric(
+                value: String(format: "%.2f", stats.median),
+                label: "Typical (\(stats.typicalLabel))"
+            )
+            alignmentMetric(
+                value: "\(String(format: "%.2f", stats.minValue)) – \(String(format: "%.2f", stats.maxValue))",
+                label: "Range"
+            )
+        }
+    }
+
+    private func alignmentMetric(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.primary)
+                .monospacedDigit()
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(AppTheme.leaf.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
     private func alignmentCallout(_ result: DHSHRVStudyResult) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Why this matters", systemImage: "heart.text.square.fill")
+            Label("What this is telling you", systemImage: "heart.text.square.fill")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(AppTheme.primary)
+            Text(result.alignmentStrengthText)
+                .font(.caption)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
             Text(result.alignmentSummary)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -446,51 +661,60 @@ struct DHSHRVStudyView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func scatterplotCard(_ result: DHSHRVStudyResult, isLandscape: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Weekly Points Scatterplot")
-                .font(.headline.weight(.semibold))
+    private func trendColor(_ direction: DHSHRVTrendDirection) -> Color {
+        switch direction {
+        case .strengthening: return AppTheme.leaf
+        case .steady: return .secondary
+        case .easing: return cautionColor
+        }
+    }
 
-            Text("Each dot is one 7-day block. Dots that rise from lower-left to upper-right suggest higher DHS weeks tend to align with higher HRV weeks.")
+    // MARK: - Methods
+
+    private var methodsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("How the Trend Is Built")
+                    .font(.headline.weight(.semibold))
+                Spacer(minLength: 0)
+                Button("Learn more") {
+                    withAnimation { showMethods = true }
+                }
+                .font(.caption.weight(.semibold))
+            }
+
+            Text("We use your latest 91 complete DHS days, pair each day with the sleep HRV from the night that followed it, then group those 91 pairs into 13 weekly points before measuring how closely they move together.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            Chart {
-                ForEach(result.scatterPoints) { point in
-                    PointMark(
-                        x: .value("DHS", point.averageDHS),
-                        y: .value("HRV", point.averageHRV)
-                    )
-                    .foregroundStyle(AppTheme.primary)
-                    .symbolSize(52)
-                    .annotation(position: .top, alignment: .center) {
-                        Text("\(point.weekIndex)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .chartXAxisLabel("Weekly DHS")
-            .chartYAxisLabel("Weekly HRV (ms)")
-            .frame(height: isLandscape ? 260 : 220)
-
-            whyThisMatters(
-                "This directly checks whether your higher-DHS weeks were also higher-HRV weeks, instead of relying only on the line graphs."
-            )
         }
         .dhsCard()
     }
 
-    private func whyThisMatters(_ text: String) -> some View {
+    // MARK: - Shared building blocks
+
+    private func interpretationBlock(shows: String, matters: String, conclude: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            interpretationRow(label: "What it shows", text: shows, icon: "chart.xyaxis.line")
+            interpretationRow(label: "Why it matters", text: matters, icon: "lightbulb.fill")
+            interpretationRow(label: "What you can conclude", text: conclude, icon: "checkmark.seal.fill")
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.primary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func interpretationRow(label: String, text: String, icon: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "magnifyingglass.circle.fill")
-                .font(.caption.weight(.semibold))
+            Image(systemName: icon)
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(AppTheme.primary)
-                .padding(.top, 1)
+                .frame(width: 16)
+                .padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Why this matters")
-                    .font(.caption2.weight(.semibold))
+                Text(label)
+                    .font(.caption2.weight(.bold))
                     .foregroundStyle(.primary)
                 Text(text)
                     .font(.caption2)
@@ -498,9 +722,22 @@ struct DHSHRVStudyView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private func healthTieIn(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "heart.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.leaf)
+                .padding(.top, 1)
+            Text(text)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.primary.opacity(0.07))
+        .background(AppTheme.leaf.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
@@ -518,7 +755,7 @@ struct DHSHRVStudyView: View {
     private func summaryColor(_ correlation: DHSHRVCorrelationResult) -> Color {
         switch correlation.direction {
         case "positive": return AppTheme.leaf
-        case "negative": return Color(red: 0.94, green: 0.55, blue: 0.32)
+        case "negative": return cautionColor
         default: return .primary
         }
     }
@@ -540,19 +777,21 @@ struct DHSHRVStudyView: View {
         """
 We use your latest 91 complete DHS days.
 
-Each DHS day is paired with the sleep HRV from the night that followed it.
+Each DHS day is paired with the sleep HRV from the night that followed it (DHS[t] with HRV[t+1]).
 
-Those 91 pairs are grouped into 13 weekly blocks.
+Those 91 pairs are grouped into 13 non-overlapping 7-day blocks. Each point on the chart is one block's average.
 
-Each point on the chart is one 7-day block.
+Spearman correlation (primary) asks whether higher-DHS weeks generally rank with higher-HRV weeks. It cares about order, so one unusual week does not distort it.
 
-The goal is to see whether your DHS and HRV trends rise and fall together over time.
+Pearson correlation (secondary) asks whether the weekly points fall along a straight line. It uses the exact values, so a single outlier week can move it more.
 
-Spearman asks whether higher-DHS weeks generally rank with higher-HRV weeks.
+Both run from −1 (move in opposite directions) through 0 (no relationship) to +1 (move together perfectly).
 
-Pearson asks whether the weekly points form a straighter line.
+How sure can you be? With only 13 weekly points, a single correlation has a wide margin of error. We translate that margin into a plain-language range using a standard Fisher transformation, so you can see whether the relationship is likely weak, moderate, or strong rather than trusting one number.
 
-The alignment-over-time chart repeats the same calculation across recent 91-day windows so you can see whether the relationship is stable or changing.
+DHS-HRV Alignment Over Time repeats the entire calculation across the last 30 windows, each shifted one day. Because neighboring windows share almost all of their days, the value moves smoothly — so read the overall level and drift, not single-day jumps. A relationship that stays positive across many windows is stronger evidence than one good window alone.
+
+This is an exploratory view of your own data. It can reveal associations in your habits and recovery, but it cannot prove that one causes the other.
 """
     }
 }
