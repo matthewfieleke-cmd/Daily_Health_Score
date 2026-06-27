@@ -408,30 +408,30 @@ struct DHSHRVStudyResult: Equatable {
         }
     }
 
-    /// How strongly and how consistently positive the relationship has been.
+    /// How strongly and how consistently higher DHS has lined up with higher HRV.
     var alignmentStrengthText: String {
         guard let stats = alignmentStats else {
-            return "Keep collecting data to see whether the DHS-HRV relationship stays positive over time."
+            return "Keep collecting data to see whether higher DHS lines up with higher overnight HRV over time."
         }
 
         let medianText = String(format: "%.2f", stats.median)
         let rangeText = "\(String(format: "%.2f", stats.minValue)) to \(String(format: "%.2f", stats.maxValue))"
-        return "It has been positive in \(stats.positiveCount) of the last \(stats.total) windows. Typically it sits around a \(stats.typicalLabel) relationship (Spearman \(medianText)), ranging from \(rangeText). The trend is \(stats.direction.label.lowercased())."
+        return "Higher DHS lined up with higher overnight HRV in \(stats.positiveCount) of the last \(stats.total) windows. The link is typically \(stats.typicalLabel) (Spearman \(medianText), where +1 is a perfect match), ranging from \(rangeText). The trend is \(stats.direction.label.lowercased())."
     }
 
     /// Why this stability view matters, with health framing.
     var alignmentSummary: String {
         guard let stats = alignmentStats else {
-            return "Keep collecting data to see whether the DHS-HRV relationship stays positive over time."
+            return "Keep collecting data to see whether higher DHS lines up with higher overnight HRV over time."
         }
 
         let percentPositive = Double(stats.positiveCount) / Double(stats.total)
         if percentPositive >= 0.75 {
-            return "A relationship that stays positive across many overlapping windows is more trustworthy than one good window alone. That consistency is encouraging, because higher HRV trends are linked in research with better cardiovascular fitness and lower cardiovascular risk."
+            return "The closer these lines stay to +1 across many overlapping windows, the more dependable the \u201chigher DHS, higher HRV\u201d link is — far more convincing than one good window alone. That is encouraging, because higher HRV trends are linked in research with better cardiovascular fitness and lower cardiovascular risk."
         }
         if percentPositive >= 0.50 {
-            return "The relationship has been positive in about half of recent windows, so some alignment is showing but the pattern is still settling. Watching it across windows tells you whether it is real and durable rather than a one-window fluke."
+            return "Higher DHS has lined up with higher HRV in about half of recent windows, so the link is showing but still settling. The closer the lines climb toward +1 and stay there, the more dependable that link becomes."
         }
-        return "The relationship has not been consistently positive yet. Tracking it across windows helps you see whether that changes as your habits do — HRV can be pushed down by sleep disruption, stress, illness, alcohol, or training strain."
+        return "Higher DHS and higher HRV have not consistently lined up yet — the lines are not staying above zero. Tracking this as your habits change shows whether the link strengthens; HRV can also be pushed down by sleep disruption, stress, illness, alcohol, or training strain."
     }
 }

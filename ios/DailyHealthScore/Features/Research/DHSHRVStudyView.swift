@@ -745,6 +745,11 @@ struct DHSHRVStudyView: View {
                 }
             }
 
+            Text("Is higher DHS linked to higher overnight HRV — and does that link hold up over time? This tracks the strength of that link, not your DHS or HRV scores themselves.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             if let stats = result.alignmentStats {
                 alignmentMetricRow(stats)
             }
@@ -786,8 +791,20 @@ struct DHSHRVStudyView: View {
                     .foregroundStyle(.secondary.opacity(0.5))
             }
             .chartForegroundStyleScale(["Spearman": AppTheme.primary, "Pearson": AppTheme.leaf])
-            .chartYAxisLabel("Correlation")
+            .chartYScale(domain: -1 ... 1)
+            .chartYAxisLabel("Higher DHS ↔ higher HRV")
             .chartXAxisLabel("Older → Newer windows")
+            .chartYAxis {
+                AxisMarks(values: [-1, -0.5, 0, 0.5, 1]) { value in
+                    AxisGridLine()
+                    AxisTick()
+                    if let number = value.as(Double.self) {
+                        AxisValueLabel {
+                            Text(number == 0 ? "0" : String(format: "%+.1f", number))
+                        }
+                    }
+                }
+            }
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 6)) { _ in
                     AxisGridLine()
@@ -795,32 +812,85 @@ struct DHSHRVStudyView: View {
                     AxisValueLabel()
                 }
             }
+            .chartPlotStyle { plotArea in
+                plotArea.background(
+                    LinearGradient(
+                        colors: [
+                            AppTheme.leaf.opacity(0.12),
+                            Color.clear,
+                            cautionColor.opacity(0.10)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            }
             .frame(height: isLandscape ? 260 : 220)
+
+            alignmentScaleGuide()
 
             alignmentCallout(result)
 
             interpretationBlock(
-                shows: "The correlation recalculated across the last 30 overlapping 91-day windows, each shifted by one day. Higher on the chart means a more positive relationship.",
-                matters: "One good window could be luck. Seeing the value stay positive as the window slides day by day tells you the relationship is stable and trustworthy, not a fluke.",
-                conclude: "A line that holds above zero across most windows is strong personal evidence the relationship is real. Neighboring windows share almost all their data, so look at the overall level and drift, not single-day jumps."
+                shows: "How strongly your higher-DHS weeks lined up with higher overnight HRV, recalculated across the last 30 windows (each shifted one day). The closer a line sits to +1, the more reliably higher DHS came with higher HRV.",
+                matters: "One good 91-day window could be luck. Watching the line as the window slides day by day shows whether \u201chigher DHS, higher HRV\u201d is a stable feature of your data or just a passing coincidence.",
+                conclude: "A line that holds high and positive across most windows is strong personal evidence that higher DHS is associated with higher overnight HRV for you. It shows association, not proof of cause, and neighboring windows share most of their data — so read the overall level, not single-day jumps."
             )
         }
         .dhsCard()
     }
 
+    private func alignmentScaleGuide() -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            scaleGuideRow(
+                color: AppTheme.leaf,
+                symbol: "arrow.up",
+                text: "Near +1 — your higher-DHS weeks were followed by higher overnight HRV. This is what you want to see."
+            )
+            scaleGuideRow(
+                color: .secondary,
+                symbol: "minus",
+                text: "Around 0 — little or no link between DHS and HRV in that window."
+            )
+            scaleGuideRow(
+                color: cautionColor,
+                symbol: "arrow.down",
+                text: "Below 0 — higher-DHS weeks came with lower HRV (the opposite of the goal)."
+            )
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.primary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func scaleGuideRow(color: Color, symbol: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: symbol)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(color)
+                .frame(width: 16)
+                .padding(.top, 1)
+            Text(text)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private func alignmentMetricRow(_ stats: DHSHRVAlignmentStats) -> some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
             alignmentMetric(
                 value: "\(stats.positiveCount)/\(stats.total)",
-                label: "Windows positive"
+                label: "Windows higher DHS = higher HRV"
             )
             alignmentMetric(
                 value: String(format: "%.2f", stats.median),
-                label: "Typical (\(stats.typicalLabel))"
+                label: "Typical link (\(stats.typicalLabel))"
             )
             alignmentMetric(
                 value: "\(String(format: "%.2f", stats.minValue)) – \(String(format: "%.2f", stats.maxValue))",
-                label: "Range"
+                label: "Weakest – strongest"
             )
         }
     }
