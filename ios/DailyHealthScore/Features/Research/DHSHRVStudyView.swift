@@ -327,7 +327,7 @@ struct DHSHRVStudyView: View {
             interpretationBlock(
                 shows: "Two stacked lines. Each point averages one 7-day block: DHS from those days, and sleep HRV from the nights that followed them. Faded points rest on only 1–3 values.",
                 matters: "Weekly averaging strips out day-to-day noise so real multi-week trends become visible.",
-                conclude: "You can spot whether healthier DHS weeks tend to sit alongside higher HRV weeks. Tap any point for that week's exact dates and counts. Treat faded points cautiously."
+                conclude: "You can spot whether healthier DHS weeks tend to sit alongside higher HRV weeks. Tap either chart to pull up that week's exact dates and counts. Treat faded points cautiously."
             )
         }
         .dhsCard()
@@ -348,6 +348,12 @@ struct DHSHRVStudyView: View {
                 .foregroundStyle(.primary)
 
             Chart {
+                if let selectedWeek {
+                    RuleMark(x: .value("Week", selectedWeek))
+                        .foregroundStyle(.secondary.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                }
+
                 ForEach(points) { point in
                     if let y = point[keyPath: value] {
                         LineMark(
@@ -363,15 +369,64 @@ struct DHSHRVStudyView: View {
                             x: .value("Week", point.weekIndex),
                             y: .value(title, y)
                         )
-                        .foregroundStyle(point[keyPath: completeness] == .sparse ? color.opacity(0.38) : color)
-                        .symbolSize(point[keyPath: completeness] == .sparse ? 32 : 48)
+                        .foregroundStyle(pointColor(point, completeness: completeness, color: color))
+                        .symbolSize(pointSize(point, completeness: completeness))
                     }
                 }
             }
             .chartYAxisLabel(yLabel)
             .chartXAxis { weekAxisMarks }
-            .chartXSelection(value: $selectedWeek)
+            .chartXScale(domain: 1 ... DHSHRVStudyResult.weeklyPointCount)
+            .chartOverlay { proxy in
+                GeometryReader { geo in
+                    Rectangle()
+                        .fill(Color.clear)
+                        .contentShape(Rectangle())
+                        .onTapGesture { location in
+                            selectWeek(at: location, proxy: proxy, geometry: geo)
+                        }
+                }
+            }
             .frame(height: height)
+        }
+    }
+
+    private func pointColor(
+        _ point: DHSHRVWeeklyPoint,
+        completeness: KeyPath<DHSHRVWeeklyPoint, StudyPointCompleteness>,
+        color: Color
+    ) -> Color {
+        if point.weekIndex == selectedWeek { return color }
+        return point[keyPath: completeness] == .sparse ? color.opacity(0.38) : color
+    }
+
+    private func pointSize(
+        _ point: DHSHRVWeeklyPoint,
+        completeness: KeyPath<DHSHRVWeeklyPoint, StudyPointCompleteness>
+    ) -> CGFloat {
+        if point.weekIndex == selectedWeek { return 140 }
+        return point[keyPath: completeness] == .sparse ? 32 : 48
+    }
+
+    private func selectWeek(at location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) {
+        let plotFrame = geometry[proxy.plotAreaFrame]
+        let xInPlot = location.x - plotFrame.origin.x
+        let count = DHSHRVStudyResult.weeklyPointCount
+
+        let week: Int
+        if let raw = proxy.value(atX: xInPlot, as: Double.self) {
+            week = Int(raw.rounded())
+        } else if plotFrame.width > 0 {
+            // Fallback: the x domain is fixed to 1...count with no padding.
+            let fraction = max(0, min(1, xInPlot / plotFrame.width))
+            week = Int((fraction * Double(count - 1)).rounded()) + 1
+        } else {
+            return
+        }
+
+        guard (1 ... count).contains(week) else { return }
+        withAnimation(.easeInOut(duration: 0.15)) {
+            selectedWeek = (selectedWeek == week) ? nil : week
         }
     }
 
@@ -408,23 +463,77 @@ struct DHSHRVStudyView: View {
     private func selectedWeekCard(_ result: DHSHRVStudyResult) -> some View {
         if let selectedWeek,
            let point = result.weeklyPoints.first(where: { $0.weekIndex == selectedWeek }) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Week \(point.weekIndex)")
-                    .font(.subheadline.weight(.semibold))
-                Text("\(formatRange(point.dhsStartDate, point.dhsEndDate)) DHS paired with \(formatRange(point.hrvStartDate, point.hrvEndDate)) sleep HRV")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let averageDHS = point.averageDHS {
-                    Text("DHS average: \(ScoreCalculator.formatDisplayScore(averageDHS)) based on \(point.dhsValueCount) of 7 days.")
-                        .font(.caption)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Week \(point.weekIndex)")
+                            .font(.subheadline.weight(.bold))
+                        Text("\(formatRange(point.dhsStartDate, point.dhsEndDate)) DHS  •  \(formatRange(point.hrvStartDate, point.hrvEndDate)) sleep HRV")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { self.selectedWeek = nil }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close week details")
                 }
-                if let averageHRV = point.averageHRV {
-                    Text("HRV average: \(Int(averageHRV.rounded())) ms based on \(point.hrvValueCount) of 7 nights.")
-                        .font(.caption)
+
+                HStack(spacing: 10) {
+                    weekMetric(
+                        title: "DHS average",
+                        valueText: point.averageDHS.map { ScoreCalculator.formatDisplayScore($0) } ?? "—",
+                        detailText: "\(point.dhsValueCount) of 7 days",
+                        completeness: point.dhsCompleteness,
+                        accent: AppTheme.primary
+                    )
+                    weekMetric(
+                        title: "Following-night HRV",
+                        valueText: point.averageHRV.map { "\(Int($0.rounded())) ms" } ?? "—",
+                        detailText: "\(point.hrvValueCount) of 7 nights",
+                        completeness: point.hrvCompleteness,
+                        accent: AppTheme.leaf
+                    )
                 }
             }
             .dhsCard(padding: 14)
+            .transition(.opacity.combined(with: .move(edge: .top)))
         }
+    }
+
+    private func weekMetric(
+        title: String,
+        valueText: String,
+        detailText: String,
+        completeness: StudyPointCompleteness,
+        accent: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(valueText)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.primary)
+                .monospacedDigit()
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(completeness == .solid ? accent : accent.opacity(0.4))
+                    .frame(width: 7, height: 7)
+                Text(completeness == .none ? "No data this week" : detailText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(accent.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     // MARK: - Normalized overlay
