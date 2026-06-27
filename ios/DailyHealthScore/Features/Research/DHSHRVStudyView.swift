@@ -8,8 +8,11 @@ struct DHSHRVStudyView: View {
     @State private var showEducation = false
     @State private var showMethods = false
     @State private var selectedWeek: Int?
+    @State private var popupAnchor: CGPoint?
+    @State private var popupSize: CGSize = .zero
 
     private let cautionColor = Color(red: 0.94, green: 0.55, blue: 0.32)
+    private let studySpace = "dhsStudySpace"
 
     private var result: DHSHRVStudyResult? {
         DHSHRVStudyAnalyzer.analyze(records: records, todayKey: todayKey)
@@ -29,7 +32,6 @@ struct DHSHRVStudyView: View {
                             headlineCard(result)
                             correlationSummaryCard(result)
                             stackedTrendCard(result, isLandscape: isLandscape)
-                            selectedWeekCard(result)
                             overlayCard(result, isLandscape: isLandscape)
                             scatterplotCard(result, isLandscape: isLandscape)
                             alignmentOverTimeCard(result, isLandscape: isLandscape)
@@ -42,7 +44,12 @@ struct DHSHRVStudyView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 28)
                 }
+
+                if let result {
+                    weekPopupLayer(result)
+                }
             }
+            .coordinateSpace(name: studySpace)
         }
         .navigationTitle("DHS + HRV")
         .navigationBarTitleDisplayMode(.inline)
@@ -383,7 +390,7 @@ struct DHSHRVStudyView: View {
                         .fill(Color.clear)
                         .contentShape(Rectangle())
                         .onTapGesture { location in
-                            selectWeek(at: location, proxy: proxy, geometry: geo)
+                            selectWeek(at: location, points: points, value: value, proxy: proxy, geometry: geo)
                         }
                 }
             }
@@ -408,7 +415,13 @@ struct DHSHRVStudyView: View {
         return point[keyPath: completeness] == .sparse ? 32 : 48
     }
 
-    private func selectWeek(at location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) {
+    private func selectWeek(
+        at location: CGPoint,
+        points: [DHSHRVWeeklyPoint],
+        value: KeyPath<DHSHRVWeeklyPoint, Double?>,
+        proxy: ChartProxy,
+        geometry: GeometryProxy
+    ) {
         let plotFrame = geometry[proxy.plotAreaFrame]
         let xInPlot = location.x - plotFrame.origin.x
         let count = DHSHRVStudyResult.weeklyPointCount
@@ -425,8 +438,33 @@ struct DHSHRVStudyView: View {
         }
 
         guard (1 ... count).contains(week) else { return }
+
+        if selectedWeek == week {
+            dismissPopup()
+            return
+        }
+
+        // Anchor the popup at the tapped point, converted to the screen coordinate space.
+        let overlayOrigin = geometry.frame(in: .named(studySpace)).origin
+        let pointX = (proxy.position(forX: week) ?? xInPlot) + plotFrame.minX
+        var pointY = plotFrame.minY
+        if let point = points.first(where: { $0.weekIndex == week }),
+           let y = point[keyPath: value],
+           let positionY = proxy.position(forY: y) {
+            pointY = positionY + plotFrame.minY
+        }
+        let anchor = CGPoint(x: pointX + overlayOrigin.x, y: pointY + overlayOrigin.y)
+
         withAnimation(.easeInOut(duration: 0.15)) {
-            selectedWeek = (selectedWeek == week) ? nil : week
+            selectedWeek = week
+            popupAnchor = anchor
+        }
+    }
+
+    private func dismissPopup() {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            selectedWeek = nil
+            popupAnchor = nil
         }
     }
 
@@ -460,50 +498,105 @@ struct DHSHRVStudyView: View {
     }
 
     @ViewBuilder
-    private func selectedWeekCard(_ result: DHSHRVStudyResult) -> some View {
+    private func weekPopupLayer(_ result: DHSHRVStudyResult) -> some View {
         if let selectedWeek,
+           let anchor = popupAnchor,
            let point = result.weeklyPoints.first(where: { $0.weekIndex == selectedWeek }) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Week \(point.weekIndex)")
-                            .font(.subheadline.weight(.bold))
-                        Text("\(formatRange(point.dhsStartDate, point.dhsEndDate)) DHS  •  \(formatRange(point.hrvStartDate, point.hrvEndDate)) sleep HRV")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 0)
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.15)) { self.selectedWeek = nil }
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close week details")
-                }
+            ZStack {
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { dismissPopup() }
 
-                HStack(spacing: 10) {
-                    weekMetric(
-                        title: "DHS average",
-                        valueText: point.averageDHS.map { ScoreCalculator.formatDisplayScore($0) } ?? "—",
-                        detailText: "\(point.dhsValueCount) of 7 days",
-                        completeness: point.dhsCompleteness,
-                        accent: AppTheme.primary
+                GeometryReader { root in
+                    let maxWidth: CGFloat = 250
+                    let margin: CGFloat = 12
+                    let arrowHeight: CGFloat = 8
+                    let gap: CGFloat = 8
+                    let halfWidth = popupSize.width / 2
+                    let clampedX = min(
+                        max(anchor.x, margin + halfWidth),
+                        max(margin + halfWidth, root.size.width - margin - halfWidth)
                     )
-                    weekMetric(
-                        title: "Following-night HRV",
-                        valueText: point.averageHRV.map { "\(Int($0.rounded())) ms" } ?? "—",
-                        detailText: "\(point.hrvValueCount) of 7 nights",
-                        completeness: point.hrvCompleteness,
-                        accent: AppTheme.leaf
-                    )
+                    let showAbove = anchor.y - popupSize.height - arrowHeight - gap > margin
+                    let centerY = showAbove
+                        ? anchor.y - gap - arrowHeight - popupSize.height / 2
+                        : anchor.y + gap + arrowHeight + popupSize.height / 2
+                    let pointerOffset = min(max(anchor.x - clampedX, -halfWidth + 16), halfWidth - 16)
+
+                    weekPopupCard(point, pointerOffset: pointerOffset, arrowHeight: arrowHeight, showAbove: showAbove)
+                        .frame(maxWidth: maxWidth)
+                        .background(
+                            GeometryReader { proxy in
+                                Color.clear.preference(key: PopupSizeKey.self, value: proxy.size)
+                            }
+                        )
+                        .position(x: clampedX, y: centerY)
                 }
+                .onPreferenceChange(PopupSizeKey.self) { popupSize = $0 }
             }
-            .dhsCard(padding: 14)
-            .transition(.opacity.combined(with: .move(edge: .top)))
+            .transition(.opacity)
         }
+    }
+
+    private func weekPopupCard(
+        _ point: DHSHRVWeeklyPoint,
+        pointerOffset: CGFloat,
+        arrowHeight: CGFloat,
+        showAbove: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Week \(point.weekIndex)")
+                        .font(.subheadline.weight(.bold))
+                    Text("\(formatRange(point.dhsStartDate, point.dhsEndDate)) DHS  •  \(formatRange(point.hrvStartDate, point.hrvEndDate)) HRV")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Button {
+                    dismissPopup()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close week details")
+            }
+
+            HStack(spacing: 8) {
+                weekMetric(
+                    title: "DHS average",
+                    valueText: point.averageDHS.map { ScoreCalculator.formatDisplayScore($0) } ?? "—",
+                    detailText: "\(point.dhsValueCount) of 7 days",
+                    completeness: point.dhsCompleteness,
+                    accent: AppTheme.primary
+                )
+                weekMetric(
+                    title: "Following-night HRV",
+                    valueText: point.averageHRV.map { "\(Int($0.rounded())) ms" } ?? "—",
+                    detailText: "\(point.hrvValueCount) of 7 nights",
+                    completeness: point.hrvCompleteness,
+                    accent: AppTheme.leaf
+                )
+            }
+        }
+        .padding(14)
+        .background(AppTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .overlay(alignment: showAbove ? .bottom : .top) {
+            PopupPointer(pointingDown: showAbove)
+                .fill(AppTheme.cardSurface)
+                .frame(width: 16, height: arrowHeight)
+                .offset(x: pointerOffset, y: showAbove ? arrowHeight : -arrowHeight)
+        }
+        .cardShadow()
     }
 
     private func weekMetric(
@@ -902,5 +995,33 @@ DHS-HRV Alignment Over Time repeats the entire calculation across the last 30 wi
 
 This is an exploratory view of your own data. It can reveal associations in your habits and recovery, but it cannot prove that one causes the other.
 """
+    }
+}
+
+private struct PopupSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next != .zero { value = next }
+    }
+}
+
+/// A small triangle pointer that visually connects the popup to its data point.
+private struct PopupPointer: Shape {
+    var pointingDown: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        if pointingDown {
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        } else {
+            path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        }
+        path.closeSubpath()
+        return path
     }
 }
