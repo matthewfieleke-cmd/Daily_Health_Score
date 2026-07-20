@@ -8,6 +8,8 @@ struct SMARTGoalDetailView: View {
 
     @State private var goal: SMARTGoal?
     @State private var showCelebration = false
+    /// When true, leaving this screen while the goal is still fully checked removes it.
+    @State private var removeIfCompleteOnLeave = false
 
     private var tint: Color {
         goal.map { AppTheme.tint(for: $0.relevantTheme) } ?? AppTheme.primary
@@ -35,14 +37,19 @@ struct SMARTGoalDetailView: View {
         .navigationTitle("Goal")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { reload() }
-        .alert("Goal complete!", isPresented: $showCelebration) {
-            Button("Keep editing", role: .cancel) {}
-            Button("Done") {
-                dismiss()
-            }
-        } message: {
-            Text("You finished “\(goal?.specificText ?? "your goal")”. Nice work. If you checked one by accident, tap it again to uncheck it.")
+        .onDisappear {
+            finalizeIfCompleteOnLeave()
         }
+        .goalCompleteCelebration(
+            isPresented: $showCelebration,
+            goalTitle: goal?.specificText ?? "your goal",
+            onEdit: {
+                // Stay on the detail screen; bubbles remain freely editable.
+            },
+            onDone: {
+                finishAndRemove()
+            }
+        )
     }
 
     private func reload() {
@@ -71,6 +78,7 @@ struct SMARTGoalDetailView: View {
                 .font(.subheadline.weight(.semibold))
             HStack(spacing: 12) {
                 Button("Renew") {
+                    removeIfCompleteOnLeave = false
                     appState.smartGoalStore.renew(cloning: goal)
                     dismiss()
                 }
@@ -78,6 +86,7 @@ struct SMARTGoalDetailView: View {
                 .tint(AppTheme.primary)
 
                 Button("Delete", role: .destructive) {
+                    removeIfCompleteOnLeave = false
                     appState.smartGoalStore.delete(id: goal.id)
                     dismiss()
                 }
@@ -125,8 +134,10 @@ struct SMARTGoalDetailView: View {
         if current.isComplete {
             goal = current
             appState.smartGoalStore.save(current)
+            removeIfCompleteOnLeave = true
             showCelebration = true
         } else {
+            removeIfCompleteOnLeave = false
             persist(current)
         }
     }
@@ -134,5 +145,17 @@ struct SMARTGoalDetailView: View {
     private func persist(_ updated: SMARTGoal) {
         goal = updated
         appState.smartGoalStore.save(updated)
+    }
+
+    private func finishAndRemove() {
+        removeIfCompleteOnLeave = false
+        appState.smartGoalStore.completeAndRemove(id: goalId)
+        dismiss()
+    }
+
+    private func finalizeIfCompleteOnLeave() {
+        guard removeIfCompleteOnLeave else { return }
+        guard let current = goal, current.status == .active, current.isComplete else { return }
+        appState.smartGoalStore.completeAndRemove(id: goalId)
     }
 }
