@@ -63,4 +63,35 @@ final class SMARTGoalLogicTests: XCTestCase {
         XCTAssertFalse(goal.isFilled(2))
         XCTAssertEqual(goal.filledCount, 0)
     }
+
+    func test_setFilled_canCompleteThenUncheckLastBubble() {
+        let futureEnd = Date().addingTimeInterval(86_400)
+        var goal = SMARTGoal(
+            id: UUID(),
+            specificText: "walk over lunch",
+            targetCount: 2,
+            relevantTheme: .health,
+            timeWindowDays: 3,
+            endDate: futureEnd,
+            createdAt: Date(),
+            generatedSummary: "",
+            filledMask: 0,
+            status: .active,
+            remindersEnabled: false,
+            reminderHour: 12,
+            reminderMinute: 0,
+            reminderWeekdaysMask: 0
+        )
+
+        goal.setFilled(0, filled: true)
+        XCTAssertFalse(goal.isComplete)
+
+        goal.setFilled(1, filled: true)
+        XCTAssertTrue(goal.isComplete)
+
+        goal.setFilled(1, filled: false)
+        XCTAssertFalse(goal.isComplete)
+        XCTAssertEqual(goal.filledCount, 1)
+        XCTAssertFalse(goal.isExpired)
+    }
 }
