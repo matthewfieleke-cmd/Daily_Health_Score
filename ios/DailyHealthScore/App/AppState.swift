@@ -24,6 +24,7 @@ final class AppState: ObservableObject {
     let settingsStore = SettingsStore()
     let recordStore: RecordStore
     let smartGoalStore: SMARTGoalStore
+    let coach: LifestyleCoachController
 
     @Published var healthSyncBannerPhase: HealthSyncBannerPhase = .hidden
     /// True while sync work runs and through the minimum syncing-banner display window.
@@ -38,6 +39,7 @@ final class AppState: ObservableObject {
     init(modelContext: ModelContext) {
         recordStore = RecordStore(modelContext: modelContext)
         smartGoalStore = SMARTGoalStore(modelContext: modelContext)
+        coach = LifestyleCoachController(modelContext: modelContext)
     }
 
     func requestHealthAccess() async {

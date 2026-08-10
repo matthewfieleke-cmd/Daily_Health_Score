@@ -16,7 +16,12 @@ final class RecordStore: ObservableObject {
     /// `.modelContainer(...)` modifier, before any actor context is established.
     nonisolated static func makeContainer() -> ModelContainer {
         do {
-            return try ModelContainer(for: DailyRecordEntity.self, SMARTGoalEntity.self)
+            return try ModelContainer(
+                for: DailyRecordEntity.self,
+                SMARTGoalEntity.self,
+                CoachChatMessageEntity.self,
+                CoachMemoryStateEntity.self
+            )
         } catch {
             fatalError("SwiftData container failed: \(error)")
         }

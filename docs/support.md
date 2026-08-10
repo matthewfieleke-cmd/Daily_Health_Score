@@ -18,13 +18,14 @@ Please include your iOS version (e.g. iOS 18.x) and a short description of the i
 
 ## Requirements
 
-- iPhone running **iOS 17 or later**
+- iPhone running **iOS 26 or later** with **Apple Intelligence** enabled (required for DHS Lifestyle Coach)
 - **Apple Health** with permission to read:
   - Sleep Analysis (asleep)
   - Dietary Fiber
   - Apple Exercise Time (exercise minutes)
+  - Heart Rate Variability (for sleep HRV trends)
 
-The app does not require an account. Data is stored on your device.
+The app does not require an account. Data is stored on your device. Coach chat memory can be cleared in **Settings → Clear coach chat & memory**.
 
 ---
 

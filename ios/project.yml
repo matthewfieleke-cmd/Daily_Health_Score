@@ -2,7 +2,7 @@ name: DailyHealthScore
 options:
   bundleIdPrefix: com.dailyhealthscore
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "26.0"
 settings:
   SWIFT_VERSION: "5.9"
 targets:
@@ -21,8 +21,8 @@ targets:
       # iPhone-only. Adding iPad ("1,2") would also require declaring iPad
       # interface orientations in Info.plist or setting UIRequiresFullScreen.
       TARGETED_DEVICE_FAMILY: "1"
-      MARKETING_VERSION: "1.6.0"
-      CURRENT_PROJECT_VERSION: "10"
+      MARKETING_VERSION: "1.7.0"
+      CURRENT_PROJECT_VERSION: "11"
     entitlements:
       path: DailyHealthScore/DailyHealthScore.entitlements
 

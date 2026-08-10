@@ -1,10 +1,8 @@
 import SwiftUI
 
-/// Custom top bar for Today: enlarged logo (leading), title centered in the gap
-/// before the trailing action buttons.
+/// Custom top bar for Today: brand mark, title, Ask coach, refresh.
 struct TodayTopBar: View {
-    let onDiscouragement: () -> Void
-    let onMotivation: () -> Void
+    let onAskCoach: () -> Void
     let onRefresh: () -> Void
 
     var body: some View {
@@ -27,20 +25,16 @@ struct TodayTopBar: View {
 
             Spacer(minLength: 8)
 
-            HStack(spacing: 16) {
-                Button(action: onDiscouragement) {
-                    Image(systemName: "heart.text.square")
-                }
-                .accessibilityLabel("Feeling discouraged")
-
-                Button(action: onMotivation) {
-                    Image("HikerOnHill")
-                        .renderingMode(.template)
+            HStack(spacing: 14) {
+                Button(action: onAskCoach) {
+                    Image("DHSLifestyleCoach")
                         .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 22, height: 22)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 30, height: 30)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 }
-                .accessibilityLabel("Need motivation")
+                .buttonStyle(.plain)
+                .accessibilityLabel("Ask DHS Lifestyle Coach")
 
                 Button(action: onRefresh) {
                     Image(systemName: "arrow.clockwise")

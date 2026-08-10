@@ -5,7 +5,7 @@ Native SwiftUI app with **HealthKit** — sleep, fiber, and exercise scoring wit
 ## Requirements
 
 - macOS with **Xcode 15+**
-- iPhone on **iOS 17+** (SwiftData)
+- iPhone on **iOS 26+** with **Apple Intelligence** (DHS Lifestyle Coach uses on-device Foundation Models)
 - Apple Developer account (for device testing and App Store)
 
 ## Open the project
@@ -22,11 +22,12 @@ open DailyHealthScore.xcodeproj
 ### Option B — Manual Xcode project
 
 1. **File → New → Project → App** (SwiftUI, Swift, iOS 17).
-2. Product name: `DailyHealthScore`, bundle ID: `com.dailyhealthscore.app`.
+2. Product name: `DailyHealthScore`, bundle ID: `com.dailyhealthscore.app`, iOS 26.
 3. Drag the `DailyHealthScore/` source folder into the target.
 4. Add **HealthKit** capability (Signing & Capabilities).
 5. Set **Info.plist** `NSHealthShareUsageDescription` (included in this repo).
 6. Set **Code Signing Entitlements** to `DailyHealthScore/DailyHealthScore.entitlements`.
+7. Link Apple’s **FoundationModels** framework (DHS Lifestyle Coach).
 
 ## Run on device
 
@@ -39,9 +40,9 @@ open DailyHealthScore.xcodeproj
 
 | Tab | Description |
 |-----|-------------|
-| Today | Score, metrics, primary focus, suggestion, discouragement / motivation |
+| Today | Score, metrics, DHS Lifestyle Coach, SMART goals, HRV |
 | 7 / 30 / 90-Day | Rolling averages + daily list |
-| Settings | Goals, manual day edit, export JSON, clear data |
+| Settings | Goals, coach memory clear, manual day edit, export JSON, clear data |
 
 ## Data
 
@@ -58,6 +59,5 @@ Tune `HealthKitService.swift` if your sleep totals differ from the Health app.
 
 ## Content
 
-- **30** “Feeling discouraged?” paragraphs (20 original + 10 new).
-- **30** “Need motivation?” paragraphs (20 original + 10 new, DBT-informed).
-- **80** rotating daily suggestions (sleep / fiber / exercise / maintain).
+- **DHS Lifestyle Coach** — on-device daily card and Ask-the-coach chat (Apple Intelligence).
+- Rotating suggestion libraries remain available to the record builder.
