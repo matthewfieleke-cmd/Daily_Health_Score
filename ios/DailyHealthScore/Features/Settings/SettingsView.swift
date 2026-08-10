@@ -9,6 +9,7 @@ struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @State private var showEditDay = false
     @State private var showClearConfirm = false
+    @State private var showClearCoachConfirm = false
     @State private var showSleepDiagnostic = false
     @State private var exportText = ""
     @State private var selectedSleepGoal: SleepGoalHours = .sevenHalf
@@ -51,6 +52,14 @@ struct SettingsView: View {
                         showSleepDiagnostic = true
                     } label: {
                         Label("Sleep diagnostic", systemImage: "stethoscope")
+                    }
+                }
+
+                Section("DHS Lifestyle Coach") {
+                    Button(role: .destructive) {
+                        showClearCoachConfirm = true
+                    } label: {
+                        Label("Clear coach chat & memory", systemImage: "bubble.left.and.bubble.right")
                     }
                 }
 
@@ -110,9 +119,18 @@ struct SettingsView: View {
                 Button("Erase", role: .destructive) {
                     appState.recordStore.deleteAll()
                     appState.settingsStore.clearRotationState()
+                    appState.coach.clearMemory()
                 }
             } message: {
-                Text("This removes all saved daily records on this device. It cannot be undone.")
+                Text("This removes all saved daily records and coach memory on this device. It cannot be undone.")
+            }
+            .alert("Clear coach memory?", isPresented: $showClearCoachConfirm) {
+                Button("Cancel", role: .cancel) {}
+                Button("Clear", role: .destructive) {
+                    appState.coach.clearMemory()
+                }
+            } message: {
+                Text("This clears your coach conversations and what the coach has learned about your preferences. Health scores and SMART goals are not affected.")
             }
         }
     }

@@ -4,6 +4,8 @@ A native iOS app that scores each day on three pillars — **sleep**, **dietary 
 
 All metrics are read directly from **Apple Health**. Data stays on the device (SwiftData, roughly 125-day retention). No server, no account, no Apple Shortcut required.
 
+**DHS Lifestyle Coach** (iOS 26 + Apple Intelligence) uses Apple’s on-device Foundation Models for a daily coaching card and Ask-the-coach chat. Chat memory stays on-device; clear it anytime in Settings.
+
 See **[ios/README.md](ios/README.md)** for Xcode setup and run instructions.
 
 ## Scoring
@@ -46,6 +48,5 @@ Suites:
 
 ## Content
 
-- **80** rotating daily suggestions across sleep / fiber / exercise / maintain.
-- **30** rotating "Feeling discouraged?" paragraphs.
-- **30** rotating "Need motivation?" paragraphs.
+- **DHS Lifestyle Coach** daily card + Ask-the-coach chat (on-device Foundation Models).
+- Legacy rotating suggestion pools remain in the codebase for record-building compatibility.

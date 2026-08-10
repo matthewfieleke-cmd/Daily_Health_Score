@@ -30,6 +30,7 @@ With your explicit permission, the app reads:
 | Sleep Analysis (asleep) | Calculate sleep hours and sleep score for each day |
 | Dietary Fiber | Calculate fiber intake and fiber score for each day |
 | Apple Exercise Time | Calculate exercise minutes and exercise score for each day |
+| Heart Rate Variability | Show sleep HRV trends and on-device research views (not part of the daily point score) |
 
 The app uses HealthKit’s read-only access for these types. It does not write health data to Apple Health unless a future version clearly states otherwise in the app and this policy.
 
@@ -44,8 +45,13 @@ The app stores locally, on your iPhone:
 - Suggestions shown for each day
 - Optional SMART goals and check-in state
 - App preferences (e.g. rotation of encouragement/motivation text)
+- Optional **DHS Lifestyle Coach** chat transcript, a short running summary, and preference notes used only to personalize on-device coaching
 
-Local retention is limited to approximately **125 days** of daily records, after which older records may be removed by the app’s storage rules.
+Local retention is limited to approximately **125 days** of daily records, after which older records may be removed by the app’s storage rules. Coach chat memory can be cleared separately in Settings.
+
+### On-device Lifestyle Coach
+
+When available, **DHS Lifestyle Coach** uses Apple’s on-device Foundation Models (Apple Intelligence). Coaching prompts and replies are processed on your device. The app does not send your Health metrics or coach chats to a developer-operated cloud backend.
 
 ### Notifications (optional)
 

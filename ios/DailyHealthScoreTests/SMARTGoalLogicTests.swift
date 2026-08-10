@@ -5,7 +5,7 @@ final class SMARTGoalLogicTests: XCTestCase {
     func test_relevantThemes_areInRequestedOrder() {
         XCTAssertEqual(
             SMARTRelevantTheme.allCases,
-            [.marriage, .parenting, .health, .relationships, .finances, .career]
+            [.marriage, .parenting, .health, .relationships, .finances, .career, .choresMisc]
         )
     }
 

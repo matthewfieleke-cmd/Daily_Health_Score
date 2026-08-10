@@ -33,6 +33,7 @@ private struct AppRootContent: View {
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
         .environmentObject(appState)
+        .environmentObject(appState.coach)
         .tint(AppTheme.primary)
         .overlay {
             HealthSyncBannerOverlay()

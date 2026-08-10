@@ -1,17 +1,14 @@
 import SwiftUI
 
-/// Today dashboard: hero score, metric row, focus suggestion, SMART Goals,
-/// and HRV. Scrolls when content exceeds the safe area. Secondary actions
-/// (refresh, support messages) live in the navigation bar.
+/// Today dashboard: hero score, metric row, DHS Lifestyle Coach, SMART Goals,
+/// and HRV. Scrolls when content exceeds the safe area. Ask coach + refresh
+/// live in the top bar.
 struct TodayView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var showDiscouragement = false
-    @State private var showMotivation = false
+    @State private var showCoachChat = false
     @State private var showHRVTrendsInfo = false
-    @State private var discText: String = ""
-    @State private var motivText: String = ""
     /// Shared 0…1 progress for coordinated dial-up (ring, numbers, bars).
     @State private var dialUpProgress: Double = 0
     @State private var hasPlayedLaunchDialUp = false
@@ -37,14 +34,7 @@ struct TodayView: View {
             .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
                 TodayTopBar(
-                    onDiscouragement: {
-                        discText = appState.settingsStore.nextDiscouragement()
-                        withAnimation { showDiscouragement = true }
-                    },
-                    onMotivation: {
-                        motivText = appState.settingsStore.nextMotivation()
-                        withAnimation { showMotivation = true }
-                    },
+                    onAskCoach: { showCoachChat = true },
                     onRefresh: {
                         Task { await appState.syncTodayFromHealth(userInitiated: true) }
                     }
@@ -52,9 +42,13 @@ struct TodayView: View {
             }
         }
         .task { await playLaunchDialUpIfNeeded() }
-        .onAppear { appState.refreshTodaySuggestionForDisplayIfNeeded() }
+        .onAppear {
+            appState.coach.refreshAvailability()
+            appState.refreshTodaySuggestionForDisplayIfNeeded()
+        }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
+            appState.coach.refreshAvailability()
             appState.refreshTodaySuggestionForDisplayIfNeeded()
         }
         .onChange(of: displayRecord?.date) { oldDate, newDate in
@@ -65,16 +59,13 @@ struct TodayView: View {
             startDialUp()
         }
         .onDisappear { dialUpTask?.cancel() }
-        .paragraphDialog(
-            isPresented: $showDiscouragement,
-            title: "Feeling discouraged?",
-            text: discText
-        )
-        .paragraphDialog(
-            isPresented: $showMotivation,
-            title: "Need motivation?",
-            text: motivText
-        )
+        .sheet(isPresented: $showCoachChat) {
+            NavigationStack {
+                LifestyleCoachChatView()
+                    .environmentObject(appState)
+                    .environmentObject(appState.coach)
+            }
+        }
         .infoScrollDialog(
             isPresented: $showHRVTrendsInfo,
             title: HRVEducationLibrary.title,
@@ -105,7 +96,7 @@ struct TodayView: View {
                     metricRow(for: record)
                         .animation(DialUpAnimation.timing, value: dialUpProgress)
 
-                    focusCard(for: record)
+                    TodayLifestyleCoachCard(record: record)
 
                     TodaySMARTGoalsCard(
                         attentionCount: SMARTGoalLogic.attentionCount(
@@ -183,13 +174,6 @@ struct TodayView: View {
                 lineWidth: 10,
                 size: 118
             )
-
-            Text(focusHeadline(for: record))
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.white.opacity(0.9))
-                .multilineTextAlignment(.center)
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -203,15 +187,6 @@ struct TodayView: View {
                 .stroke(.white.opacity(0.06), lineWidth: 0.5)
         )
         .shadow(color: AppTheme.backgroundDeep.opacity(0.25), radius: 14, x: 0, y: 6)
-    }
-
-    private func focusHeadline(for record: DailyRecord) -> String {
-        switch record.primaryFocus {
-        case .maintain: return "All goals met — stay the course."
-        case .sleep:    return "Tonight's focus: sleep."
-        case .fiber:    return "Today's focus: fiber."
-        case .exercise: return "Today's focus: movement."
-        }
     }
 
     // MARK: - Three compact metric cards in a single row
@@ -255,31 +230,6 @@ struct TodayView: View {
                 tint: AppTheme.tint(for: PrimaryFocus.exercise)
             )
         }
-    }
-
-    // MARK: - Primary focus / suggestion
-
-    private func focusCard(for record: DailyRecord) -> some View {
-        let tint = AppTheme.tint(for: record.primaryFocus)
-        return HStack(alignment: .top, spacing: 10) {
-            Image(systemName: AppTheme.symbol(for: record.primaryFocus))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(tint)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(tint.opacity(0.15)))
-            VStack(alignment: .leading, spacing: 3) {
-                Text("PRIMARY FOCUS · \(ScoreCalculator.primaryFocusLabel(record.primaryFocus).uppercased())")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .tracking(0.6)
-                Text(record.suggestion)
-                    .font(.footnote)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-        .dhsCard(padding: 10)
     }
 
     // MARK: - Banners
