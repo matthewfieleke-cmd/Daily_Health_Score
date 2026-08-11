@@ -24,6 +24,16 @@ final class LifestyleMedicineKnowledgeTests: XCTestCase {
         XCTAssertTrue(entries.contains { $0.id == "fiber-foods" })
     }
 
+    func test_retrievesConcreteMealContentForFoodQuestions() {
+        let entries = LifestyleMedicineKnowledge.retrieve(query: "what should I have for breakfast?")
+        XCTAssertTrue(entries.contains { $0.id == "meal-building" })
+    }
+
+    func test_retrievesComparisonContentForWalkingVersusRunning() {
+        let entries = LifestyleMedicineKnowledge.retrieve(query: "what is better? walking or running?")
+        XCTAssertTrue(entries.contains { $0.id == "walking-vs-running" })
+    }
+
     func test_retrievesSleepGuidanceForSleepQuestions() {
         let entries = LifestyleMedicineKnowledge.retrieve(query: "how much sleep should I get tonight?")
         XCTAssertTrue(entries.contains { $0.id == "sleep-duration" })

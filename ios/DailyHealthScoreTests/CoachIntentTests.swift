@@ -28,10 +28,39 @@ final class CoachIntentTests: XCTestCase {
         XCTAssertEqual(CoachIntentClassifier.classify("How do I start strength training"), .planning)
     }
 
+    func test_smallTalkDoesNotBecomeCoaching() {
+        XCTAssertEqual(CoachIntentClassifier.classify("What day is it today?"), .smallTalk)
+        XCTAssertEqual(CoachIntentClassifier.classify("Good morning"), .smallTalk)
+        XCTAssertEqual(CoachIntentClassifier.classify("Thanks!"), .smallTalk)
+    }
+
+    func test_recommendationAndComparisonQuestionsAreEducation() {
+        XCTAssertEqual(CoachIntentClassifier.classify("What should I have for breakfast?"), .education)
+        XCTAssertEqual(CoachIntentClassifier.classify("What is better? Walking or running?"), .education)
+        XCTAssertEqual(CoachIntentClassifier.classify("Which is better for sleep, tea or milk?"), .education)
+    }
+
+    func test_onlyPlanIntentsMayOfferANextStep() {
+        XCTAssertFalse(CoachIntent.smallTalk.allowsNextStep)
+        XCTAssertFalse(CoachIntent.education.allowsNextStep)
+        XCTAssertFalse(CoachIntent.dataLookup.allowsNextStep)
+        XCTAssertTrue(CoachIntent.planning.allowsNextStep)
+        XCTAssertTrue(CoachIntent.support.allowsNextStep)
+    }
+
+    func test_metricsAreWithheldFromEducationAndSmallTalk() {
+        XCTAssertFalse(CoachIntent.education.usesFullMetrics)
+        XCTAssertFalse(CoachIntent.smallTalk.usesFullMetrics)
+        XCTAssertTrue(CoachIntent.dataLookup.usesFullMetrics)
+        XCTAssertTrue(CoachIntent.planning.usesFullMetrics)
+    }
+
     func test_contractsEncodeCriticalRules() {
         XCTAssertTrue(CoachIntent.education.contract.contains("Do NOT recite the user's daily metrics"))
         XCTAssertTrue(CoachIntent.dataLookup.contract.contains("including the goal value"))
         XCTAssertTrue(CoachIntent.planning.contract.contains("Never write \"I will ...\" as yourself."))
         XCTAssertTrue(CoachIntent.support.contract.contains("Validate the feeling first"))
+        XCTAssertTrue(CoachIntent.smallTalk.contract.contains("No metrics"))
+        XCTAssertTrue(CoachIntent.education.contract.contains("Be concrete"))
     }
 }

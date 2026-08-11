@@ -74,6 +74,16 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(snapshot.promptBlock.contains("BELOW GOAL by 3.2 g"))
     }
 
+    func test_minimalBlockKeepsDateAndGoalsButHidesMetrics() {
+        let record = makeRecord(date: "2026-08-11", sleep: 7.2, fiber: 36.8, exercise: 1, focus: .exercise)
+        let snapshot = CoachSnapshotBuilder.build(today: record, records: [record], phase: .evening)
+
+        XCTAssertTrue(snapshot.minimalBlock.contains("August"))
+        XCTAssertTrue(snapshot.minimalBlock.contains("Fiber goal 40 g/day"))
+        XCTAssertFalse(snapshot.minimalBlock.contains("BELOW GOAL"))
+        XCTAssertTrue(snapshot.promptBlock.contains(snapshot.todayDisplay))
+    }
+
     func test_coachingDirective_protectsMetPillarsAndTargetsWeakest() {
         let record = makeRecord(date: "2026-08-11", sleep: 7.2, fiber: 12, exercise: 71, focus: .fiber)
         let snapshot = CoachSnapshotBuilder.build(today: record, records: [record], phase: .day)
