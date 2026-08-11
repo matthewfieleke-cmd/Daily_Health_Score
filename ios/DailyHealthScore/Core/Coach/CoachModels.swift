@@ -123,6 +123,10 @@ struct CoachSnapshot: Equatable, Sendable {
     var weekAvgFiber: Double?
     var weekAvgExercise: Double?
     var fiberDaysLoggedInWeek: Int
+    /// Precomputed HRV sentence; nil when HRV is not being tracked at all.
+    var hrvSummary: String?
+    /// Precomputed SMART goal lines, progress and pace already judged.
+    var smartGoals: [String] = []
 
     var metrics: [CoachMetricStatus] { [sleep, fiber, exercise] }
 
@@ -175,6 +179,14 @@ struct CoachSnapshot: Equatable, Sendable {
         }
         weekly.append("fiber logged on \(fiberDaysLoggedInWeek) of 7 days")
         lines.append(weekly.joined(separator: "; "))
+
+        if let hrvSummary {
+            lines.append(hrvSummary)
+        }
+        if !smartGoals.isEmpty {
+            lines.append("SMART GOALS (progress and pace already computed — repeat them exactly):")
+            lines.append(contentsOf: smartGoals.map { "- \($0)" })
+        }
 
         lines.append(
             "FACT RULES: Use only these numbers. Never claim a metric is above or below goal "

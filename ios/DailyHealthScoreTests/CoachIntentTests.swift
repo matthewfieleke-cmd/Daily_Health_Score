@@ -9,6 +9,31 @@ final class CoachIntentTests: XCTestCase {
         XCTAssertEqual(CoachIntentClassifier.classify("How am I doing this week?"), .dataLookup)
     }
 
+    /// The snapshot carries SMART goals and HRV, but only intents that use the
+    /// full metrics ever see it. A goal question landing in `education` would be
+    /// answered without the goal.
+    func test_goalAndHRVQuestionsReachTheDataThatAnswersThem() {
+        for question in [
+            "How am I doing on my SMART goals?",
+            "How's my walking goal going?",
+            "Where am I on my smart goals?",
+            "Am I on track?",
+            "What's my HRV been like?",
+            "How's my heart rate variability?"
+        ] {
+            let intent = CoachIntentClassifier.classify(question)
+            XCTAssertEqual(intent, .dataLookup, "\(question)")
+            XCTAssertTrue(intent.usesFullMetrics, "\(question)")
+        }
+    }
+
+    /// The same keywords must not swallow the general versions of those questions.
+    func test_conceptQuestionsAboutGoalsAndHRVStayEducational() {
+        XCTAssertEqual(CoachIntentClassifier.classify("What is a SMART goal?"), .education)
+        XCTAssertEqual(CoachIntentClassifier.classify("What is HRV?"), .education)
+        XCTAssertEqual(CoachIntentClassifier.classify("How do I stay on track?"), .planning)
+    }
+
     func test_educationQuestionsRouteToEducation() {
         XCTAssertEqual(CoachIntentClassifier.classify("What is the healthiest vegetable?"), .education)
         XCTAssertEqual(CoachIntentClassifier.classify("Why does fiber matter?"), .education)

@@ -4,12 +4,26 @@ enum CoachSnapshotBuilder {
     static func build(
         today: DailyRecord,
         records: [DailyRecord],
+        goals: [SMARTGoal] = [],
+        hrvSensitivity: HRVSensitivity = .balanced,
         phase: DayPhase = .current()
     ) -> CoachSnapshot {
         let weekKeys = DateHelpers.rollingDateKeys(days: 7)
         let weekStats = RollingStatsCalculator.compute(records: records, windowKeys: weekKeys)
         let weekRecords = weekStats?.recordsInWindow ?? []
         let fiberDays = weekRecords.filter { $0.fiberGrams > 0 }.count
+
+        // HRV only enters the prompt once some nights exist; otherwise the coach
+        // would discuss a metric the person is not collecting.
+        let hrvSummary: String? = records.contains { $0.sleepHrvSDNNMs != nil }
+            ? CoachHRVSummarizer.line(
+                for: HRVBaselineAnalyzer.analyze(
+                    records: records,
+                    todayKey: today.date,
+                    sensitivity: hrvSensitivity
+                )
+            )
+            : nil
 
         return CoachSnapshot(
             todayKey: today.date,
@@ -48,7 +62,9 @@ enum CoachSnapshotBuilder {
             weekAvgSleep: weekStats?.avgSleepHours,
             weekAvgFiber: weekStats?.avgFiberGrams,
             weekAvgExercise: weekStats?.avgExerciseMinutes,
-            fiberDaysLoggedInWeek: fiberDays
+            fiberDaysLoggedInWeek: fiberDays,
+            hrvSummary: hrvSummary,
+            smartGoals: CoachGoalSummarizer.lines(for: goals)
         )
     }
 
