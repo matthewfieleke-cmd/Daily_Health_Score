@@ -77,6 +77,14 @@ final class LifestyleCoachController: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
+        // Acute risk is answered deterministically, before availability or the model.
+        if case .escalate(let message) = CoachSafetyGate.evaluate(trimmed) {
+            memory.append(CoachChatTurn(role: .user, text: trimmed))
+            memory.append(CoachChatTurn(role: .coach, text: message))
+            chatError = nil
+            return
+        }
+
         refreshAvailability()
         guard availability == .available else {
             chatError = availability.guidance
@@ -95,6 +103,7 @@ final class LifestyleCoachController: ObservableObject {
             }
             let result = try await model.reply(
                 to: trimmed,
+                intent: CoachIntentClassifier.classify(trimmed),
                 snapshot: snapshot,
                 profile: memory.profile,
                 summary: memory.runningSummary,
