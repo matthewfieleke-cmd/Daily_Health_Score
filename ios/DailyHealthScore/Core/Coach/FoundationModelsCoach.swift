@@ -359,7 +359,7 @@ struct GenerableDailyCoachCard {
 @available(iOS 26.0, *)
 @Generable
 struct GenerableCoachChatReply {
-    @Guide(description: "Coach reply that answers the user's question in its first sentence, written in second person, 3-6 sentences, no lists, headers, or emoji.")
+    @Guide(description: "Coach reply that answers the user's question in its first sentence, written in second person. Usually 3-6 sentences; a substantive question supported by reference material may run to about 10. Plain prose, no lists, headers, or emoji.")
     var message: String
 
     @Guide(description: "True only when the user stated a durable preference or constraint.")

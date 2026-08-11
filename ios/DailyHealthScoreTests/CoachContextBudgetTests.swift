@@ -11,6 +11,12 @@ final class CoachContextBudgetTests: XCTestCase {
         XCTAssertGreaterThan(os27.summaryCharacters, os26.summaryCharacters)
     }
 
+    /// A bigger window should buy a fuller answer, not only a longer prompt.
+    func test_largerWindowReservesMoreRoomForTheReply() {
+        XCTAssertGreaterThan(os27.responseTokens, os26.responseTokens)
+        XCTAssertGreaterThanOrEqual(os26.responseTokens, 600)
+    }
+
     func test_smallWindowKeepsWorkableFloors() {
         // Below roughly one full knowledge entry, retrieval degrades to a fragment.
         XCTAssertGreaterThanOrEqual(os26.knowledgeCharacters, 900)
@@ -29,7 +35,7 @@ final class CoachContextBudgetTests: XCTestCase {
                 + budget.summaryCharacters
                 + budget.profileCharacters
             let tokens = Int(Double(characters) / CoachContextBudget.charactersPerToken)
-                + CoachContextBudget.reservedResponseTokens
+                + budget.responseTokens
             XCTAssertLessThanOrEqual(
                 tokens,
                 budget.totalTokens,

@@ -48,13 +48,21 @@ enum CoachIntent: String, Equatable, Sendable {
         case .education:
             return """
             RESPONSE CONTRACT (education or recommendation question):
-            1. Answer the question directly and substantively first, in 2–4 sentences, using the
-               reference material provided. Give real content, not a deflection.
-            2. Be concrete. Name actual foods, options, amounts, or trade-offs. Never answer with
-               filler like "consider a balanced start" or "something that supports your goals".
-            3. If the question compares two things, say what each one is better for and what
+            1. Lead with a direct verdict in the first sentence. Take a position the evidence
+               supports rather than opening with "it depends" or "while I'm not a doctor".
+            2. Then give the substance behind it, using the reference material provided:
+               what the evidence actually shows, the specific numbers, foods, or amounts, and
+               the trade-offs. Use as much of the reference material as genuinely answers
+               the question — a real question deserves a real explanation, not three sentences.
+            3. If a common counter-argument or worry exists in the reference material, name it
+               and say what the evidence says about it. That is often the most useful part.
+            4. Close with the practical takeaway — what this means for what someone actually
+               buys, cooks, or does. One or two sentences.
+            5. If the question compares two things, say what each one is better for and what
                actually decides between them.
-            4. Do NOT recite the user's daily metrics, and do NOT append an unrelated next step.
+            6. Do NOT recite the user's daily metrics, and do NOT append an unrelated next step.
+            7. Never pad. If the reference material is thin, a shorter honest answer is correct,
+               and saying what is genuinely uncertain is part of a good answer.
             """
         case .planning:
             return """

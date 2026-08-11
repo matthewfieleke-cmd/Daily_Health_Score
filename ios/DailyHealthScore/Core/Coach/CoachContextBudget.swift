@@ -12,12 +12,17 @@ struct CoachContextBudget: Equatable, Sendable {
     static let charactersPerToken = 3.5
     /// Window to assume when the framework cannot report one.
     static let fallbackTokenCapacity = 4096
-    /// Room held back for the model's own structured reply.
-    static let reservedResponseTokens = 700
     /// Fixed prompt scaffolding: snapshot, directives, contract, section headers.
-    static let scaffoldingCharacters = 2400
+    static let scaffoldingCharacters = 2800
+
+    /// Room held back for the model's own reply. A larger window should buy a
+    /// fuller answer, not just a longer prompt.
+    static func reservedResponseTokens(totalTokens: Int) -> Int {
+        min(max(totalTokens / 6, 600), 1600)
+    }
 
     let totalTokens: Int
+    let responseTokens: Int
     let knowledgeCharacters: Int
     let historyCharacters: Int
     let transcriptTurns: Int
@@ -31,7 +36,7 @@ struct CoachContextBudget: Equatable, Sendable {
         totalTokens: Int,
         instructionCharacters: Int
     ) -> Int {
-        let usableTokens = max(totalTokens - reservedResponseTokens, 0)
+        let usableTokens = max(totalTokens - reservedResponseTokens(totalTokens: totalTokens), 0)
         let usableCharacters = Int(Double(usableTokens) * charactersPerToken)
         return max(usableCharacters - instructionCharacters - scaffoldingCharacters, 1200)
     }
@@ -61,6 +66,7 @@ struct CoachContextBudget: Equatable, Sendable {
 
         return CoachContextBudget(
             totalTokens: totalTokens,
+            responseTokens: reservedResponseTokens(totalTokens: totalTokens),
             knowledgeCharacters: knowledge,
             historyCharacters: history,
             transcriptTurns: turns,

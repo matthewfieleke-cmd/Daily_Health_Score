@@ -81,6 +81,31 @@ final class LifestyleMedicineKnowledgeTests: XCTestCase {
         }
     }
 
+    func test_relatedMapPointsAtRealEntries() {
+        let ids = Set(LifestyleMedicineKnowledge.all.map(\.id))
+        for (source, targets) in LifestyleMedicineKnowledge.relatedIds {
+            XCTAssertTrue(ids.contains(source), "unknown related source \(source)")
+            for target in targets {
+                XCTAssertTrue(ids.contains(target), "unknown related target \(target) from \(source)")
+            }
+        }
+    }
+
+    /// Keyword matching only finds words the user said. A real answer about seed
+    /// oils needs the refining and cooking material nobody thinks to ask about.
+    func test_retrievalPullsInAdjacentMaterial() {
+        let entries = LifestyleMedicineKnowledge.retrieve(query: "are seed oils bad for me", limit: 6)
+        let ids = entries.map(\.id)
+        XCTAssertEqual(ids.first, "seed-oils")
+        XCTAssertTrue(ids.contains("cooking-oils"))
+        XCTAssertTrue(ids.contains("ultra-processed"))
+    }
+
+    func test_expansionNeverPrecedesADirectMatch() {
+        let entries = LifestyleMedicineKnowledge.retrieve(query: "how much fiber should I eat", limit: 4)
+        XCTAssertEqual(entries.first?.topic, .fiber)
+    }
+
     func test_unmatchedQueryReturnsNoNoise() {
         let entries = LifestyleMedicineKnowledge.retrieve(query: "zzzz qqqq")
         XCTAssertTrue(entries.isEmpty)
