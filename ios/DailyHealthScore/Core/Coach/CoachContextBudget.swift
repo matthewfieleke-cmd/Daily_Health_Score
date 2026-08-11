@@ -13,7 +13,9 @@ struct CoachContextBudget: Equatable, Sendable {
     /// Window to assume when the framework cannot report one.
     static let fallbackTokenCapacity = 4096
     /// Fixed prompt scaffolding: snapshot, directives, contract, section headers.
-    static let scaffoldingCharacters = 2800
+    /// The snapshot now also carries HRV and SMART goal status, so this reserve
+    /// has to cover a fuller worst case than the three daily metrics alone.
+    static let scaffoldingCharacters = 3200
 
     /// Ceilings any window can reach. Callers that build a block before knowing
     /// which model will answer use these, and the prompt trims to the real
