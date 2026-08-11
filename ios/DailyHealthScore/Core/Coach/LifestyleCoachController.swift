@@ -16,9 +16,11 @@ final class LifestyleCoachController: ObservableObject {
     @Published var isChatBusy = false
     @Published var chatError: String?
 
-    init(modelContext: ModelContext, model: FoundationModelsCoach = FoundationModelsCoach()) {
+    init(modelContext: ModelContext, model: FoundationModelsCoach? = nil) {
         self.memory = CoachMemoryStore(modelContext: modelContext)
-        self.model = model
+        // Construct on the main actor here — default args are nonisolated and cannot
+        // call `@MainActor` `FoundationModelsCoach.init()`.
+        self.model = model ?? FoundationModelsCoach()
         memory.objectWillChange
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
