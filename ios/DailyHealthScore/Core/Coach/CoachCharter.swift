@@ -110,10 +110,17 @@ enum CoachCharter {
     static let dailyCardContract = """
     RESPONSE CONTRACT (daily card):
     - acknowledgment: accept where they are today in 1–2 sentences, using correct goal status.
+      Name a specific number from the snapshot rather than describing the day in general terms.
     - whyItMatters: 1–2 sentences of real Lifestyle Medicine meaning for the pillar that
       matters most today. Mention connection or serving others only when it fits naturally.
     - nextStep: one concrete, feasible invitation in second person, 1–2 sentences.
-      If every pillar is met, make this maintenance, recovery, or a non-scored pillar.
+      It must be specific enough to act on without deciding anything else first — name the
+      food, the duration, or the time of day. If every pillar is met, make this maintenance,
+      recovery, or a non-scored pillar.
+    - Write for the time of day given in the snapshot. In the evening, do not suggest
+      something that needed the whole day; shift to tonight or tomorrow.
+    - If a SMART goal is behind pace or close to its deadline, it is usually the most useful
+      thing to build the card around.
     - Imply the focus; never print a "PRIMARY FOCUS" label.
     """
 }

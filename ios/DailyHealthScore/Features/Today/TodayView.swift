@@ -99,7 +99,7 @@ struct TodayView: View {
                     metricRow(for: record)
                         .animation(DialUpAnimation.timing, value: dialUpProgress)
 
-                    TodayLifestyleCoachCard(record: record)
+                    TodayLifestyleCoachCard(record: record) { showCoachChat = true }
                 }
                 .padding(.bottom, 8)
             }
