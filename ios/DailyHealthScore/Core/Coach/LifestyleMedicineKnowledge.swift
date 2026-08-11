@@ -243,6 +243,20 @@ enum LifestyleMedicineKnowledge {
             ]
         ),
         CoachKnowledgeEntry(
+            id: "meal-building",
+            topic: .nutrition,
+            title: "Building a meal, with concrete examples",
+            keywords: ["breakfast", "lunch", "dinner", "meal", "snack", "what should i eat", "what to eat", "recipe"],
+            facts: [
+                "A meal that holds people over usually pairs protein, fiber, and some fat; that combination slows gastric emptying and blunts the post-meal glucose rise.",
+                "High-fiber breakfasts, with rough fiber counts: oats with raspberries, chia, and walnuts (~12–15 g); whole-grain toast with avocado and eggs (~10 g); Greek or soy yogurt with berries and ground flax (~8–10 g); a black bean and vegetable scramble (~10 g).",
+                "Breakfast is the most repeatable meal of the day for most people, which makes it the easiest place to close a fiber gap permanently.",
+                "Refined low-fiber breakfasts (pastries, most boxed cereals, juice) tend to leave people hungry within about two hours.",
+                "Roughly 25–40 g of protein at the first meal supports satiety and muscle protein synthesis; eggs, Greek yogurt, cottage cheese, tofu scramble, or leftover beans all get there.",
+                "Batch-cooked components (a pot of grains, a pot of beans, roasted vegetables) turn meal decisions into assembly, which is what makes patterns stick."
+            ]
+        ),
+        CoachKnowledgeEntry(
             id: "hydration",
             topic: .hydration,
             title: "Hydration",
@@ -283,6 +297,33 @@ enum LifestyleMedicineKnowledge {
                 "Step-count mortality benefits accrue from roughly 2,700–4,000 steps/day and largely plateau near 6,000–8,000 for adults over 60 and 8,000–10,000 for younger adults.",
                 "Brisk walking counts as moderate intensity for most adults — the talk test (can speak, cannot sing) is a practical gauge.",
                 "Fitness gains require progressive overload: increase duration or intensity, not both aggressively at once."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "walking-vs-running",
+            topic: .aerobic,
+            title: "Walking versus running",
+            keywords: ["walking or running", "running or walking", "run or walk", "walk or run", "running", "jogging", "treadmill", "elliptical", "cycling"],
+            facts: [
+                "Neither is universally better: both lower cardiovascular and all-cause mortality risk, and which one someone actually keeps doing usually decides the outcome.",
+                "Running delivers more cardiorespiratory benefit per minute — guidelines count one minute of vigorous activity as roughly two minutes of moderate — so it is more time-efficient for a fixed weekly dose.",
+                "Walking is far lower impact; annual running injury rates in the literature commonly land somewhere between 20% and 70% of runners, mostly overuse from too much too soon.",
+                "Walking is easier to accumulate in short bouts, after meals, and while doing something else, which makes it more resilient to a busy week.",
+                "Walk-run intervals are the standard bridge: keep most volume easy and add running gradually rather than converting all at once.",
+                "For someone rebuilding a habit, the honest answer is whichever one happens on the most days."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "cardio-vs-strength",
+            topic: .physicalActivity,
+            title: "Cardio versus strength training",
+            keywords: ["cardio or", "weights or", "strength or", "lifting or", "cardio vs", "strength vs"],
+            facts: [
+                "They are complements, not competitors; guidelines ask for both because they produce different adaptations.",
+                "Aerobic work drives cardiorespiratory fitness, which is among the strongest predictors of mortality risk; resistance work preserves muscle, bone, glucose disposal, and independence with age.",
+                "Doing both is associated with lower mortality than either alone in large cohort studies.",
+                "When time is scarce, roughly two short strength sessions plus accumulated daily walking covers most of the benefit of each.",
+                "Order matters only modestly; if one goal is priority, do it first while fresh."
             ]
         ),
         CoachKnowledgeEntry(
