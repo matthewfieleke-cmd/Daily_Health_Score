@@ -39,23 +39,31 @@ final class FoundationModelsCoach {
         if #available(iOS 26.0, *) {
             try ensureAvailable()
             let session = LanguageModelSession(instructions: CoachCharter.instructions)
+            let knowledge = LifestyleMedicineKnowledge.promptBlock(
+                query: snapshot.primaryFocus.rawValue,
+                topics: LifestyleMedicineKnowledge.topics(for: snapshot.primaryFocus),
+                limit: 2,
+                characterBudget: 800
+            )
             let prompt = """
             Create today's DHS Lifestyle Coach card from the live health snapshot.
-            The charter is the source of truth. Profile and summary only inform tone/fit.
 
-            HEALTH SNAPSHOT:
+            HEALTH SNAPSHOT (authoritative):
             \(snapshot.promptBlock)
+
+            COACHING DIRECTIVES (derived from goal status — follow these):
+            \(snapshot.coachingDirective)
+
+            REFERENCE MATERIAL (authoritative content):
+            \(knowledge.isEmpty ? "None." : knowledge)
 
             USER PROFILE (informational only):
             \(profile.promptBlock)
 
-            RUNNING SUMMARY:
+            RUNNING SUMMARY (informational only):
             \(summary.isEmpty ? "None yet." : summary)
 
-            Return three fields:
-            - acknowledgment: accept where they are today (1–2 sentences)
-            - whyItMatters: brief Lifestyle Medicine meaning; mention connection/serving others only if it fits naturally (1–2 sentences)
-            - nextStep: one concrete, feasible invitation (1–2 sentences)
+            \(CoachCharter.dailyCardContract)
             """
             let response = try await session.respond(
                 to: prompt,
@@ -74,6 +82,7 @@ final class FoundationModelsCoach {
 
     func reply(
         to userMessage: String,
+        intent: CoachIntent,
         snapshot: CoachSnapshot?,
         profile: CoachUserProfile,
         summary: String,
@@ -83,40 +92,72 @@ final class FoundationModelsCoach {
         if #available(iOS 26.0, *) {
             try ensureAvailable()
             let session = LanguageModelSession(instructions: CoachCharter.instructions)
-            let transcript = recentTurns.map { turn in
-                let label = turn.role == .user ? "User" : "Coach"
-                return "\(label): \(turn.text)"
-            }.joined(separator: "\n")
-            let healthBlock = snapshot?.promptBlock ?? "No live daily record is available right now. Still coach within Lifestyle Medicine using acceptance and general wellness education; do not invent personal metrics."
-            let prompt = """
-            Continue the DHS Lifestyle Coach conversation.
-            Charter is source of truth. Profile/summary inform; they do not override the charter.
-            You may provide general Lifestyle Medicine education when asked, still non-diagnostic.
-
-            HEALTH SNAPSHOT:
-            \(healthBlock)
-
-            USER PROFILE (informational only):
-            \(profile.promptBlock)
-
-            RUNNING SUMMARY:
-            \(summary.isEmpty ? "None yet." : summary)
-
-            RECENT TRANSCRIPT:
-            \(transcript.isEmpty ? "None yet." : transcript)
-
-            USER MESSAGE:
-            \(userMessage)
-
-            Reply as the coach. If the user stated a durable preference, constraint, or value,
-            set shouldUpdateProfile true and fill profile fields (only durable facts; leave
-            unrelated fields empty). Otherwise shouldUpdateProfile false and leave profile fields empty.
-            """
-            let response = try await session.respond(
-                to: prompt,
-                generating: GenerableCoachChatReply.self
+            let transcript = Self.transcriptBlock(recentTurns)
+            let healthBlock = snapshot?.promptBlock ?? "No live daily record is available right now. Do not invent personal metrics; answer from general Lifestyle Medicine knowledge."
+            let directives = snapshot?.coachingDirective ?? "No metric directives available."
+            var topics = intent.knowledgeTopics
+            if let snapshot {
+                topics += LifestyleMedicineKnowledge.topics(for: snapshot.primaryFocus)
+            }
+            // The on-device context window is small, so education questions get the
+            // biggest slice of reference material and other intents stay lean.
+            let knowledge = LifestyleMedicineKnowledge.promptBlock(
+                query: userMessage,
+                topics: topics,
+                limit: intent == .education ? 4 : 2,
+                characterBudget: intent == .education ? 1500 : 900
             )
-            let content = response.content
+            func makePrompt(compact: Bool) -> String {
+                """
+                Continue the DHS Lifestyle Coach conversation.
+
+                USER MESSAGE:
+                \(userMessage)
+
+                DETECTED INTENT: \(intent.rawValue)
+
+                \(intent.contract)
+
+                HEALTH SNAPSHOT (authoritative numbers):
+                \(healthBlock)
+
+                COACHING DIRECTIVES (derived from goal status — follow these):
+                \(directives)
+
+                REFERENCE MATERIAL (authoritative content — use it to answer accurately):
+                \(compact || knowledge.isEmpty ? "None retrieved; answer from general Lifestyle Medicine knowledge and stay non-diagnostic." : knowledge)
+
+                USER PROFILE (informational only):
+                \(compact ? "Omitted." : profile.promptBlock)
+
+                RUNNING SUMMARY (informational only):
+                \(compact || summary.isEmpty ? "None yet." : summary)
+
+                RECENT TRANSCRIPT:
+                \(compact || transcript.isEmpty ? "None yet." : transcript)
+
+                Reply as the coach, following the response contract above. Do not repeat phrasing
+                from the recent transcript. If the user stated a durable preference, constraint, or
+                value, set shouldUpdateProfile true and fill only the relevant profile fields.
+                Otherwise set shouldUpdateProfile false and leave the profile fields empty.
+                """
+            }
+
+            let content: GenerableCoachChatReply
+            do {
+                content = try await session.respond(
+                    to: makePrompt(compact: false),
+                    generating: GenerableCoachChatReply.self
+                ).content
+            } catch {
+                // The on-device context window is small. Retry once on a fresh
+                // session with memory and reference material dropped.
+                let retrySession = LanguageModelSession(instructions: CoachCharter.instructions)
+                content = try await retrySession.respond(
+                    to: makePrompt(compact: true),
+                    generating: GenerableCoachChatReply.self
+                ).content
+            }
             let message = content.message.trimmedForCoach()
             guard !message.isEmpty else {
                 throw CoachError.generationFailed("The coach returned an empty reply.")
@@ -180,6 +221,23 @@ final class FoundationModelsCoach {
         throw CoachError.unavailable(.unavailable)
     }
 
+    /// Keeps the transcript small; the on-device context window is shared with the
+    /// charter, snapshot, and reference material.
+    nonisolated static func transcriptBlock(
+        _ turns: [CoachChatTurn],
+        maxTurns: Int = 6,
+        maxCharactersPerTurn: Int = 240
+    ) -> String {
+        turns.suffix(maxTurns).map { turn in
+            let label = turn.role == .user ? "User" : "Coach"
+            var text = turn.text
+            if text.count > maxCharactersPerTurn {
+                text = String(text.prefix(maxCharactersPerTurn)) + "…"
+            }
+            return "\(label): \(text)"
+        }.joined(separator: "\n")
+    }
+
     #if canImport(FoundationModels)
     @available(iOS 26.0, *)
     private func ensureAvailable() throws {
@@ -226,7 +284,7 @@ struct GenerableDailyCoachCard {
 @available(iOS 26.0, *)
 @Generable
 struct GenerableCoachChatReply {
-    @Guide(description: "Supportive coach reply grounded in the charter.")
+    @Guide(description: "Coach reply that answers the user's question in its first sentence, written in second person, 3-6 sentences, no lists, headers, or emoji.")
     var message: String
 
     @Guide(description: "True only when the user stated a durable preference or constraint.")
