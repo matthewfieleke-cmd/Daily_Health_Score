@@ -93,8 +93,24 @@ final class FoundationModelsCoach {
             try ensureAvailable()
             let session = LanguageModelSession(instructions: CoachCharter.instructions)
             let transcript = Self.transcriptBlock(recentTurns)
-            let healthBlock = snapshot?.promptBlock ?? "No live daily record is available right now. Do not invent personal metrics; answer from general Lifestyle Medicine knowledge."
-            let directives = snapshot?.coachingDirective ?? "No metric directives available."
+            let healthBlock: String
+            if let snapshot {
+                healthBlock = intent.usesFullMetrics ? snapshot.promptBlock : snapshot.minimalBlock
+            } else {
+                healthBlock = "No live daily record is available right now. Do not invent personal metrics; answer from general Lifestyle Medicine knowledge."
+            }
+            let nextStepPolicy: String
+            if intent.allowsNextStep {
+                nextStepPolicy = """
+                COACHING DIRECTIVES (derived from goal status — follow these):
+                \(snapshot?.coachingDirective ?? "No metric directives available.")
+                """
+            } else {
+                nextStepPolicy = """
+                NEXT STEP POLICY: This message did not ask for a plan. Do not offer a
+                suggestion, a next step, or an activity idea. Answer only what was asked.
+                """
+            }
             var topics = intent.knowledgeTopics
             if let snapshot {
                 topics += LifestyleMedicineKnowledge.topics(for: snapshot.primaryFocus)
@@ -121,8 +137,7 @@ final class FoundationModelsCoach {
                 HEALTH SNAPSHOT (authoritative numbers):
                 \(healthBlock)
 
-                COACHING DIRECTIVES (derived from goal status — follow these):
-                \(directives)
+                \(nextStepPolicy)
 
                 REFERENCE MATERIAL (authoritative content — use it to answer accurately):
                 \(compact || knowledge.isEmpty ? "None retrieved; answer from general Lifestyle Medicine knowledge and stay non-diagnostic." : knowledge)
@@ -136,10 +151,11 @@ final class FoundationModelsCoach {
                 RECENT TRANSCRIPT:
                 \(compact || transcript.isEmpty ? "None yet." : transcript)
 
-                Reply as the coach, following the response contract above. Do not repeat phrasing
-                from the recent transcript. If the user stated a durable preference, constraint, or
-                value, set shouldUpdateProfile true and fill only the relevant profile fields.
-                Otherwise set shouldUpdateProfile false and leave the profile fields empty.
+                Reply as the coach, following the response contract above. Your first sentence must
+                answer the user's message. Never repeat a sentence or a suggestion that already
+                appears in the recent transcript. If the user stated a durable preference,
+                constraint, or value, set shouldUpdateProfile true and fill only the relevant
+                profile fields. Otherwise set shouldUpdateProfile false and leave them empty.
                 """
             }
 

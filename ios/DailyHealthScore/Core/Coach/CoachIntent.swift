@@ -5,14 +5,34 @@ import Foundation
 enum CoachIntent: String, Equatable, Sendable {
     /// "What is my fiber goal?", "How did I do today?"
     case dataLookup
-    /// "What is the healthiest vegetable?", "How much sleep should I get?"
+    /// "What is the healthiest vegetable?", "Walking or running?"
     case education
     /// "Help me get started", "What should I do tomorrow?"
     case planning
     /// "I keep failing", "I'm exhausted and discouraged"
     case support
+    /// "What day is it?", "Good morning", "Thanks"
+    case smallTalk
     /// Anything else conversational.
     case general
+
+    /// Whether a suggestion belongs in the reply at all. Questions that did not
+    /// ask for a plan should never collect one.
+    var allowsNextStep: Bool {
+        switch self {
+        case .planning, .support, .general: return true
+        case .dataLookup, .education, .smallTalk: return false
+        }
+    }
+
+    /// Whether today's metric lines belong in the prompt. Withholding them is the
+    /// only reliable way to stop the model from steering every answer back to them.
+    var usesFullMetrics: Bool {
+        switch self {
+        case .dataLookup, .planning, .support, .general: return true
+        case .education, .smallTalk: return false
+        }
+    }
 
     /// Response shape appended to the chat prompt.
     var contract: String {
@@ -27,11 +47,14 @@ enum CoachIntent: String, Equatable, Sendable {
             """
         case .education:
             return """
-            RESPONSE CONTRACT (education question):
+            RESPONSE CONTRACT (education or recommendation question):
             1. Answer the question directly and substantively first, in 2–4 sentences, using the
                reference material provided. Give real content, not a deflection.
-            2. Do NOT recite the user's daily metrics in an education answer.
-            3. Optionally close with ONE short sentence connecting it to them, only if genuinely useful.
+            2. Be concrete. Name actual foods, options, amounts, or trade-offs. Never answer with
+               filler like "consider a balanced start" or "something that supports your goals".
+            3. If the question compares two things, say what each one is better for and what
+               actually decides between them.
+            4. Do NOT recite the user's daily metrics, and do NOT append an unrelated next step.
             """
         case .planning:
             return """
@@ -50,12 +73,20 @@ enum CoachIntent: String, Equatable, Sendable {
             3. Offer one small optional restart, or simply ask what would help. Advice is optional here.
             4. No metrics dump. No cheerleading clichés.
             """
+        case .smallTalk:
+            return """
+            RESPONSE CONTRACT (small talk or a simple factual question):
+            1. Answer plainly in one or two sentences. Nothing else is needed.
+            2. No metrics, no pillar education, no suggestion, no next step.
+            3. Warmth is welcome; a lecture is not.
+            """
         case .general:
             return """
             RESPONSE CONTRACT (general):
             1. Respond directly to what was actually said before adding anything else.
             2. Bring in data only when it is relevant to their message.
-            3. End with at most one question or one optional next step.
+            3. Offer a next step only if their message invites one, and never one you
+               have already suggested in this conversation.
             """
         }
     }
@@ -63,10 +94,9 @@ enum CoachIntent: String, Equatable, Sendable {
     var knowledgeTopics: [CoachKnowledgeTopic] {
         switch self {
         case .dataLookup: return [.appScoring]
-        case .education: return []
+        case .education, .smallTalk, .general: return []
         case .planning: return [.behaviorChange, .habits]
         case .support: return [.lapses, .motivationalInterviewing, .dbtSkills]
-        case .general: return []
         }
     }
 }
@@ -88,7 +118,21 @@ enum CoachIntentClassifier {
         "should i get", "how much sleep should", "how much fiber should",
         "how many gram", "why does", "why is", "what are", "is it true",
         "explain", "difference between", "recommend", "benefit of", "benefits of",
-        "good source", "what counts as", "is it better", "how does"
+        "good source", "what counts as", "how does",
+        // Comparisons.
+        "is better", "which is", "better than", "better for", "versus", "vs ",
+        "compare", "or should i",
+        // Concrete food and training recommendations.
+        "what should i have", "what should i eat", "should i eat", "what to eat",
+        "for breakfast", "for lunch", "for dinner", "good snack", "healthy snack",
+        "what do you", "any good", "give me some", "ideas for"
+    ]
+
+    private static let smallTalkPhrases = [
+        "what day is it", "what is the date", "what's the date", "whats the date",
+        "what time is it", "hello", "hey ", "hi ", "good morning", "good afternoon",
+        "good evening", "thank you", "thanks", "how are you", "who are you",
+        "what can you do", "your name", "nice to meet"
     ]
 
     private static let planningPhrases = [
@@ -109,6 +153,9 @@ enum CoachIntentClassifier {
         let text = normalize(message)
 
         if matches(text, supportPhrases) { return .support }
+        // Small talk is checked before education so "what is the date" does not
+        // trip the "what is the" education prefix.
+        if matches(text, smallTalkPhrases) { return .smallTalk }
         if matches(text, dataPhrases) { return .dataLookup }
         if matches(text, planningPhrases) { return .planning }
         if matches(text, educationPhrases) { return .education }

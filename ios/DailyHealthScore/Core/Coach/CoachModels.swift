@@ -126,6 +126,9 @@ struct CoachSnapshot: Equatable, Sendable {
 
     var metrics: [CoachMetricStatus] { [sleep, fiber, exercise] }
 
+    /// "Tuesday, August 11, 2026" — the raw key reads like a serial number aloud.
+    var todayDisplay: String { DateHelpers.formatDisplayDate(todayKey) }
+
     /// Goals restated verbatim so "what is my goal?" can be answered exactly.
     var goalsBlock: String {
         String(
@@ -136,10 +139,20 @@ struct CoachSnapshot: Equatable, Sendable {
         )
     }
 
+    /// Date and goals only. Used when the question is not about today's numbers,
+    /// because a model that can see the metrics will steer the answer toward them.
+    var minimalBlock: String {
+        """
+        TODAY: \(todayDisplay) (\(dayPhase.rawValue))
+        USER'S GOALS: \(goalsBlock)
+        Today's metric details were not requested. Do not recite or refer to them.
+        """
+    }
+
     var promptBlock: String {
         var lines: [String] = []
         lines.append("USER'S GOALS: \(goalsBlock)")
-        lines.append("DATE: \(todayKey) (\(dayPhase.rawValue))")
+        lines.append("DATE: \(todayDisplay) (\(dayPhase.rawValue))")
         lines.append(String(format: "TODAY'S SCORE: %.1f of 10", totalScore))
         lines.append("TODAY'S METRICS (comparisons already computed — repeat them exactly):")
         for metric in metrics {
