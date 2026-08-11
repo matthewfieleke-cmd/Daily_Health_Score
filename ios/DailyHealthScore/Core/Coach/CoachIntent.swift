@@ -112,7 +112,9 @@ enum CoachIntent: String, Equatable, Sendable {
 
     var knowledgeTopics: [CoachKnowledgeTopic] {
         switch self {
-        case .dataLookup: return [.appScoring]
+        // HRV rides along because a question about their own HRV needs the
+        // interpretation guidance as much as the number.
+        case .dataLookup: return [.appScoring, .hrv]
         case .education, .smallTalk, .general: return []
         case .planning: return [.behaviorChange, .habits]
         case .support: return [.lapses, .motivationalInterviewing, .dbtSkills]
@@ -129,7 +131,15 @@ enum CoachIntentClassifier {
         "my average", "my week", "my data", "my number", "my streak",
         "how did i do", "how am i doing", "what did i ", "how much did i ",
         "did i ", "have i ", "am i above", "am i below", "am i at ",
-        "today's score", "todays score", "is my ", "was my "
+        "today's score", "todays score", "is my ", "was my ",
+        // Their own goals and HRV, which the snapshot now carries. Without these
+        // a question like "how's my walking goal going?" falls through to
+        // education, which deliberately withholds their data.
+        // Kept narrow on purpose: bare "smart goal" would swallow "what is a
+        // SMART goal?", and bare "on track" would swallow "how do I stay on track?".
+        "my goals", "my smart", "goal going", "goals going",
+        "my progress", "my check in", "my checkin", "am i on track",
+        "my hrv", "my heart rate variability", "my variability", "hrv trend"
     ]
 
     private static let educationPhrases = [

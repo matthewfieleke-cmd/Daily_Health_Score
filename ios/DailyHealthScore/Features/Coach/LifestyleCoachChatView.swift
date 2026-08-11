@@ -56,6 +56,7 @@ struct LifestyleCoachChatView: View {
                     .padding(.bottom, 6)
             }
 
+            suggestionRow
             composer
         }
         .background(AppTheme.screenBackground.ignoresSafeArea())
@@ -75,7 +76,7 @@ struct LifestyleCoachChatView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(CoachCharter.philosophy)
                 .font(.subheadline.weight(.medium))
-            Text("Ask about sleep, nutrition, movement, stress, or building steady habits. Your coach uses today’s health data and remembers prior chats on this device.")
+            Text("Ask about sleep, nutrition, movement, stress, or building steady habits. Your coach can see today’s score, your goals, your SMART goals, and your HRV trend, and remembers prior chats on this device.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -98,6 +99,57 @@ struct LifestyleCoachChatView: View {
         .background(Color.orange.opacity(0.12))
     }
 
+    /// A blank text field is the hardest moment in the feature — people do not
+    /// know what a coach is for until they see a good question. These are built
+    /// from today's real numbers, and they get out of the way once typing starts.
+    @ViewBuilder
+    private var suggestionRow: some View {
+        let suggestions = CoachPromptSuggestions.build(
+            record: todayRecord,
+            goals: appState.smartGoalStore.goals
+        )
+        if coach.availability == .available,
+           !coach.isChatBusy,
+           draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           !suggestions.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(suggestions, id: \.self) { suggestion in
+                        Button {
+                            send(suggestion)
+                        } label: {
+                            Text(suggestion)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(AppTheme.primary)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(AppTheme.primary.opacity(0.10))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .padding(.bottom, 2)
+        }
+    }
+
+    private func send(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        draft = ""
+        Task {
+            await coach.sendChatMessage(
+                trimmed,
+                todayRecord: todayRecord,
+                records: appState.recordStore.records,
+                goals: appState.smartGoalStore.goals,
+                hrvSensitivity: appState.settingsStore.hrvSensitivity
+            )
+        }
+    }
+
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 10) {
             TextField("Ask your coach…", text: $draft, axis: .vertical)
@@ -110,15 +162,7 @@ struct LifestyleCoachChatView: View {
                 .lineLimit(1...5)
 
             Button {
-                let text = draft
-                draft = ""
-                Task {
-                    await coach.sendChatMessage(
-                        text,
-                        todayRecord: todayRecord,
-                        records: appState.recordStore.records
-                    )
-                }
+                send(draft)
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 30))

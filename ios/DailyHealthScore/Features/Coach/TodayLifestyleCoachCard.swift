@@ -1,11 +1,18 @@
 import SwiftUI
 
-/// Richer Today card: acknowledgment, why it matters, next step — or setup/status.
+/// Today card: acknowledgment, why it matters, and the next step to act on.
+/// Falls back to the app's own focus suggestion whenever the model has nothing,
+/// so the card is never dead space on a device without Apple Intelligence.
 struct TodayLifestyleCoachCard: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var coach: LifestyleCoachController
 
     let record: DailyRecord?
+    var onAskCoach: (() -> Void)?
+
+    /// Part of the refresh identity: a card written this morning should be
+    /// rewritten once the evening starts, not left sitting there all day.
+    private var phase: DayPhase { .current() }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -13,24 +20,28 @@ struct TodayLifestyleCoachCard: View {
 
             if coach.availability != .available {
                 statusBody
+                // Without Apple Intelligence this card would otherwise never say
+                // anything, so it falls back to the focus suggestion the app
+                // computes on its own.
+                fallbackBody
             } else if coach.isGeneratingDailyCard && coach.dailyCard == nil {
                 loadingBody
             } else if let card = coach.dailyCard {
                 cardBody(card)
-            } else if let error = coach.dailyCardError {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                askCoachButton
             } else {
-                statusBody
+                fallbackBody
+                askCoachButton
             }
         }
         .dhsCard(padding: 14)
-        .task(id: record?.date) {
+        .task(id: "\(record?.date ?? "")#\(phase.rawValue)") {
             guard let record else { return }
             await coach.ensureDailyCard(
                 for: record,
-                records: appState.recordStore.records
+                records: appState.recordStore.records,
+                goals: appState.smartGoalStore.goals,
+                hrvSensitivity: appState.settingsStore.hrvSensitivity
             )
         }
         .onChange(of: appState.userRefreshToken) { _, _ in
@@ -39,9 +50,36 @@ struct TodayLifestyleCoachCard: View {
                 await coach.ensureDailyCard(
                     for: record,
                     records: appState.recordStore.records,
+                    goals: appState.smartGoalStore.goals,
+                    hrvSensitivity: appState.settingsStore.hrvSensitivity,
                     force: true
                 )
             }
+        }
+    }
+
+    @ViewBuilder
+    private var askCoachButton: some View {
+        if let onAskCoach {
+            Button(action: onAskCoach) {
+                HStack(spacing: 6) {
+                    Image(systemName: "bubble.left.and.text.bubble.right")
+                        .font(.caption)
+                    Text("Talk this through")
+                        .font(.footnote.weight(.semibold))
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(AppTheme.primary)
+                .padding(.vertical, 9)
+                .padding(.horizontal, 11)
+                .frame(maxWidth: .infinity)
+                .background(AppTheme.primary.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -90,7 +128,10 @@ struct TodayLifestyleCoachCard: View {
         VStack(alignment: .leading, spacing: 10) {
             coachSection(title: "With you", text: card.acknowledgment)
             coachSection(title: "Why it matters", text: card.whyItMatters)
-            coachSection(title: "Next step", text: card.nextStep)
+            // The next step is the only part that asks anything of the reader,
+            // so it gets the visual weight rather than sitting third in a stack
+            // of three identical paragraphs.
+            nextStepSection(card.nextStep)
         }
     }
 
@@ -105,5 +146,39 @@ struct TodayLifestyleCoachCard: View {
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    /// Shown when the model has nothing for us: no Apple Intelligence, or a
+    /// generation that failed. A raw framework error is not useful to read.
+    @ViewBuilder
+    private var fallbackBody: some View {
+        let suggestion = record?.suggestion.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !suggestion.isEmpty {
+            nextStepSection(suggestion, title: "Today's focus")
+        }
+    }
+
+    private func nextStepSection(_ text: String, title: String = "Next step") -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: "arrow.forward.circle.fill")
+                .font(.footnote)
+                .foregroundStyle(AppTheme.leaf)
+                .padding(.top, 1)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppTheme.leaf)
+                    .tracking(0.5)
+                Text(text)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.leaf.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }

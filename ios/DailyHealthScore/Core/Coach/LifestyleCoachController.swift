@@ -34,11 +34,21 @@ final class LifestyleCoachController: ObservableObject {
         availability = model.availability
     }
 
-    func ensureDailyCard(for record: DailyRecord, records: [DailyRecord], force: Bool = false) async {
+    func ensureDailyCard(
+        for record: DailyRecord,
+        records: [DailyRecord],
+        goals: [SMARTGoal] = [],
+        hrvSensitivity: HRVSensitivity = .balanced,
+        force: Bool = false
+    ) async {
         refreshAvailability()
-        let todayKey = record.date
+        let phase = DayPhase.current()
+        // Keyed by phase as well as day: a card written at 7am was written when
+        // fiber and exercise were still zero, and it should not still be sitting
+        // on the dashboard at 9pm.
+        let cacheKey = "\(record.date)#\(phase.rawValue)"
         if !force,
-           memory.cachedDailyCardDateKey == todayKey,
+           memory.cachedDailyCardDateKey == cacheKey,
            let cached = memory.cachedDailyCard {
             dailyCard = cached
             dailyCardError = nil
@@ -56,13 +66,19 @@ final class LifestyleCoachController: ObservableObject {
         defer { isGeneratingDailyCard = false }
 
         do {
-            let snapshot = CoachSnapshotBuilder.build(today: record, records: records)
+            let snapshot = CoachSnapshotBuilder.build(
+                today: record,
+                records: records,
+                goals: goals,
+                hrvSensitivity: hrvSensitivity,
+                phase: phase
+            )
             let card = try await model.generateDailyCard(
                 snapshot: snapshot,
                 profile: memory.profile,
                 summary: memory.runningSummary
             )
-            memory.saveDailyCard(card, dateKey: todayKey)
+            memory.saveDailyCard(card, dateKey: cacheKey)
             dailyCard = card
         } catch {
             dailyCardError = error.localizedDescription
@@ -72,7 +88,9 @@ final class LifestyleCoachController: ObservableObject {
     func sendChatMessage(
         _ text: String,
         todayRecord: DailyRecord?,
-        records: [DailyRecord]
+        records: [DailyRecord],
+        goals: [SMARTGoal] = [],
+        hrvSensitivity: HRVSensitivity = .balanced
     ) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -99,7 +117,12 @@ final class LifestyleCoachController: ObservableObject {
 
         do {
             let snapshot = todayRecord.map {
-                CoachSnapshotBuilder.build(today: $0, records: records)
+                CoachSnapshotBuilder.build(
+                    today: $0,
+                    records: records,
+                    goals: goals,
+                    hrvSensitivity: hrvSensitivity
+                )
             }
             // Past-day questions are resolved and compared in Swift, so the model
             // never does date arithmetic.

@@ -13,7 +13,9 @@ struct CoachContextBudget: Equatable, Sendable {
     /// Window to assume when the framework cannot report one.
     static let fallbackTokenCapacity = 4096
     /// Fixed prompt scaffolding: snapshot, directives, contract, section headers.
-    static let scaffoldingCharacters = 2800
+    /// The snapshot now also carries HRV and SMART goal status, so this reserve
+    /// has to cover a fuller worst case than the three daily metrics alone.
+    static let scaffoldingCharacters = 3200
 
     /// Ceilings any window can reach. Callers that build a block before knowing
     /// which model will answer use these, and the prompt trims to the real
@@ -26,6 +28,10 @@ struct CoachContextBudget: Equatable, Sendable {
     static func reservedResponseTokens(totalTokens: Int) -> Int {
         min(max(totalTokens / 6, 600), 1600)
     }
+
+    /// Characters per token is an estimate, and filling a window to the last
+    /// token means any text that runs denser than the estimate overflows.
+    static let safetyMarginTokens = 120
 
     let totalTokens: Int
     let responseTokens: Int
@@ -42,7 +48,10 @@ struct CoachContextBudget: Equatable, Sendable {
         totalTokens: Int,
         instructionCharacters: Int
     ) -> Int {
-        let usableTokens = max(totalTokens - reservedResponseTokens(totalTokens: totalTokens), 0)
+        let usableTokens = max(
+            totalTokens - reservedResponseTokens(totalTokens: totalTokens) - safetyMarginTokens,
+            0
+        )
         let usableCharacters = Int(Double(usableTokens) * charactersPerToken)
         return max(usableCharacters - instructionCharacters - scaffoldingCharacters, 1200)
     }
@@ -64,11 +73,24 @@ struct CoachContextBudget: Equatable, Sendable {
         // the worst case, and the small window has no room for an overrun.
         // Upper bounds are generous enough for the 32K server window without
         // letting a prompt grow past the point where more material helps.
-        let knowledge = clamp(Int(Double(available) * 0.28), min: 900, max: 12_000)
-        let history = clamp(Int(Double(available) * 0.10), min: 400, max: maxHistoryCharacters)
-        let transcript = clamp(Int(Double(available) * 0.30), min: 480, max: 16_000)
-        let summary = clamp(Int(Double(available) * 0.10), min: 300, max: 2_000)
-        let profile = clamp(Int(Double(available) * 0.09), min: 260, max: 1_600)
+        var knowledge = clamp(Int(Double(available) * 0.28), min: 900, max: 12_000)
+        var history = clamp(Int(Double(available) * 0.10), min: 400, max: maxHistoryCharacters)
+        var transcript = clamp(Int(Double(available) * 0.30), min: 480, max: 16_000)
+        var summary = clamp(Int(Double(available) * 0.10), min: 300, max: 2_000)
+        var profile = clamp(Int(Double(available) * 0.09), min: 260, max: 1_600)
+
+        // Those floors can outrun a small window as the charter grows, and a
+        // budget that promises more room than exists is how prompts get silently
+        // truncated. Scale every block back together instead.
+        let requested = knowledge + history + transcript + summary + profile
+        if requested > available {
+            let scale = Double(available) / Double(requested)
+            knowledge = Swift.max(Int(Double(knowledge) * scale), 500)
+            history = Swift.max(Int(Double(history) * scale), 200)
+            transcript = Swift.max(Int(Double(transcript) * scale), 300)
+            summary = Swift.max(Int(Double(summary) * scale), 150)
+            profile = Swift.max(Int(Double(profile) * scale), 130)
+        }
 
         let turns = clamp(transcript / 280, min: 2, max: maxTranscriptTurns)
 

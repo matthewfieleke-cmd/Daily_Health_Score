@@ -260,6 +260,7 @@ final class FoundationModelsCoach {
             You maintain a short running summary for DHS Lifestyle Coach.
             Write neutral, accepting, non-judgmental notes.
             Include themes, what helped, open threads, and emotional stance if relevant.
+            Record anything the person said they would try, so it can be followed up on once.
             Exclude raw daily metric tables and diagnostic labels.
             Keep under 900 characters.
             """)
