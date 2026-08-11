@@ -230,7 +230,7 @@ enum CoachAvailabilityStatus: Equatable {
         case .available:
             return "DHS Lifestyle Coach is ready on this device."
         case .deviceNotEligible:
-            return "DHS Lifestyle Coach needs an Apple Intelligence–capable iPhone on iOS 26."
+            return "DHS Lifestyle Coach needs an Apple Intelligence–capable iPhone on iOS 26 or later."
         case .appleIntelligenceNotEnabled:
             return "Turn on Apple Intelligence in Settings to use DHS Lifestyle Coach."
         case .modelNotReady:

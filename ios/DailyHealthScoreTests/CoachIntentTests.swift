@@ -55,6 +55,38 @@ final class CoachIntentTests: XCTestCase {
         XCTAssertTrue(CoachIntent.planning.usesFullMetrics)
     }
 
+    /// A question landing in `general` would let the reply attach metrics and an
+    /// unrequested next step, which is the failure mode this routing exists to stop.
+    func test_questionsNeverFallThroughToGeneral() {
+        let questions = [
+            "Are seed oils bad for me?",
+            "Should I take creatine?",
+            "Is walking as good as running?",
+            "Do I need a multivitamin",
+            "Is a plant based diet healthy?",
+            "Tell me about melatonin"
+        ]
+        for question in questions {
+            XCTAssertEqual(CoachIntentClassifier.classify(question), .education, question)
+        }
+    }
+
+    func test_statementsStayGeneral() {
+        XCTAssertEqual(CoachIntentClassifier.classify("I ate a big salad today"), .general)
+        XCTAssertEqual(CoachIntentClassifier.classify("My knee hurts when I walk"), .general)
+    }
+
+    func test_resolvedHistoryReferenceForcesDataLookup() {
+        XCTAssertEqual(
+            CoachIntentClassifier.classify("sleep versus fiber on tuesday", hasHistoryReference: true),
+            .dataLookup
+        )
+        XCTAssertEqual(
+            CoachIntentClassifier.classify("I feel like a failure, how did I do yesterday", hasHistoryReference: true),
+            .support
+        )
+    }
+
     func test_contractsEncodeCriticalRules() {
         XCTAssertTrue(CoachIntent.education.contract.contains("Do NOT recite the user's daily metrics"))
         XCTAssertTrue(CoachIntent.dataLookup.contract.contains("including the goal value"))

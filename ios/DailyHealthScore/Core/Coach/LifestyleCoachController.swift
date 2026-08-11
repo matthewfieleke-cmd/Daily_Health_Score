@@ -98,16 +98,29 @@ final class LifestyleCoachController: ObservableObject {
         memory.append(CoachChatTurn(role: .user, text: trimmed))
 
         do {
+            let budget = await FoundationModelsCoach.contextBudget()
             let snapshot = todayRecord.map {
                 CoachSnapshotBuilder.build(today: $0, records: records)
             }
+            // Past-day questions are resolved and compared in Swift, so the model
+            // never does date arithmetic.
+            let historyBlock = CoachHistoryResolver.block(
+                message: trimmed,
+                records: records,
+                todayKey: todayRecord?.date ?? DateHelpers.localDateKey(),
+                characterBudget: budget.historyCharacters
+            )
             let result = try await model.reply(
                 to: trimmed,
-                intent: CoachIntentClassifier.classify(trimmed),
+                intent: CoachIntentClassifier.classify(
+                    trimmed,
+                    hasHistoryReference: historyBlock != nil
+                ),
                 snapshot: snapshot,
+                historyBlock: historyBlock,
                 profile: memory.profile,
                 summary: memory.runningSummary,
-                recentTurns: memory.recentTurnsForPrompt()
+                recentTurns: memory.recentTurnsForPrompt(limit: budget.transcriptTurns)
             )
             memory.append(CoachChatTurn(role: .coach, text: result.message))
             if let profileUpdate = result.profileUpdate {
