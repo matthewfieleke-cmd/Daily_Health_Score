@@ -39,6 +39,12 @@ enum CoachKnowledgeTopic: String, CaseIterable, Sendable {
     case hrv
     case weightNeutral
     case appScoring
+    case supplements
+    case nutritionMyths
+    case exerciseMyths
+    case cardiometabolic
+    case lifeStages
+    case practicalEating
 }
 
 struct CoachKnowledgeEntry: Equatable, Sendable {
@@ -98,6 +104,11 @@ enum LifestyleMedicineKnowledge {
             let candidate = output.isEmpty ? entry.block : output + "\n\n" + entry.block
             if candidate.count > characterBudget { break }
             output = candidate
+        }
+        // A single entry can exceed a tight budget. Returning a truncated best
+        // match beats returning nothing and letting the model improvise.
+        if output.isEmpty, let first = entries.first {
+            output = first.block.limitedToCoachBudget(characterBudget)
         }
         return output
     }
@@ -617,6 +628,476 @@ enum LifestyleMedicineKnowledge {
         )
     ]
 
+    // MARK: - Supplements
+
+    static let supplementEntries: [CoachKnowledgeEntry] = [
+        CoachKnowledgeEntry(
+            id: "supplement-basics",
+            topic: .supplements,
+            title: "How to think about supplements",
+            keywords: ["supplement", "multivitamin", "vitamins", "pills", "should i take"],
+            facts: [
+                "Supplements are regulated as food, not drugs, in the US: manufacturers do not have to prove efficacy or purity before sale, and label accuracy varies.",
+                "Large trials of multivitamins in well-nourished adults show no reduction in cardiovascular events, cancer, or mortality; they are insurance against deficiency, not a health upgrade.",
+                "The strongest cases are for correcting a documented gap — vitamin B12 on a vegan diet, vitamin D with little sun exposure, iron with diagnosed deficiency, folate in pregnancy.",
+                "Third-party certification (NSF Certified for Sport, USP, Informed Choice) is the practical way to check what is actually in a bottle.",
+                "Supplements interact with medications; anything ongoing is worth running past a clinician or pharmacist."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "creatine",
+            topic: .supplements,
+            title: "Creatine monohydrate",
+            keywords: ["creatine", "monohydrate"],
+            facts: [
+                "Creatine monohydrate is among the best-studied ergogenic aids: roughly 3–5 g/day increases muscle phosphocreatine and modestly improves strength and lean mass gains alongside resistance training.",
+                "Loading protocols are optional; 3–5 g/day reaches saturation in about three to four weeks.",
+                "It does not damage kidneys in healthy adults across decades of trials, though anyone with kidney disease should ask their clinician first.",
+                "Early weight gain of one to two kilograms is intracellular water, not fat.",
+                "Evidence for cognitive or mood benefits is preliminary and mostly in sleep-deprived or vegetarian populations."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "protein-powder",
+            topic: .supplements,
+            title: "Protein powder and shakes",
+            keywords: ["protein powder", "whey", "shake", "casein", "protein supplement"],
+            facts: [
+                "Protein powder is a convenience food, not a superior protein source; total daily protein matters far more than form or timing.",
+                "Whey is high in leucine and absorbs quickly; soy, pea, and blended plant powders work well when total intake and variety are adequate.",
+                "Most people meeting 1.2–1.6 g/kg/day from food gain nothing from adding powder.",
+                "Some powders carry heavy-metal or contaminant concerns; third-party certification addresses this.",
+                "A shake is a poor substitute for a meal in fiber, micronutrients, and satiety."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "vitamin-d",
+            topic: .supplements,
+            title: "Vitamin D",
+            keywords: ["vitamin d", "d3", "sunshine vitamin", "sun exposure"],
+            facts: [
+                "The RDA is 600 IU/day for adults under 70 and 800 IU/day after 70; the tolerable upper intake level is 4,000 IU/day.",
+                "Deficiency is genuinely common in people with limited sun exposure, darker skin, higher body weight, or northern latitudes in winter.",
+                "Large randomized trials (VITAL, D-Health) found no reduction in cardiovascular disease, cancer incidence, or all-cause mortality from supplementing people who were not deficient.",
+                "The clear benefit is skeletal: correcting deficiency supports bone health, and vitamin D plus calcium modestly reduces fracture risk in older adults.",
+                "Blood levels vary enough between people that testing beats guessing before high-dose supplementation."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "sleep-supplements",
+            topic: .supplements,
+            title: "Melatonin, magnesium, and sleep supplements",
+            keywords: ["melatonin", "magnesium", "sleep supplement", "sleep aid", "sleeping pill"],
+            facts: [
+                "Melatonin is a circadian timing signal more than a sedative: low doses of 0.5–1 mg taken a few hours before target bedtime shift the clock more effectively than the 5–10 mg doses sold everywhere.",
+                "Its strongest evidence is for jet lag and delayed sleep phase; effects on chronic insomnia are small, averaging under ten minutes of extra sleep in meta-analyses.",
+                "US melatonin products are frequently mislabeled, with measured content ranging far from the stated dose.",
+                "Magnesium supplementation improves sleep only modestly and mostly in people with low intake or older adults; food sources include legumes, nuts, seeds, and leafy greens.",
+                "Cognitive behavioral therapy for insomnia outperforms every sleep supplement and is the guideline-recommended first-line treatment."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "omega-3",
+            topic: .supplements,
+            title: "Omega-3 fats and fish oil",
+            keywords: ["omega", "fish oil", "epa", "dha", "flax", "chia omega"],
+            facts: [
+                "Two servings of fatty fish per week is the guideline-level recommendation; salmon, sardines, mackerel, herring, and trout are the practical sources.",
+                "Fish oil supplements have not reduced cardiovascular events in general-population trials such as VITAL and ASCEND.",
+                "High-dose prescription EPA lowers triglycerides substantially and is a clinical decision, not a wellness one.",
+                "Plant omega-3 (ALA from flax, chia, walnuts) converts to EPA and DHA inefficiently, so vegans often consider an algae-based DHA source.",
+                "Doses above about 3 g/day may increase bleeding risk and atrial fibrillation signals have appeared in some trials."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "probiotics-fermented",
+            topic: .supplements,
+            title: "Probiotics and fermented foods",
+            keywords: ["probiotic", "fermented", "yogurt", "kefir", "kimchi", "sauerkraut", "kombucha"],
+            facts: [
+                "Probiotic effects are strain-specific and condition-specific; 'probiotic' on a label says almost nothing about what a product does.",
+                "The clearest evidence is for preventing antibiotic-associated diarrhea and for specific strains in irritable bowel syndrome.",
+                "Most supplemented strains are transient — they pass through rather than colonize.",
+                "A small randomized trial found fermented foods increased microbiome diversity and lowered inflammatory markers more than a high-fiber diet did, though this needs replication.",
+                "Feeding existing gut bacteria with fiber and plant variety has stronger evidence than adding new bacteria from a capsule."
+            ]
+        )
+    ]
+
+    // MARK: - Frequently asked nutrition questions
+
+    static let nutritionQuestionEntries: [CoachKnowledgeEntry] = [
+        CoachKnowledgeEntry(
+            id: "seed-oils",
+            topic: .nutritionMyths,
+            title: "Seed oils and cooking fats",
+            keywords: ["seed oil", "canola", "vegetable oil", "sunflower", "soybean oil", "linoleic", "olive oil"],
+            facts: [
+                "Randomized trials consistently show that replacing saturated fat with polyunsaturated vegetable oils lowers LDL cholesterol and cardiovascular events.",
+                "Higher blood levels of linoleic acid, the main omega-6 in seed oils, are associated with lower risk of cardiovascular disease and type 2 diabetes in pooled cohort data.",
+                "Controlled feeding studies have not found that dietary linoleic acid raises inflammatory markers in humans, which is the central claim of the anti-seed-oil argument.",
+                "Seed oils cluster in ultra-processed foods, so the association people notice is largely about the foods, not the oil.",
+                "Extra virgin olive oil has the deepest outcome evidence (PREDIMED) and is a reasonable default; canola, avocado, and high-oleic oils are fine for higher-heat cooking."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "sweeteners",
+            topic: .nutritionMyths,
+            title: "Artificial and non-sugar sweeteners",
+            keywords: ["artificial sweetener", "aspartame", "sucralose", "stevia", "diet soda", "erythritol", "sugar free"],
+            facts: [
+                "Approved sweeteners have large safety margins; typical consumption sits far below the acceptable daily intake, and the 2023 IARC classification of aspartame as 'possibly carcinogenic' came with JECFA reaffirming its existing intake limit.",
+                "WHO issued a conditional recommendation in 2023 against using non-sugar sweeteners for weight control, based on low-certainty evidence of no long-term benefit.",
+                "Swapping sugar-sweetened beverages for diet versions does reduce sugar and calorie intake in the short term, and randomized trials show modest weight benefit versus staying on sugar.",
+                "Observational signals linking erythritol to cardiovascular events exist but are confounded and unconfirmed.",
+                "Water, sparkling water, and unsweetened tea sidestep the debate entirely; diet drinks are best framed as a bridge, not a destination."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "detox-cleanse",
+            topic: .nutritionMyths,
+            title: "Detoxes, cleanses, and 'toxins'",
+            keywords: ["detox", "cleanse", "juice cleanse", "toxins", "flush", "reset diet"],
+            facts: [
+                "The liver, kidneys, lungs, and gut clear metabolic waste continuously; no commercial cleanse has been shown to improve their function.",
+                "No detox product has demonstrated clinical benefit in a controlled trial, and 'toxins' is almost never specified by the products claiming to remove them.",
+                "Juice cleanses remove the fiber that makes fruit and vegetables valuable and can spike blood sugar.",
+                "Risks include inadequate protein, electrolyte disturbance with laxative-based programs, and rebound eating.",
+                "What actually supports clearance pathways is unglamorous: adequate fluid, fiber, protein, sleep, and less alcohol."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "red-processed-meat",
+            topic: .nutritionMyths,
+            title: "Red and processed meat",
+            keywords: ["red meat", "processed meat", "bacon", "deli", "steak", "sausage", "hot dog"],
+            facts: [
+                "IARC classifies processed meat as a Group 1 carcinogen and red meat as Group 2A (probably carcinogenic); Group 1 describes strength of evidence, not size of risk.",
+                "Pooled cohort data associate each 50 g/day of processed meat with roughly 16–18% higher relative colorectal cancer risk — a meaningful but modest absolute increase.",
+                "World Cancer Research Fund guidance is to limit red meat to about three portions weekly (350–500 g cooked) and eat very little processed meat.",
+                "Unprocessed red meat is nutrient-dense — heme iron, B12, zinc, high-quality protein — so the question is frequency, not prohibition.",
+                "Swapping some red meat for legumes, fish, or poultry captures most of the modeled benefit without eliminating anything."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "eggs-cholesterol",
+            topic: .nutritionMyths,
+            title: "Eggs and dietary cholesterol",
+            keywords: ["egg", "eggs", "dietary cholesterol", "yolk"],
+            facts: [
+                "Dietary cholesterol raises blood LDL far less than saturated and trans fat do for most people, which is why the 300 mg/day cap was dropped from US dietary guidance.",
+                "Meta-analyses of cohorts generally find no association between up to about one egg per day and cardiovascular disease in generally healthy adults.",
+                "Response varies: a minority are hyper-responders, and people with type 2 diabetes or familial hypercholesterolemia show less reassuring data.",
+                "Eggs are inexpensive, satiating, and rich in choline, lutein, and complete protein.",
+                "What accompanies the egg — bacon, sausage, buttered white toast — usually matters more than the egg."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "soy",
+            topic: .nutritionMyths,
+            title: "Soy foods and phytoestrogens",
+            keywords: ["soy", "tofu", "edamame", "phytoestrogen", "soy milk", "tempeh"],
+            facts: [
+                "Clinical meta-analyses show soy foods and isoflavones do not lower testosterone, raise estrogen, or feminize men.",
+                "Soy intake is associated with neutral-to-favorable breast cancer outcomes, including among survivors; guidance from major cancer organizations treats soy foods as safe.",
+                "About 25 g/day of soy protein produces a small LDL reduction and carries an FDA heart-health claim.",
+                "Minimally processed forms — tofu, tempeh, edamame, soy milk — carry the evidence; isolated isoflavone supplements do not.",
+                "Soy is one of the few complete plant proteins, which makes it useful for people reducing animal foods."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "gluten-dairy",
+            topic: .nutritionMyths,
+            title: "Gluten and dairy",
+            keywords: ["gluten", "celiac", "dairy", "lactose", "milk", "cheese", "gluten free"],
+            facts: [
+                "Gluten avoidance is medically necessary for celiac disease (about 1% of people), wheat allergy, and diagnosed non-celiac gluten sensitivity.",
+                "For everyone else, gluten-free eating shows no health benefit and often lowers whole-grain and fiber intake.",
+                "Celiac testing requires eating gluten beforehand, so it is worth testing before cutting it out.",
+                "Lactose intolerance is common and dose-dependent; aged cheeses and yogurt are usually tolerated because fermentation reduces lactose.",
+                "Fermented dairy such as yogurt and kefir is associated with neutral-to-favorable cardiometabolic outcomes; fortified soy milk is the closest non-dairy nutritional match."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "organic-produce",
+            topic: .nutritionMyths,
+            title: "Organic versus conventional produce",
+            keywords: ["organic", "pesticide", "dirty dozen", "conventional", "grass fed"],
+            facts: [
+                "Systematic reviews find minimal nutritional difference between organic and conventional produce, apart from somewhat higher antioxidant and lower cadmium levels in organic.",
+                "Organic produce does lower measured pesticide residue exposure, though residues on conventional produce in the US are typically far below regulatory safety thresholds.",
+                "No trial has shown a health outcome difference; cohort evidence is mixed and heavily confounded by income and overall diet quality.",
+                "Total vegetable and fruit intake predicts outcomes much more strongly than whether they were organically grown.",
+                "If cost forces a trade-off, buying more conventional, frozen, or canned produce beats buying less organic produce."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "carbs-and-low-carb",
+            topic: .nutritionMyths,
+            title: "Carbohydrates, keto, and low-carb eating",
+            keywords: ["carb", "carbs", "keto", "low carb", "ketogenic", "atkins", "carbohydrate"],
+            facts: [
+                "Carbohydrate quality separates outcomes far more than quantity: whole grains, legumes, fruit, and vegetables associate with lower disease risk while refined starch and added sugar do the opposite.",
+                "Head-to-head trials of low-carb versus low-fat diets show similar average weight change at twelve months; adherence dominates the result.",
+                "Very low-carb and ketogenic patterns can improve triglycerides and glycemic control short term, though LDL rises in a subset of people.",
+                "Cohort data suggest a U-shaped mortality curve, with the lowest risk around 50% of calories from carbohydrate and higher risk at both extremes when replacements are animal-based.",
+                "Cutting carbohydrate usually also cuts fiber, which is the piece worth protecting deliberately."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "metabolism",
+            topic: .nutritionMyths,
+            title: "Metabolism and 'starvation mode'",
+            keywords: ["metabolism", "slow metabolism", "metabolic rate", "starvation mode", "burn calories"],
+            facts: [
+                "Resting metabolic rate accounts for roughly 60–70% of daily energy use and scales mostly with fat-free mass, which is why bigger and more muscular bodies burn more at rest.",
+                "Large doubly-labeled-water analyses found total energy expenditure adjusted for body composition is stable from about age 20 to 60, then declines slowly — the 'metabolism crashes at 40' story is not supported.",
+                "Adaptive thermogenesis after weight loss is real but modest, on the order of tens to a couple hundred calories per day, not a shutdown.",
+                "Non-exercise activity — walking, fidgeting, standing — varies enormously between people and often drops silently during dieting.",
+                "There is no food, spice, or supplement that meaningfully 'boosts metabolism'; muscle mass and daily movement are the levers that exist."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "meal-timing",
+            topic: .nutritionMyths,
+            title: "Meal timing and late eating",
+            keywords: ["meal timing", "late eating", "night eating", "before bed", "eat after", "when to eat"],
+            facts: [
+                "Total intake and food quality dominate; timing is a secondary lever for most people.",
+                "Controlled crossover studies do show worse glucose tolerance and greater hunger when the same calories are eaten late in the evening, reflecting circadian rhythms in insulin sensitivity.",
+                "Large meals within roughly three hours of bed worsen reflux and fragment sleep for many people.",
+                "A light protein or carbohydrate snack before bed does not harm sleep and can help people who wake hungry.",
+                "Skipping breakfast is not inherently harmful; in practice it often shifts intake later and raises evening eating."
+            ]
+        )
+    ]
+
+    // MARK: - Frequently asked exercise questions
+
+    static let exerciseQuestionEntries: [CoachKnowledgeEntry] = [
+        CoachKnowledgeEntry(
+            id: "spot-reduction",
+            topic: .exerciseMyths,
+            title: "Spot reduction and 'toning'",
+            keywords: ["spot reduction", "belly fat", "toning", "tone up", "target fat", "love handles", "abs"],
+            facts: [
+                "Training a body part does not preferentially remove fat from it; controlled studies of localized training show no regional fat loss advantage.",
+                "Where fat is lost is largely genetic and hormonal, and it is not something training can direct.",
+                "'Toning' describes building muscle while reducing overlying fat, which comes from resistance training plus overall energy balance.",
+                "Abdominal exercises strengthen the trunk and support posture and back health, which is worth doing for its own reasons.",
+                "Visceral fat responds well to aerobic activity and better sleep, often before any change shows on the scale."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "stretching-warmup",
+            topic: .exerciseMyths,
+            title: "Stretching, warm-ups, and flexibility",
+            keywords: ["stretch", "stretching", "warm up", "warmup", "cool down", "flexibility", "mobility"],
+            facts: [
+                "Long static stretches held over about 60 seconds immediately before lifting or sprinting produce small acute reductions in strength and power.",
+                "A dynamic warm-up — five to ten minutes of progressively harder movement rehearsing the activity — is the better pre-exercise choice.",
+                "Meta-analyses find stretching alone has little effect on overall injury risk; structured neuromuscular warm-up programs do reduce injuries in sport.",
+                "Static stretching does improve range of motion when done consistently, and post-exercise or standalone sessions are a fine time for it.",
+                "Stretching does not prevent or meaningfully reduce delayed-onset muscle soreness."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "soreness-recovery",
+            topic: .exerciseMyths,
+            title: "Muscle soreness and rest days",
+            keywords: ["sore", "soreness", "doms", "rest day", "recovery day", "too sore"],
+            facts: [
+                "Delayed-onset muscle soreness peaks 24–72 hours after unfamiliar or eccentric work and fades as the same movement is repeated.",
+                "Soreness is not a measure of workout quality and is not required for strength or fitness adaptation.",
+                "Light movement — walking, easy cycling, mobility work — relieves soreness better than complete rest.",
+                "Sharp, one-sided, or joint-line pain is different from diffuse muscle soreness and deserves attention rather than pushing through.",
+                "Persistent soreness alongside poor sleep, low mood, and stalled performance suggests under-recovery rather than insufficient training."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "cardio-types",
+            topic: .exerciseMyths,
+            title: "HIIT, zone 2, and choosing cardio",
+            keywords: ["hiit", "interval", "intervals", "zone 2", "cardio", "best workout", "steady state"],
+            facts: [
+                "Both interval and continuous moderate training improve cardiorespiratory fitness; intervals produce slightly larger VO2max gains per minute invested in meta-analyses.",
+                "Guidelines treat one minute of vigorous activity as equivalent to two minutes of moderate, which is why 75–150 vigorous minutes substitutes for 150–300 moderate minutes.",
+                "Lower-intensity work is easier to recover from and to sustain, which usually matters more than the theoretical advantage of intervals.",
+                "A practical mix is most sessions easy enough to hold a conversation, with one or two harder sessions weekly.",
+                "The best cardio is the kind that gets done repeatedly; adherence beats optimization at every level below elite sport."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "step-counts",
+            topic: .exerciseMyths,
+            title: "Step counts and what the numbers mean",
+            keywords: ["steps", "10000", "10,000", "step count", "step goal", "pedometer"],
+            facts: [
+                "The 10,000-step target came from 1960s Japanese pedometer marketing, not from research.",
+                "Meta-analyses show mortality risk falls steeply from about 2,500 steps per day and largely plateaus around 7,000–8,000 for most adults, with the plateau lower in older adults.",
+                "Cadence matters somewhat: faster walking is associated with additional benefit beyond total volume.",
+                "Steps and structured exercise minutes measure overlapping but different things; this app scores minutes of intentional activity.",
+                "Adding roughly 1,000 steps per day to a current baseline is a more useful target than any universal number."
+            ]
+        )
+    ]
+
+    // MARK: - Cardiometabolic questions
+
+    static let cardiometabolicEntries: [CoachKnowledgeEntry] = [
+        CoachKnowledgeEntry(
+            id: "blood-pressure",
+            topic: .cardiometabolic,
+            title: "Blood pressure and lifestyle",
+            keywords: ["blood pressure", "hypertension", "systolic", "diastolic", "dash"],
+            facts: [
+                "US guidelines define normal as under 120/80 mmHg, elevated as 120–129 systolic, and stage 1 hypertension as 130–139 or 80–89.",
+                "The DASH dietary pattern lowers systolic pressure by roughly 5–11 mmHg, and combining it with sodium reduction produces the largest effect.",
+                "Reducing sodium by about 1,000 mg/day lowers systolic pressure a few mmHg on average, with larger effects in salt-sensitive people.",
+                "Regular aerobic activity lowers systolic pressure about 5–8 mmHg; isometric work such as wall sits shows surprisingly strong effects in recent meta-analyses.",
+                "Potassium-rich foods, weight change, less alcohol, and better sleep each contribute; readings should be taken seated, arm supported, after five quiet minutes."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "cholesterol",
+            topic: .cardiometabolic,
+            title: "Cholesterol and lipids",
+            keywords: ["cholesterol", "ldl", "hdl", "triglyceride", "lipid", "statin", "apob"],
+            facts: [
+                "LDL cholesterol is causally linked to atherosclerotic cardiovascular disease; lowering it lowers risk, and apolipoprotein B is an increasingly preferred measure.",
+                "Replacing saturated fat with unsaturated fat is the single most effective dietary lever on LDL.",
+                "Five to ten grams per day of viscous soluble fiber — oats, barley, psyllium, legumes — lowers LDL by roughly 5%, and plant sterols at 2 g/day lower it about 8–10%.",
+                "Exercise mainly lowers triglycerides and raises HDL rather than moving LDL much.",
+                "Lipid targets and medication decisions are clinical; the lifestyle contribution is real but complements rather than replaces that conversation."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "blood-sugar",
+            topic: .cardiometabolic,
+            title: "Blood sugar, A1c, and glucose spikes",
+            keywords: ["blood sugar", "glucose", "a1c", "prediabetes", "insulin", "cgm", "spike", "diabetes"],
+            facts: [
+                "The Diabetes Prevention Program showed that modest weight change plus 150 minutes weekly of activity reduced progression from prediabetes to type 2 diabetes by 58%, outperforming metformin.",
+                "A 10–15 minute walk after meals meaningfully blunts post-meal glucose rises, and it works even when the walk is easy.",
+                "Muscle is the largest site of glucose disposal, so resistance training improves glycemic control independently of aerobic work.",
+                "Fiber, protein, and fat slow gastric emptying and flatten the same carbohydrate's glucose curve; eating vegetables and protein before starch has a modest measured effect.",
+                "Continuous glucose monitors in people without diabetes show variation that is largely normal physiology; interpreting A1c or diagnosing anything is a clinician's job."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "cardiorespiratory-fitness",
+            topic: .cardiometabolic,
+            title: "Cardiorespiratory fitness as a health marker",
+            keywords: ["vo2", "vo2max", "cardio fitness", "fitness level", "aerobic capacity", "mets"],
+            facts: [
+                "Cardiorespiratory fitness is one of the strongest predictors of all-cause mortality, rivaling or exceeding smoking, hypertension, and diabetes as a risk marker.",
+                "The largest survival difference sits between the least fit and the next group up, so early gains matter most.",
+                "Fitness improves at any age; older previously sedentary adults show substantial relative gains from consistent training.",
+                "Watch-estimated VO2max is imprecise in absolute terms but useful as a personal trend.",
+                "Both easy aerobic volume and occasional harder efforts contribute; consistency over months is what moves it."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "heat-cold-exposure",
+            topic: .cardiometabolic,
+            title: "Sauna, heat, and cold exposure",
+            keywords: ["sauna", "cold plunge", "ice bath", "cold exposure", "heat therapy", "cold shower"],
+            facts: [
+                "Finnish cohort studies associate frequent sauna use with lower cardiovascular and all-cause mortality, and heat exposure acutely improves vascular function — but this evidence is observational.",
+                "Sauna is not a substitute for exercise, though it may be a useful adjunct for people with limited mobility.",
+                "Cold water immersion reduces perceived soreness; taken immediately after resistance training it appears to blunt muscle hypertrophy adaptations.",
+                "Reported mood and alertness benefits from cold exposure are short-term and largely unblinded.",
+                "Both carry real cardiovascular risk for some people, and neither should follow heavy alcohol use or be done alone."
+            ]
+        )
+    ]
+
+    // MARK: - Life stages and practical logistics
+
+    static let lifeContextEntries: [CoachKnowledgeEntry] = [
+        CoachKnowledgeEntry(
+            id: "aging-muscle",
+            topic: .lifeStages,
+            title: "Aging, muscle, and falls",
+            keywords: ["aging", "older", "sarcopenia", "muscle loss", "elderly", "getting older", "balance"],
+            facts: [
+                "Muscle mass declines roughly 3–8% per decade after age 30 and faster after 60, with strength declining even more quickly than mass.",
+                "Resistance training produces meaningful gains at every age studied, including in adults in their eighties and nineties.",
+                "Protein needs rise with age due to anabolic resistance; 1.0–1.2 g/kg/day is commonly recommended for older adults, with some evidence supporting more.",
+                "Multicomponent programs including balance work reduce fall risk by roughly a quarter in older adults.",
+                "Grip strength and chair-stand speed are simple, well-validated functional markers worth tracking over years."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "menopause",
+            topic: .lifeStages,
+            title: "Perimenopause and menopause",
+            keywords: ["menopause", "perimenopause", "hot flash", "night sweats", "hormones"],
+            facts: [
+                "Sleep disruption is one of the most common and underdiscussed symptoms, driven by vasomotor symptoms and changes in sleep architecture.",
+                "Bone loss accelerates around the menopausal transition, making resistance and impact training especially valuable.",
+                "Cardiovascular risk rises after menopause, so blood pressure and lipids deserve attention during this window.",
+                "Cognitive behavioral therapy has evidence for both insomnia and vasomotor symptom distress in this population.",
+                "Hormone therapy decisions are individualized and belong with a clinician who knows the person's history."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "pain-and-movement",
+            topic: .lifeStages,
+            title: "Back pain, joint pain, and movement",
+            keywords: ["back pain", "knee pain", "joint", "arthritis", "hurts", "sore knees", "hip pain"],
+            facts: [
+                "For chronic low back pain, exercise therapy is first-line in clinical guidelines and extended bed rest worsens outcomes.",
+                "In knee osteoarthritis, strength training and walking reduce pain and improve function; they do not accelerate joint damage.",
+                "Pain is modulated by sleep, stress, and mood as well as tissue state, which is why poor sleep reliably amplifies it.",
+                "Reducing load and range temporarily, then rebuilding gradually, usually beats stopping entirely.",
+                "Red flags — numbness, weakness, bowel or bladder changes, unexplained weight loss, night pain, fever — need medical evaluation rather than a training tweak."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "eating-on-a-budget",
+            topic: .practicalEating,
+            title: "Eating well on a budget and short on time",
+            keywords: ["budget", "cheap", "expensive", "afford", "cost", "no time to cook", "meal prep", "busy"],
+            facts: [
+                "Dried and canned legumes, oats, brown rice, frozen vegetables, frozen berries, eggs, canned fish, and peanut butter deliver the most fiber and protein per dollar.",
+                "Frozen and canned produce are nutritionally comparable to fresh and often better than fresh that spoils before it is eaten; rinsing canned beans cuts sodium substantially.",
+                "Batch-cooking one pot of beans, grains, or soup weekly removes most weekday decisions.",
+                "Keeping two or three genuinely fast default meals on hand beats aspirational recipes that require a shopping trip.",
+                "A 15-gram fiber gap usually closes with one cup of beans, one bowl of oatmeal with berries, or a handful of nuts plus a piece of fruit — not with a diet overhaul."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "travel-and-eating-out",
+            topic: .practicalEating,
+            title: "Restaurants, travel, and disrupted routines",
+            keywords: ["restaurant", "eating out", "travel", "airport", "takeout", "vacation", "hotel"],
+            facts: [
+                "Restaurant portions and added fat, sodium, and sugar are usually the difference, not any single menu item.",
+                "Anchoring the order around a protein and a vegetable, and adding a side of beans or a salad, moves the meal more than avoiding a specific food.",
+                "Travel disrupts sleep and activity more than diet for most people; protecting sleep timing usually pays the largest dividend.",
+                "Walking is the most portable form of exercise, and hotel bodyweight circuits cover strength adequately for a week or two.",
+                "A disrupted week is a pause, not a failure; the recovery habit is resuming the next normal meal or day rather than waiting for Monday."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "shift-work-jet-lag",
+            topic: .practicalEating,
+            title: "Shift work and jet lag",
+            keywords: ["shift work", "night shift", "jet lag", "time zone", "overnight", "rotating shift"],
+            facts: [
+                "Circadian misalignment, not just short sleep, drives the metabolic and cardiovascular risks associated with shift work.",
+                "The body clock shifts roughly one hour per day, so full adjustment to a large time-zone change takes several days.",
+                "Light is the dominant signal: bright light during the intended wake period and darkness or blue-blocking before the intended sleep period.",
+                "Anchor sleep — a consistent core block kept even on off days — reduces the cost of rotating schedules.",
+                "Caffeine early in a shift and avoided in the final hours, plus a dark, cool, quiet daytime sleep environment, are the practical levers."
+            ]
+        )
+    ]
+
     static let all: [CoachKnowledgeEntry] =
-        nutritionEntries + activityEntries + sleepEntries + mindEntries + socialAndBehaviorEntries + appEntries
+        nutritionEntries + activityEntries + sleepEntries + mindEntries
+            + socialAndBehaviorEntries + appEntries + supplementEntries
+            + nutritionQuestionEntries + exerciseQuestionEntries
+            + cardiometabolicEntries + lifeContextEntries
 }

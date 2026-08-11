@@ -115,13 +115,16 @@ enum CoachIntentClassifier {
 
     private static let educationPhrases = [
         "what is the", "what's the", "whats the", "healthiest", "best ",
-        "should i get", "how much sleep should", "how much fiber should",
+        "should i get", "should i take", "should i try", "should i be",
+        "how much sleep should", "how much fiber should",
         "how many gram", "why does", "why is", "what are", "is it true",
         "explain", "difference between", "recommend", "benefit of", "benefits of",
-        "good source", "what counts as", "how does",
+        "good source", "what counts as", "how does", "do i need",
+        "is it worth", "is it safe", "is it bad", "is it healthy",
+        "bad for", "good for you", "healthy", "unhealthy", "tell me about",
         // Comparisons.
         "is better", "which is", "better than", "better for", "versus", "vs ",
-        "compare", "or should i",
+        "compare", "or should i", "as good as", "same as",
         // Concrete food and training recommendations.
         "what should i have", "what should i eat", "should i eat", "what to eat",
         "for breakfast", "for lunch", "for dinner", "good snack", "healthy snack",
@@ -135,31 +138,55 @@ enum CoachIntentClassifier {
         "what can you do", "your name", "nice to meet"
     ]
 
+    // "plan" is deliberately not bare: it would swallow "plant based".
     private static let planningPhrases = [
-        "help me", "how do i start", "what should i do", "plan", "routine",
+        "help me", "how do i start", "what should i do", "a plan ", "my plan ",
+        "plan for", "plan to", "planning", "routine",
         "get started", "tomorrow", "this week", "make it easier", "any idea",
         "suggestion", "where do i begin", "how can i", "how do i "
     ]
 
     private static let supportPhrases = [
-        "discouraged", "frustrated", "failing", "failed", "give up", "gave up",
+        "discouraged", "frustrated", "failing", "failed", "failure",
+        "give up", "gave up", "giving up",
         "hopeless", "exhausted", "burned out", "burnt out", "overwhelmed",
         "stressed", "anxious", "sad ", "guilty", "ashamed", "hate myself",
         "can't keep up", "cant keep up", "struggling", "off track", "slipped",
-        "no motivation", "unmotivated", "pointless", "why bother"
+        "no motivation", "unmotivated", "pointless", "why bother",
+        "not good enough", "beating myself", "disappointed", "i suck",
+        "can't do this", "cant do this", "lonely", "depressed", "miserable"
     ]
 
-    static func classify(_ message: String) -> CoachIntent {
+    /// Question words that start a real question, used only as a fallback so a
+    /// question never lands in `general` — which would let the reply attach
+    /// metrics and a next step nobody asked for.
+    private static let questionStarters = [
+        "what ", "what's ", "whats ", "why ", "how ", "is ", "are ", "was ",
+        "were ", "does ", "do ", "did ", "can ", "could ", "would ", "should ",
+        "which ", "who ", "when ", "will ", "am i", "tell me", "explain"
+    ]
+
+    /// - Parameter hasHistoryReference: true when the message points at a past
+    ///   day we can resolve to a record, which makes it a data question even if
+    ///   it is phrased as a comparison.
+    static func classify(_ message: String, hasHistoryReference: Bool = false) -> CoachIntent {
         let text = normalize(message)
 
         if matches(text, supportPhrases) { return .support }
         // Small talk is checked before education so "what is the date" does not
         // trip the "what is the" education prefix.
         if matches(text, smallTalkPhrases) { return .smallTalk }
+        if hasHistoryReference { return .dataLookup }
         if matches(text, dataPhrases) { return .dataLookup }
         if matches(text, planningPhrases) { return .planning }
         if matches(text, educationPhrases) { return .education }
+        if isQuestion(text, original: message) { return .education }
         return .general
+    }
+
+    private static func isQuestion(_ text: String, original: String) -> Bool {
+        if original.contains("?") { return true }
+        return questionStarters.contains { text.hasPrefix(" " + $0) }
     }
 
     private static func matches(_ text: String, _ phrases: [String]) -> Bool {

@@ -30,6 +30,21 @@ final class FoundationModelsCoach {
         return .unavailable
     }
 
+    /// The model's real context window: 4,096 tokens on OS 26, 8,192 on OS 27.
+    /// Read at runtime so newer systems automatically get a richer prompt.
+    static var contextTokenCapacity: Int {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            return SystemLanguageModel.default.contextSize
+        }
+        #endif
+        return CoachContextBudget.fallbackTokenCapacity
+    }
+
+    static var contextBudget: CoachContextBudget {
+        CoachContextBudget.make(totalTokens: contextTokenCapacity)
+    }
+
     func generateDailyCard(
         snapshot: CoachSnapshot,
         profile: CoachUserProfile,
@@ -42,8 +57,8 @@ final class FoundationModelsCoach {
             let knowledge = LifestyleMedicineKnowledge.promptBlock(
                 query: snapshot.primaryFocus.rawValue,
                 topics: LifestyleMedicineKnowledge.topics(for: snapshot.primaryFocus),
-                limit: 2,
-                characterBudget: 800
+                limit: 3,
+                characterBudget: Self.contextBudget.knowledgeCharacters * 2 / 3
             )
             let prompt = """
             Create today's DHS Lifestyle Coach card from the live health snapshot.
@@ -84,6 +99,7 @@ final class FoundationModelsCoach {
         to userMessage: String,
         intent: CoachIntent,
         snapshot: CoachSnapshot?,
+        historyBlock: String?,
         profile: CoachUserProfile,
         summary: String,
         recentTurns: [CoachChatTurn]
@@ -91,8 +107,13 @@ final class FoundationModelsCoach {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             try ensureAvailable()
+            let budget = Self.contextBudget
             let session = LanguageModelSession(instructions: CoachCharter.instructions)
-            let transcript = Self.transcriptBlock(recentTurns)
+            let transcript = Self.transcriptBlock(
+                recentTurns,
+                maxTurns: budget.transcriptTurns,
+                maxCharactersPerTurn: budget.transcriptCharactersPerTurn
+            )
             let healthBlock: String
             if let snapshot {
                 healthBlock = intent.usesFullMetrics ? snapshot.promptBlock : snapshot.minimalBlock
@@ -115,14 +136,27 @@ final class FoundationModelsCoach {
             if let snapshot {
                 topics += LifestyleMedicineKnowledge.topics(for: snapshot.primaryFocus)
             }
-            // The on-device context window is small, so education questions get the
-            // biggest slice of reference material and other intents stay lean.
+            // Education questions get the biggest slice of reference material;
+            // other intents stay lean. Both scale with the real context window.
             let knowledge = LifestyleMedicineKnowledge.promptBlock(
                 query: userMessage,
                 topics: topics,
-                limit: intent == .education ? 4 : 2,
-                characterBudget: intent == .education ? 1500 : 900
+                limit: intent == .education ? 6 : 3,
+                characterBudget: intent == .education
+                    ? budget.knowledgeCharacters
+                    : budget.knowledgeCharacters * 2 / 3
             )
+            // Only present when the user actually referenced an earlier day, so
+            // unrelated questions never see a history section to riff on.
+            let historySection = historyBlock.map {
+                """
+
+
+                EARLIER DAYS THE USER ASKED ABOUT (already computed — use these numbers exactly):
+                \($0.limitedToCoachBudget(budget.historyCharacters))
+                """
+            } ?? ""
+
             func makePrompt(compact: Bool) -> String {
                 """
                 Continue the DHS Lifestyle Coach conversation.
@@ -135,7 +169,7 @@ final class FoundationModelsCoach {
                 \(intent.contract)
 
                 HEALTH SNAPSHOT (authoritative numbers):
-                \(healthBlock)
+                \(healthBlock)\(historySection)
 
                 \(nextStepPolicy)
 
@@ -143,10 +177,10 @@ final class FoundationModelsCoach {
                 \(compact || knowledge.isEmpty ? "None retrieved; answer from general Lifestyle Medicine knowledge and stay non-diagnostic." : knowledge)
 
                 USER PROFILE (informational only):
-                \(compact ? "Omitted." : profile.promptBlock)
+                \(compact ? "Omitted." : profile.promptBlock.limitedToCoachBudget(budget.profileCharacters))
 
                 RUNNING SUMMARY (informational only):
-                \(compact || summary.isEmpty ? "None yet." : summary)
+                \(compact || summary.isEmpty ? "None yet." : summary.limitedToCoachBudget(budget.summaryCharacters))
 
                 RECENT TRANSCRIPT:
                 \(compact || transcript.isEmpty ? "None yet." : transcript)
@@ -166,13 +200,18 @@ final class FoundationModelsCoach {
                     generating: GenerableCoachChatReply.self
                 ).content
             } catch {
-                // The on-device context window is small. Retry once on a fresh
-                // session with memory and reference material dropped.
+                // Most first-attempt failures are context pressure. Retry once on a
+                // fresh session with memory and reference material dropped; if that
+                // also fails the cause is not size, so say something human.
                 let retrySession = LanguageModelSession(instructions: CoachCharter.instructions)
-                content = try await retrySession.respond(
-                    to: makePrompt(compact: true),
-                    generating: GenerableCoachChatReply.self
-                ).content
+                do {
+                    content = try await retrySession.respond(
+                        to: makePrompt(compact: true),
+                        generating: GenerableCoachChatReply.self
+                    ).content
+                } catch {
+                    throw CoachError.generationFailed(Self.friendlyFailureMessage)
+                }
             }
             let message = content.message.trimmedForCoach()
             guard !message.isEmpty else {
@@ -214,13 +253,15 @@ final class FoundationModelsCoach {
             Exclude raw daily metric tables and diagnostic labels.
             Keep under 900 characters.
             """)
-            let transcript = recentTurns.map { turn in
-                let label = turn.role == .user ? "User" : "Coach"
-                return "\(label): \(turn.text)"
-            }.joined(separator: "\n")
+            let budget = Self.contextBudget
+            let transcript = Self.transcriptBlock(
+                recentTurns,
+                maxTurns: budget.transcriptTurns,
+                maxCharactersPerTurn: budget.transcriptCharactersPerTurn
+            )
             let prompt = """
             Previous summary:
-            \(previousSummary.isEmpty ? "None" : previousSummary)
+            \(previousSummary.isEmpty ? "None" : previousSummary.limitedToCoachBudget(budget.summaryCharacters))
 
             New turns:
             \(transcript)
@@ -236,6 +277,13 @@ final class FoundationModelsCoach {
         #endif
         throw CoachError.unavailable(.unavailable)
     }
+
+    /// Shown instead of a raw framework error, which is usually a guardrail
+    /// rejection rather than anything the person did wrong.
+    static let friendlyFailureMessage = """
+    I couldn't put a good answer together for that one. Try rephrasing it, \
+    or ask me something else — I'm still here.
+    """
 
     /// Keeps the transcript small; the on-device context window is shared with the
     /// charter, snapshot, and reference material.
