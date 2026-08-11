@@ -2,35 +2,93 @@ import XCTest
 @testable import DailyHealthScore
 
 final class CoachSnapshotBuilderTests: XCTestCase {
-    func test_build_marksMissingFiberAndIncludesWeekFiberLoggingCount() {
-        let today = makeRecord(
-            date: "2026-08-10",
-            sleep: 7.0,
-            fiber: 0,
-            exercise: 20,
-            focus: .fiber
-        )
-        let earlier = makeRecord(
-            date: "2026-08-09",
-            sleep: 6.5,
-            fiber: 22,
-            exercise: 30,
-            focus: .sleep
+    func test_fiberBelowGoal_isNeverDescribedAsAboveGoal() {
+        let status = CoachSnapshotBuilder.status(
+            name: "Fiber",
+            value: 36.8,
+            goal: 40,
+            unit: "g",
+            decimals: 1,
+            points: 3.7,
+            maxPoints: 4
         )
 
-        let snapshot = CoachSnapshotBuilder.build(
-            today: today,
-            records: [today, earlier],
-            phase: .day
+        XCTAssertEqual(status.level, .below)
+        XCTAssertFalse(status.isAtOrAboveGoal)
+        XCTAssertTrue(status.sentence.contains("BELOW GOAL by 3.2 g"))
+        XCTAssertTrue(status.sentence.contains("of a 40 g goal"))
+        XCTAssertTrue(status.sentence.contains("92% of goal"))
+        XCTAssertFalse(status.sentence.contains("EXCEEDED"))
+    }
+
+    func test_goalMetAndExceededAreDistinguished() {
+        let met = CoachSnapshotBuilder.status(
+            name: "Sleep",
+            value: 7.5,
+            goal: 7.5,
+            unit: "h",
+            decimals: 1,
+            points: 4,
+            maxPoints: 4
+        )
+        XCTAssertEqual(met.level, .met)
+        XCTAssertTrue(met.isAtOrAboveGoal)
+
+        let exceeded = CoachSnapshotBuilder.status(
+            name: "Exercise",
+            value: 71,
+            goal: 30,
+            unit: "min",
+            decimals: 0,
+            points: 2,
+            maxPoints: 2
+        )
+        XCTAssertEqual(exceeded.level, .exceeded)
+        XCTAssertTrue(exceeded.sentence.contains("GOAL EXCEEDED by 41 min"))
+    }
+
+    func test_missingMetricIsNotTreatedAsZeroBehavior() {
+        let status = CoachSnapshotBuilder.status(
+            name: "Fiber",
+            value: 0,
+            goal: 40,
+            unit: "g",
+            decimals: 1,
+            points: 0,
+            maxPoints: 4
         )
 
-        XCTAssertEqual(snapshot.todayKey, "2026-08-10")
-        XCTAssertEqual(snapshot.primaryFocus, .fiber)
-        XCTAssertFalse(snapshot.fiberPresentToday)
-        XCTAssertTrue(snapshot.sleepPresentToday)
-        XCTAssertEqual(snapshot.fiberDaysLoggedInWeek, 1)
-        XCTAssertTrue(snapshot.promptBlock.contains("Implied focus from metrics: fiber"))
-        XCTAssertTrue(snapshot.promptBlock.contains("fiber logging incomplete/missing"))
+        XCTAssertEqual(status.level, .missing)
+        XCTAssertTrue(status.sentence.contains("NO DATA"))
+        XCTAssertTrue(status.sentence.lowercased().contains("not necessarily zero"))
+    }
+
+    func test_snapshotStatesGoalsExplicitly() {
+        let record = makeRecord(date: "2026-08-11", sleep: 7.2, fiber: 36.8, exercise: 71, focus: .sleep)
+        let snapshot = CoachSnapshotBuilder.build(today: record, records: [record], phase: .evening)
+
+        XCTAssertTrue(snapshot.goalsBlock.contains("Fiber goal 40 g/day"))
+        XCTAssertTrue(snapshot.goalsBlock.contains("Sleep goal 7.5 h/night"))
+        XCTAssertTrue(snapshot.goalsBlock.contains("Exercise goal 30 min/day"))
+        XCTAssertTrue(snapshot.promptBlock.contains("USER'S GOALS"))
+        XCTAssertTrue(snapshot.promptBlock.contains("BELOW GOAL by 3.2 g"))
+    }
+
+    func test_coachingDirective_protectsMetPillarsAndTargetsWeakest() {
+        let record = makeRecord(date: "2026-08-11", sleep: 7.2, fiber: 12, exercise: 71, focus: .fiber)
+        let snapshot = CoachSnapshotBuilder.build(today: record, records: [record], phase: .day)
+
+        let directive = snapshot.coachingDirective
+        XCTAssertTrue(directive.contains("Exercise is already at or above goal"))
+        XCTAssertTrue(directive.contains("do NOT ask for more exercise"))
+        XCTAssertTrue(directive.contains("focus on fiber"))
+    }
+
+    func test_allGoalsMet_shiftsToMaintenance() {
+        let record = makeRecord(date: "2026-08-11", sleep: 8.2, fiber: 45, exercise: 60, focus: .maintain)
+        let snapshot = CoachSnapshotBuilder.build(today: record, records: [record], phase: .day)
+
+        XCTAssertTrue(snapshot.coachingDirective.contains("All pillars met"))
     }
 
     func test_profileMerge_keepsExistingWhenIncomingEmpty() {
@@ -61,14 +119,34 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertEqual(profile.constraints, "early meetings")
         XCTAssertEqual(profile.nutritionNotes, "likes beans")
         XCTAssertEqual(profile.movementNotes, "walks")
-        XCTAssertEqual(profile.values, "family")
     }
 
-    func test_charter_containsAcceptancePhilosophy() {
+    func test_profileMerge_capsFieldLengthSoPromptsStaySmall() {
+        var profile = CoachUserProfile()
+        profile.merge(from: CoachUserProfile(constraints: String(repeating: "a", count: 500)))
+
+        XCTAssertEqual(profile.constraints.count, CoachUserProfile.maxFieldLength)
+    }
+
+    func test_transcriptBlock_trimsTurnsAndLength() {
+        let turns = (0..<10).map { index in
+            CoachChatTurn(role: index.isMultiple(of: 2) ? .user : .coach, text: String(repeating: "x", count: 400))
+        }
+
+        let block = FoundationModelsCoach.transcriptBlock(turns)
+
+        XCTAssertEqual(block.split(separator: "\n").count, 6)
+        XCTAssertTrue(block.contains("…"))
+        XCTAssertLessThan(block.count, 1_700)
+    }
+
+    func test_charter_encodesPhilosophyMethodsAndAnswerFirst() {
         XCTAssertTrue(CoachCharter.philosophy.contains("acceptance"))
         XCTAssertTrue(CoachCharter.instructions.contains("Motivational Interviewing"))
-        XCTAssertTrue(CoachCharter.instructions.contains("DBT"))
-        XCTAssertTrue(CoachCharter.instructions.contains("source of truth"))
+        XCTAssertTrue(CoachCharter.instructions.contains("DBT-informed"))
+        XCTAssertTrue(CoachCharter.instructions.contains("ANSWER-FIRST RULE"))
+        XCTAssertTrue(CoachCharter.instructions.contains("Never say someone is above goal"))
+        XCTAssertTrue(CoachCharter.instructions.contains("Never state \"I will ...\" as your own plan."))
     }
 
     private func makeRecord(
