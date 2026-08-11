@@ -30,19 +30,29 @@ final class FoundationModelsCoach {
         return .unavailable
     }
 
+    private static var cachedContextTokens: Int?
+
     /// The model's real context window: 4,096 tokens on OS 26, 8,192 on OS 27.
-    /// Read at runtime so newer systems automatically get a richer prompt.
-    static var contextTokenCapacity: Int {
+    /// Read once at runtime so newer systems automatically get a richer prompt.
+    ///
+    /// `contextSize` reports the model's own limit and throws when Apple
+    /// Intelligence is unavailable, in which case the conservative window applies.
+    static func contextTokenCapacity() async -> Int {
+        if let cachedContextTokens { return cachedContextTokens }
+        var resolved = CoachContextBudget.fallbackTokenCapacity
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
-            return SystemLanguageModel.default.contextSize
+            if let reported = try? await SystemLanguageModel.default.contextSize, reported > 0 {
+                resolved = reported
+            }
         }
         #endif
-        return CoachContextBudget.fallbackTokenCapacity
+        cachedContextTokens = resolved
+        return resolved
     }
 
-    static var contextBudget: CoachContextBudget {
-        CoachContextBudget.make(totalTokens: contextTokenCapacity)
+    static func contextBudget() async -> CoachContextBudget {
+        CoachContextBudget.make(totalTokens: await contextTokenCapacity())
     }
 
     func generateDailyCard(
@@ -53,12 +63,13 @@ final class FoundationModelsCoach {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             try ensureAvailable()
+            let budget = await Self.contextBudget()
             let session = LanguageModelSession(instructions: CoachCharter.instructions)
             let knowledge = LifestyleMedicineKnowledge.promptBlock(
                 query: snapshot.primaryFocus.rawValue,
                 topics: LifestyleMedicineKnowledge.topics(for: snapshot.primaryFocus),
                 limit: 3,
-                characterBudget: Self.contextBudget.knowledgeCharacters * 2 / 3
+                characterBudget: budget.knowledgeCharacters * 2 / 3
             )
             let prompt = """
             Create today's DHS Lifestyle Coach card from the live health snapshot.
@@ -107,7 +118,7 @@ final class FoundationModelsCoach {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             try ensureAvailable()
-            let budget = Self.contextBudget
+            let budget = await Self.contextBudget()
             let session = LanguageModelSession(instructions: CoachCharter.instructions)
             let transcript = Self.transcriptBlock(
                 recentTurns,
@@ -253,7 +264,7 @@ final class FoundationModelsCoach {
             Exclude raw daily metric tables and diagnostic labels.
             Keep under 900 characters.
             """)
-            let budget = Self.contextBudget
+            let budget = await Self.contextBudget()
             let transcript = Self.transcriptBlock(
                 recentTurns,
                 maxTurns: budget.transcriptTurns,

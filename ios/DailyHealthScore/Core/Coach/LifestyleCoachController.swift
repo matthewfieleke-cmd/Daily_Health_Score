@@ -98,6 +98,7 @@ final class LifestyleCoachController: ObservableObject {
         memory.append(CoachChatTurn(role: .user, text: trimmed))
 
         do {
+            let budget = await FoundationModelsCoach.contextBudget()
             let snapshot = todayRecord.map {
                 CoachSnapshotBuilder.build(today: $0, records: records)
             }
@@ -107,7 +108,7 @@ final class LifestyleCoachController: ObservableObject {
                 message: trimmed,
                 records: records,
                 todayKey: todayRecord?.date ?? DateHelpers.localDateKey(),
-                characterBudget: FoundationModelsCoach.contextBudget.historyCharacters
+                characterBudget: budget.historyCharacters
             )
             let result = try await model.reply(
                 to: trimmed,
@@ -119,9 +120,7 @@ final class LifestyleCoachController: ObservableObject {
                 historyBlock: historyBlock,
                 profile: memory.profile,
                 summary: memory.runningSummary,
-                recentTurns: memory.recentTurnsForPrompt(
-                    limit: FoundationModelsCoach.contextBudget.transcriptTurns
-                )
+                recentTurns: memory.recentTurnsForPrompt(limit: budget.transcriptTurns)
             )
             memory.append(CoachChatTurn(role: .coach, text: result.message))
             if let profileUpdate = result.profileUpdate {
