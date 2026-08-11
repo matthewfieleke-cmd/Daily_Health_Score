@@ -82,12 +82,26 @@ enum LifestyleMedicineKnowledge {
             return (entry, score)
         }
 
-        return scored.filter { $0.score > 0 }
+        var matches = scored.filter { $0.score > 0 }
             .sorted { lhs, rhs in
                 lhs.score == rhs.score ? lhs.entry.id < rhs.entry.id : lhs.score > rhs.score
             }
-            .prefix(limit)
             .map { $0.entry }
+
+        // Pull in adjacent material the question implies but does not name. This
+        // is what turns a wider context window into a fuller answer.
+        if matches.count < limit {
+            var included = Set(matches.map(\.id))
+            for entry in matches {
+                for id in relatedIds[entry.id] ?? [] where !included.contains(id) {
+                    guard let neighbor = all.first(where: { $0.id == id }) else { continue }
+                    matches.append(neighbor)
+                    included.insert(id)
+                }
+            }
+        }
+
+        return Array(matches.prefix(limit))
     }
 
     static func promptBlock(
@@ -112,6 +126,47 @@ enum LifestyleMedicineKnowledge {
         }
         return output
     }
+
+    /// Material a good answer needs but the question rarely names. Someone asking
+    /// whether seed oils are bad never says "hexane" or "smoke point", yet those
+    /// are the parts of the answer they are actually missing.
+    static let relatedIds: [String: [String]] = [
+        "seed-oils": ["cooking-oils", "ultra-processed"],
+        "cooking-oils": ["seed-oils"],
+        "supplement-basics": ["plant-micronutrients"],
+        "creatine": ["supplement-basics", "strength-training"],
+        "protein-powder": ["protein-basics", "supplement-basics"],
+        "vitamin-d": ["supplement-basics"],
+        "sleep-supplements": ["insomnia", "sleep-disruptors"],
+        "omega-3": ["supplement-basics"],
+        "probiotics-fermented": ["fiber-types"],
+        "sweeteners": ["sodium-sugar"],
+        "detox-cleanse": ["ultra-processed"],
+        "red-processed-meat": ["plant-forward"],
+        "eggs-cholesterol": ["cholesterol"],
+        "soy": ["protein-basics"],
+        "gluten-dairy": ["fiber-foods"],
+        "organic-produce": ["vegetable-variety"],
+        "carbs-and-low-carb": ["fiber-targets", "blood-sugar"],
+        "metabolism": ["strength-training", "weight-neutral"],
+        "meal-timing": ["circadian"],
+        "spot-reduction": ["strength-training", "weight-neutral"],
+        "stretching-warmup": ["activity-guidelines"],
+        "soreness-recovery": ["recovery"],
+        "cardio-types": ["activity-guidelines", "aerobic-fitness"],
+        "step-counts": ["walking-vs-running", "activity-guidelines"],
+        "blood-pressure": ["sodium-sugar"],
+        "cholesterol": ["fiber-types", "seed-oils"],
+        "blood-sugar": ["fiber-targets", "carbs-and-low-carb"],
+        "cardiorespiratory-fitness": ["aerobic-fitness"],
+        "heat-cold-exposure": ["recovery"],
+        "aging-muscle": ["strength-training", "protein-basics"],
+        "menopause": ["sleep-duration", "strength-training"],
+        "pain-and-movement": ["activity-guidelines"],
+        "eating-on-a-budget": ["fiber-foods", "meal-building"],
+        "travel-and-eating-out": ["meal-building"],
+        "shift-work-jet-lag": ["circadian", "sleep-disruptors"]
+    ]
 
     static func topics(for focus: PrimaryFocus) -> [CoachKnowledgeTopic] {
         switch focus {
@@ -731,13 +786,29 @@ enum LifestyleMedicineKnowledge {
             id: "seed-oils",
             topic: .nutritionMyths,
             title: "Seed oils and cooking fats",
-            keywords: ["seed oil", "canola", "vegetable oil", "sunflower", "soybean oil", "linoleic", "olive oil"],
+            keywords: ["seed oil", "canola", "vegetable oil", "sunflower", "soybean oil", "linoleic", "olive oil", "grapeseed", "corn oil"],
             facts: [
+                "The oils in question are canola, corn, soybean, sunflower, safflower, grapeseed, cottonseed, and rice bran — refined oils high in the omega-6 fat linoleic acid.",
                 "Randomized trials consistently show that replacing saturated fat with polyunsaturated vegetable oils lowers LDL cholesterol and cardiovascular events.",
-                "Higher blood levels of linoleic acid, the main omega-6 in seed oils, are associated with lower risk of cardiovascular disease and type 2 diabetes in pooled cohort data.",
-                "Controlled feeding studies have not found that dietary linoleic acid raises inflammatory markers in humans, which is the central claim of the anti-seed-oil argument.",
-                "Seed oils cluster in ultra-processed foods, so the association people notice is largely about the foods, not the oil.",
+                "Higher blood levels of linoleic acid are associated with lower risk of cardiovascular disease and type 2 diabetes in pooled cohort data covering hundreds of thousands of people.",
+                "Controlled feeding studies have not found that dietary linoleic acid raises inflammatory markers such as CRP or IL-6 in humans, which is the central claim of the anti-seed-oil argument.",
+                "The omega-6 to omega-3 ratio argument has weakened: absolute omega-3 intake predicts outcomes better than the ratio, so eating more omega-3 beats cutting omega-6.",
+                "Seed oils cluster in ultra-processed and fried restaurant foods, so the pattern people notice is largely about those foods, not the oil itself.",
                 "Extra virgin olive oil has the deepest outcome evidence (PREDIMED) and is a reasonable default; canola, avocado, and high-oleic oils are fine for higher-heat cooking."
+            ]
+        ),
+        CoachKnowledgeEntry(
+            id: "cooking-oils",
+            topic: .nutritionMyths,
+            title: "Cooking with oil: heat, refining, and oxidation",
+            keywords: ["smoke point", "cooking oil", "high heat", "frying", "deep fry", "hexane",
+                       "refined", "cold pressed", "oxidize", "oxidation", "rancid", "reuse oil"],
+            facts: [
+                "Refined canola, high-oleic sunflower, avocado, and light olive oil smoke around 400–520°F; extra virgin olive oil sits near 375–410°F, higher than commonly claimed, and its polyphenols make it stable in normal home cooking.",
+                "Sautéing and roasting rarely take oil past its smoke point; deep frying and reusing the same oil repeatedly are where aldehydes and polar oxidation compounds actually accumulate.",
+                "Discard frying oil rather than reusing it many times, and stop using any oil that smells rancid or paint-like.",
+                "Hexane is used to extract most refined seed oils; residues are measured in parts per million, sit far below regulatory limits, and have not surfaced as a health signal in the literature.",
+                "Cold-pressed and unrefined oils retain more polyphenols but oxidize faster — store them dark, cool, and capped, and use them within a few months."
             ]
         ),
         CoachKnowledgeEntry(

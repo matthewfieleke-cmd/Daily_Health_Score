@@ -87,6 +87,23 @@ final class CoachIntentTests: XCTestCase {
         )
     }
 
+    /// The Private Cloud Compute allowance is per person per day, so it is spent
+    /// only where a larger model changes the answer.
+    func test_serverModelIsReservedForAnswersThatBenefit() {
+        XCTAssertTrue(CoachIntent.education.prefersServerModel)
+        XCTAssertTrue(CoachIntent.support.prefersServerModel)
+        XCTAssertTrue(CoachIntent.planning.prefersServerModel)
+        XCTAssertFalse(CoachIntent.dataLookup.prefersServerModel)
+        XCTAssertFalse(CoachIntent.smallTalk.prefersServerModel)
+    }
+
+    func test_serverTierAssumesTheLargerWindow() {
+        XCTAssertGreaterThan(
+            CoachModelTier.privateCloud.assumedContextTokens,
+            CoachModelTier.onDevice.assumedContextTokens
+        )
+    }
+
     func test_contractsEncodeCriticalRules() {
         XCTAssertTrue(CoachIntent.education.contract.contains("Do NOT recite the user's daily metrics"))
         XCTAssertTrue(CoachIntent.dataLookup.contract.contains("including the goal value"))

@@ -30,30 +30,8 @@ final class FoundationModelsCoach {
         return .unavailable
     }
 
-    private static var cachedContextTokens: Int?
-
-    /// The model's real context window: 4,096 tokens on OS 26, 8,192 on OS 27.
-    /// Read once at runtime so newer systems automatically get a richer prompt.
-    ///
-    /// `contextSize` reports the model's own limit and throws when Apple
-    /// Intelligence is unavailable, in which case the conservative window applies.
-    static func contextTokenCapacity() async -> Int {
-        if let cachedContextTokens { return cachedContextTokens }
-        var resolved = CoachContextBudget.fallbackTokenCapacity
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, *) {
-            if let reported = try? await SystemLanguageModel.default.contextSize, reported > 0 {
-                resolved = reported
-            }
-        }
-        #endif
-        cachedContextTokens = resolved
-        return resolved
-    }
-
-    static func contextBudget() async -> CoachContextBudget {
-        CoachContextBudget.make(totalTokens: await contextTokenCapacity())
-    }
+    /// Which model answered the last chat message, for the UI to surface.
+    private(set) var lastTierUsed: CoachModelTier = .onDevice
 
     func generateDailyCard(
         snapshot: CoachSnapshot,
@@ -63,8 +41,11 @@ final class FoundationModelsCoach {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             try ensureAvailable()
-            let budget = await Self.contextBudget()
-            let session = LanguageModelSession(instructions: CoachCharter.instructions)
+            // The daily card is generated once per day, so it is worth the
+            // server model when that is available.
+            let tier = CoachModelProvider.isServerModelAvailable ? CoachModelTier.privateCloud : .onDevice
+            let budget = await CoachModelProvider.contextBudget(for: tier)
+            let session = CoachModelProvider.makeSession(tier: tier, instructions: CoachCharter.instructions)
             let knowledge = LifestyleMedicineKnowledge.promptBlock(
                 query: snapshot.primaryFocus.rawValue,
                 topics: LifestyleMedicineKnowledge.topics(for: snapshot.primaryFocus),
@@ -91,11 +72,20 @@ final class FoundationModelsCoach {
 
             \(CoachCharter.dailyCardContract)
             """
-            let response = try await session.respond(
-                to: prompt,
-                generating: GenerableDailyCoachCard.self
-            )
-            let content = response.content
+            let content: GenerableDailyCoachCard
+            do {
+                content = try await session.respond(
+                    to: prompt,
+                    generating: GenerableDailyCoachCard.self
+                ).content
+            } catch where tier == .privateCloud {
+                // Network loss, quota, or a server hiccup should never cost the
+                // card; the on-device model can still write it.
+                content = try await CoachModelProvider
+                    .makeSession(tier: .onDevice, instructions: CoachCharter.instructions)
+                    .respond(to: prompt, generating: GenerableDailyCoachCard.self)
+                    .content
+            }
             return DailyCoachCardContent(
                 acknowledgment: content.acknowledgment.trimmedForCoach(),
                 whyItMatters: content.whyItMatters.trimmedForCoach(),
@@ -118,13 +108,10 @@ final class FoundationModelsCoach {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             try ensureAvailable()
-            let budget = await Self.contextBudget()
-            let session = LanguageModelSession(instructions: CoachCharter.instructions)
-            let transcript = Self.transcriptBlock(
-                recentTurns,
-                maxTurns: budget.transcriptTurns,
-                maxCharactersPerTurn: budget.transcriptCharactersPerTurn
-            )
+            let tier = CoachModelProvider.tier(for: intent)
+            let budget = await CoachModelProvider.contextBudget(for: tier)
+            lastTierUsed = tier
+            let session = CoachModelProvider.makeSession(tier: tier, instructions: CoachCharter.instructions)
             let healthBlock: String
             if let snapshot {
                 healthBlock = intent.usesFullMetrics ? snapshot.promptBlock : snapshot.minimalBlock
@@ -147,29 +134,35 @@ final class FoundationModelsCoach {
             if let snapshot {
                 topics += LifestyleMedicineKnowledge.topics(for: snapshot.primaryFocus)
             }
-            // Education questions get the biggest slice of reference material;
-            // other intents stay lean. Both scale with the real context window.
-            let knowledge = LifestyleMedicineKnowledge.promptBlock(
-                query: userMessage,
-                topics: topics,
-                limit: intent == .education ? 6 : 3,
-                characterBudget: intent == .education
-                    ? budget.knowledgeCharacters
-                    : budget.knowledgeCharacters * 2 / 3
-            )
-            // Only present when the user actually referenced an earlier day, so
-            // unrelated questions never see a history section to riff on.
-            let historySection = historyBlock.map {
-                """
+            // Every block is sized against whichever model is answering, so the
+            // on-device retry re-trims rather than reusing server-sized text.
+            func makePrompt(compact: Bool, budget: CoachContextBudget) -> String {
+                let transcript = Self.transcriptBlock(
+                    recentTurns,
+                    maxTurns: budget.transcriptTurns,
+                    maxCharactersPerTurn: budget.transcriptCharactersPerTurn
+                )
+                // Education questions get the biggest slice of reference material;
+                // other intents stay lean. Both scale with the context window.
+                let knowledge = LifestyleMedicineKnowledge.promptBlock(
+                    query: userMessage,
+                    topics: topics,
+                    limit: intent == .education ? 12 : 4,
+                    characterBudget: intent == .education
+                        ? budget.knowledgeCharacters
+                        : budget.knowledgeCharacters * 2 / 3
+                )
+                // Only present when the user referenced an earlier day, so unrelated
+                // questions never see a history section to riff on.
+                let historySection = historyBlock.map {
+                    """
 
 
-                EARLIER DAYS THE USER ASKED ABOUT (already computed — use these numbers exactly):
-                \($0.limitedToCoachBudget(budget.historyCharacters))
-                """
-            } ?? ""
-
-            func makePrompt(compact: Bool) -> String {
-                """
+                    EARLIER DAYS THE USER ASKED ABOUT (already computed — use these numbers exactly):
+                    \($0.limitedToCoachBudget(budget.historyCharacters))
+                    """
+                } ?? ""
+                return """
                 Continue the DHS Lifestyle Coach conversation.
 
                 USER MESSAGE:
@@ -207,17 +200,23 @@ final class FoundationModelsCoach {
             let content: GenerableCoachChatReply
             do {
                 content = try await session.respond(
-                    to: makePrompt(compact: false),
+                    to: makePrompt(compact: false, budget: budget),
                     generating: GenerableCoachChatReply.self
                 ).content
             } catch {
-                // Most first-attempt failures are context pressure. Retry once on a
-                // fresh session with memory and reference material dropped; if that
-                // also fails the cause is not size, so say something human.
-                let retrySession = LanguageModelSession(instructions: CoachCharter.instructions)
+                // One fallback covers every failure mode that matters: no network,
+                // exhausted server quota, or context pressure. Retry on-device with
+                // memory and reference material dropped. If that also fails the
+                // cause is not size or reachability, so say something human.
+                let retryBudget = await CoachModelProvider.contextBudget(for: .onDevice)
+                let retrySession = CoachModelProvider.makeSession(
+                    tier: .onDevice,
+                    instructions: CoachCharter.instructions
+                )
+                lastTierUsed = .onDevice
                 do {
                     content = try await retrySession.respond(
-                        to: makePrompt(compact: true),
+                        to: makePrompt(compact: tier == .onDevice, budget: retryBudget),
                         generating: GenerableCoachChatReply.self
                     ).content
                 } catch {
@@ -264,7 +263,9 @@ final class FoundationModelsCoach {
             Exclude raw daily metric tables and diagnostic labels.
             Keep under 900 characters.
             """)
-            let budget = await Self.contextBudget()
+            // Summary refresh runs after every chat turn, so it stays on-device
+            // rather than spending the daily server allowance on bookkeeping.
+            let budget = await CoachModelProvider.contextBudget(for: .onDevice)
             let transcript = Self.transcriptBlock(
                 recentTurns,
                 maxTurns: budget.transcriptTurns,
@@ -359,7 +360,7 @@ struct GenerableDailyCoachCard {
 @available(iOS 26.0, *)
 @Generable
 struct GenerableCoachChatReply {
-    @Guide(description: "Coach reply that answers the user's question in its first sentence, written in second person, 3-6 sentences, no lists, headers, or emoji.")
+    @Guide(description: "Coach reply that answers the user's question in its first sentence, written in second person. Usually 3-6 sentences; a substantive question supported by reference material may run to about 10. Plain prose, no lists, headers, or emoji.")
     var message: String
 
     @Guide(description: "True only when the user stated a durable preference or constraint.")
