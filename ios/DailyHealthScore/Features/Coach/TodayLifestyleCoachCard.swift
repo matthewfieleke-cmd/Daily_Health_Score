@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// Richer Today card: acknowledgment, why it matters, next step — or setup/status.
+/// Today card: acknowledgment, why it matters, and the next step to act on.
+/// Falls back to the app's own focus suggestion whenever the model has nothing,
+/// so the card is never dead space on a device without Apple Intelligence.
 struct TodayLifestyleCoachCard: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var coach: LifestyleCoachController
@@ -18,18 +20,18 @@ struct TodayLifestyleCoachCard: View {
 
             if coach.availability != .available {
                 statusBody
+                // Without Apple Intelligence this card would otherwise never say
+                // anything, so it falls back to the focus suggestion the app
+                // computes on its own.
+                fallbackBody
             } else if coach.isGeneratingDailyCard && coach.dailyCard == nil {
                 loadingBody
             } else if let card = coach.dailyCard {
                 cardBody(card)
                 askCoachButton
-            } else if let error = coach.dailyCardError {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                askCoachButton
             } else {
-                statusBody
+                fallbackBody
+                askCoachButton
             }
         }
         .dhsCard(padding: 14)
@@ -146,7 +148,17 @@ struct TodayLifestyleCoachCard: View {
         }
     }
 
-    private func nextStepSection(_ text: String) -> some View {
+    /// Shown when the model has nothing for us: no Apple Intelligence, or a
+    /// generation that failed. A raw framework error is not useful to read.
+    @ViewBuilder
+    private var fallbackBody: some View {
+        let suggestion = record?.suggestion.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !suggestion.isEmpty {
+            nextStepSection(suggestion, title: "Today's focus")
+        }
+    }
+
+    private func nextStepSection(_ text: String, title: String = "Next step") -> some View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: "arrow.forward.circle.fill")
                 .font(.footnote)
@@ -154,7 +166,7 @@ struct TodayLifestyleCoachCard: View {
                 .padding(.top, 1)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text("NEXT STEP")
+                Text(title.uppercased())
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(AppTheme.leaf)
                     .tracking(0.5)
