@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// Today dashboard: hero score, metric row, DHS Lifestyle Coach, SMART Goals,
-/// and HRV. Scrolls when content exceeds the safe area. Ask coach + refresh
-/// live in the top bar.
+/// Today dashboard: hero score, metric row, and DHS Lifestyle Coach. SMART
+/// goals, HRV analysis, the coach, and refresh are all reached from the top
+/// bar, which keeps the dashboard itself to a single screen.
 struct TodayView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var showCoachChat = false
-    @State private var showHRVTrendsInfo = false
+    @State private var showSMARTGoals = false
+    @State private var showHRVAnalysis = false
     /// Shared 0…1 progress for coordinated dial-up (ring, numbers, bars).
     @State private var dialUpProgress: Double = 0
     @State private var hasPlayedLaunchDialUp = false
@@ -32,9 +33,23 @@ struct TodayView: View {
                     .padding(.bottom, 4)
             }
             .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(isPresented: $showSMARTGoals) {
+                SMARTGoalsListView()
+            }
+            .navigationDestination(isPresented: $showHRVAnalysis) {
+                DHSHRVStudyView(
+                    records: appState.recordStore.records,
+                    todayKey: todayKey
+                )
+            }
             .safeAreaInset(edge: .top, spacing: 0) {
                 TodayTopBar(
+                    smartGoalAttentionCount: SMARTGoalLogic.attentionCount(
+                        goals: appState.smartGoalStore.goals
+                    ),
                     onAskCoach: { showCoachChat = true },
+                    onOpenSMARTGoals: { showSMARTGoals = true },
+                    onOpenHRVAnalysis: { showHRVAnalysis = true },
                     onRefresh: {
                         Task { await appState.syncTodayFromHealth(userInitiated: true) }
                     }
@@ -66,18 +81,6 @@ struct TodayView: View {
                     .environmentObject(appState.coach)
             }
         }
-        .infoScrollDialog(
-            isPresented: $showHRVTrendsInfo,
-            title: HRVEducationLibrary.title,
-            text: HRVEducationLibrary.body
-        )
-    }
-
-    private var dhsHRVStudyResult: DHSHRVStudyResult? {
-        DHSHRVStudyAnalyzer.analyze(
-            records: appState.recordStore.records,
-            todayKey: todayKey
-        )
     }
 
     // MARK: - Body content
@@ -97,24 +100,6 @@ struct TodayView: View {
                         .animation(DialUpAnimation.timing, value: dialUpProgress)
 
                     TodayLifestyleCoachCard(record: record)
-
-                    TodaySMARTGoalsCard(
-                        attentionCount: SMARTGoalLogic.attentionCount(
-                            goals: appState.smartGoalStore.goals
-                        )
-                    )
-
-                    NavigationLink {
-                        DHSHRVStudyView(
-                            records: appState.recordStore.records,
-                            todayKey: todayKey
-                        )
-                    } label: {
-                        TodayHRVCard(result: dhsHRVStudyResult) {
-                            withAnimation { showHRVTrendsInfo = true }
-                        }
-                    }
-                    .buttonStyle(.plain)
                 }
                 .padding(.bottom, 8)
             }
@@ -280,13 +265,6 @@ struct TodayView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 8)
             }
-            TodaySMARTGoalsCard(
-                attentionCount: SMARTGoalLogic.attentionCount(
-                    goals: appState.smartGoalStore.goals
-                )
-            )
-            .padding(.horizontal, 8)
-
             Button {
                 Task {
                     await appState.requestHealthAccess()
