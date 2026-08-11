@@ -25,6 +25,17 @@ enum CoachIntent: String, Equatable, Sendable {
         }
     }
 
+    /// Whether this message is worth spending the daily Private Cloud Compute
+    /// allowance on. Data lookups read numbers Swift already computed and small
+    /// talk needs a sentence, so both stay on-device; the rest is where a larger
+    /// model's breadth and reasoning actually change the answer.
+    var prefersServerModel: Bool {
+        switch self {
+        case .education, .planning, .support, .general: return true
+        case .dataLookup, .smallTalk: return false
+        }
+    }
+
     /// Whether today's metric lines belong in the prompt. Withholding them is the
     /// only reliable way to stop the model from steering every answer back to them.
     var usesFullMetrics: Bool {

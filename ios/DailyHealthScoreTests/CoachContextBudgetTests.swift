@@ -4,11 +4,19 @@ import XCTest
 final class CoachContextBudgetTests: XCTestCase {
     private let os26 = CoachContextBudget.make(totalTokens: 4096)
     private let os27 = CoachContextBudget.make(totalTokens: 8192)
+    private let server = CoachContextBudget.make(totalTokens: 32_768)
 
     func test_largerWindowGetsMoreRoom() {
         XCTAssertGreaterThan(os27.knowledgeCharacters, os26.knowledgeCharacters)
         XCTAssertGreaterThan(os27.transcriptTurns, os26.transcriptTurns)
         XCTAssertGreaterThan(os27.summaryCharacters, os26.summaryCharacters)
+    }
+
+    /// The Private Cloud Compute window is 32K; the caps have to leave room to
+    /// use it or routing to the server model buys nothing.
+    func test_serverWindowIsActuallyUsed() {
+        XCTAssertGreaterThan(server.knowledgeCharacters, os27.knowledgeCharacters * 2)
+        XCTAssertGreaterThan(server.transcriptTurns, os27.transcriptTurns)
     }
 
     /// A bigger window should buy a fuller answer, not only a longer prompt.
@@ -26,7 +34,7 @@ final class CoachContextBudgetTests: XCTestCase {
 
     /// Every section full at once is the worst case; it still has to fit.
     func test_worstCasePromptFitsTheWindow() {
-        for budget in [os26, os27] {
+        for budget in [os26, os27, server] {
             let characters = CoachCharter.instructions.count
                 + CoachContextBudget.scaffoldingCharacters
                 + budget.knowledgeCharacters

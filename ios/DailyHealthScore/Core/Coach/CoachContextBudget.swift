@@ -15,6 +15,12 @@ struct CoachContextBudget: Equatable, Sendable {
     /// Fixed prompt scaffolding: snapshot, directives, contract, section headers.
     static let scaffoldingCharacters = 2800
 
+    /// Ceilings any window can reach. Callers that build a block before knowing
+    /// which model will answer use these, and the prompt trims to the real
+    /// budget afterwards.
+    static let maxHistoryCharacters = 3_000
+    static let maxTranscriptTurns = 40
+
     /// Room held back for the model's own reply. A larger window should buy a
     /// fuller answer, not just a longer prompt.
     static func reservedResponseTokens(totalTokens: Int) -> Int {
@@ -56,13 +62,15 @@ struct CoachContextBudget: Equatable, Sendable {
         // returns a fragment and the model answers from memory instead.
         // Shares sum to well under 1.0: every block being simultaneously full is
         // the worst case, and the small window has no room for an overrun.
-        let knowledge = clamp(Int(Double(available) * 0.28), min: 900, max: 4200)
-        let history = clamp(Int(Double(available) * 0.10), min: 400, max: 1400)
-        let transcript = clamp(Int(Double(available) * 0.30), min: 480, max: 6000)
-        let summary = clamp(Int(Double(available) * 0.10), min: 300, max: 1400)
-        let profile = clamp(Int(Double(available) * 0.09), min: 260, max: 1200)
+        // Upper bounds are generous enough for the 32K server window without
+        // letting a prompt grow past the point where more material helps.
+        let knowledge = clamp(Int(Double(available) * 0.28), min: 900, max: 12_000)
+        let history = clamp(Int(Double(available) * 0.10), min: 400, max: maxHistoryCharacters)
+        let transcript = clamp(Int(Double(available) * 0.30), min: 480, max: 16_000)
+        let summary = clamp(Int(Double(available) * 0.10), min: 300, max: 2_000)
+        let profile = clamp(Int(Double(available) * 0.09), min: 260, max: 1_600)
 
-        let turns = clamp(transcript / 280, min: 2, max: 16)
+        let turns = clamp(transcript / 280, min: 2, max: maxTranscriptTurns)
 
         return CoachContextBudget(
             totalTokens: totalTokens,
