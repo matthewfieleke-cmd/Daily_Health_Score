@@ -43,10 +43,14 @@ struct CoachUserProfile: Equatable, Codable, Sendable {
         ].compactMap { $0 }.joined(separator: "\n")
     }
 
+    /// Profile notes ride along in every prompt, so each field stays short.
+    static let maxFieldLength = 140
+
     mutating func merge(from other: CoachUserProfile) {
         func prefer(_ incoming: String, over existing: String) -> String {
             let trimmed = incoming.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? existing : trimmed
+            guard !trimmed.isEmpty else { return existing }
+            return String(trimmed.prefix(CoachUserProfile.maxFieldLength))
         }
         preferredStyle = prefer(other.preferredStyle, over: preferredStyle)
         constraints = prefer(other.constraints, over: constraints)
@@ -78,20 +82,40 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
     }
 }
 
+/// Where a metric sits against its goal. The app computes this; the model never
+/// does the arithmetic or the comparison.
+enum CoachMetricLevel: String, Equatable, Sendable {
+    case missing = "NO DATA"
+    case below = "BELOW GOAL"
+    case met = "GOAL MET"
+    case exceeded = "GOAL EXCEEDED"
+}
+
+/// One fully rendered metric line, including the correct comparison sentence.
+struct CoachMetricStatus: Equatable, Sendable {
+    var name: String
+    var level: CoachMetricLevel
+    var value: Double
+    var goal: Double
+    var unit: String
+    var points: Double
+    var maxPoints: Double
+    /// Model-ready sentence, e.g. "Fiber: 36.8 g of a 40 g goal — BELOW GOAL by 3.2 g (92% of goal)."
+    var sentence: String
+
+    var isAtOrAboveGoal: Bool {
+        level == .met || level == .exceeded
+    }
+}
+
 /// Compact facts for the model. Built by app code — never invent metrics in prompts.
 struct CoachSnapshot: Equatable, Sendable {
     var todayKey: String
     var dayPhase: DayPhase
     var totalScore: Double
-    var sleepHours: Double
-    var sleepGoal: Double
-    var sleepScore: Double
-    var fiberGrams: Double
-    var fiberGoal: Double
-    var fiberScore: Double
-    var exerciseMinutes: Double
-    var exerciseGoal: Double
-    var exerciseScore: Double
+    var sleep: CoachMetricStatus
+    var fiber: CoachMetricStatus
+    var exercise: CoachMetricStatus
     var primaryFocus: PrimaryFocus
     var weekDaysWithData: Int
     var weekAvgScore: Double?
@@ -99,62 +123,75 @@ struct CoachSnapshot: Equatable, Sendable {
     var weekAvgFiber: Double?
     var weekAvgExercise: Double?
     var fiberDaysLoggedInWeek: Int
-    var sleepPresentToday: Bool
-    var fiberPresentToday: Bool
-    var exercisePresentToday: Bool
+
+    var metrics: [CoachMetricStatus] { [sleep, fiber, exercise] }
+
+    /// Goals restated verbatim so "what is my goal?" can be answered exactly.
+    var goalsBlock: String {
+        String(
+            format: "Sleep goal %.1f h/night · Fiber goal %.0f g/day · Exercise goal %.0f min/day",
+            sleep.goal,
+            fiber.goal,
+            exercise.goal
+        )
+    }
 
     var promptBlock: String {
         var lines: [String] = []
-        lines.append("Date: \(todayKey)")
-        lines.append("Day phase: \(dayPhase.rawValue)")
-        lines.append(String(format: "Today score: %.1f / 10", totalScore))
-        lines.append(
-            String(
-                format: "Sleep: %.1f h (goal %.1f, points %.1f/4)%@",
-                sleepHours,
-                sleepGoal,
-                sleepScore,
-                sleepPresentToday ? "" : " [no/low sleep data]"
-            )
-        )
-        lines.append(
-            String(
-                format: "Fiber: %.1f g (goal %.0f, points %.1f/4)%@",
-                fiberGrams,
-                fiberGoal,
-                fiberScore,
-                fiberPresentToday ? "" : " [fiber logging incomplete/missing]"
-            )
-        )
-        lines.append(
-            String(
-                format: "Exercise: %.0f min (goal %.0f, points %.1f/2)%@",
-                exerciseMinutes,
-                exerciseGoal,
-                exerciseScore,
-                exercisePresentToday ? "" : " [no exercise minutes logged]"
-            )
-        )
-        lines.append("Implied focus from metrics: \(primaryFocus.rawValue)")
-        lines.append(
-            "Last 7 days: \(weekDaysWithData) days with records; fiber logged on \(fiberDaysLoggedInWeek)/7 days"
-        )
+        lines.append("USER'S GOALS: \(goalsBlock)")
+        lines.append("DATE: \(todayKey) (\(dayPhase.rawValue))")
+        lines.append(String(format: "TODAY'S SCORE: %.1f of 10", totalScore))
+        lines.append("TODAY'S METRICS (comparisons already computed — repeat them exactly):")
+        for metric in metrics {
+            lines.append("- \(metric.sentence)")
+        }
+        lines.append("WEAKEST PILLAR RIGHT NOW: \(primaryFocus.rawValue)")
+
+        var weekly: [String] = ["7-DAY CONTEXT: \(weekDaysWithData) of 7 days have records"]
         if let weekAvgScore {
-            lines.append(String(format: "7-day avg score: %.1f", weekAvgScore))
+            weekly.append(String(format: "avg score %.1f", weekAvgScore))
         }
         if let weekAvgSleep {
-            lines.append(String(format: "7-day avg sleep: %.1f h", weekAvgSleep))
+            weekly.append(String(format: "avg sleep %.1f h", weekAvgSleep))
         }
         if let weekAvgFiber {
-            lines.append(String(format: "7-day avg fiber: %.1f g", weekAvgFiber))
+            weekly.append(String(format: "avg fiber %.0f g", weekAvgFiber))
         }
         if let weekAvgExercise {
-            lines.append(String(format: "7-day avg exercise: %.0f min", weekAvgExercise))
+            weekly.append(String(format: "avg exercise %.0f min", weekAvgExercise))
         }
+        weekly.append("fiber logged on \(fiberDaysLoggedInWeek) of 7 days")
+        lines.append(weekly.joined(separator: "; "))
+
         lines.append(
-            "Reminders: missing data ≠ failure; do not chase the score; one next step."
+            "FACT RULES: Use only these numbers. Never claim a metric is above or below goal "
+                + "unless its status line says so. Missing data means unlogged, not zero behavior."
         )
         return lines.joined(separator: "\n")
+    }
+
+    /// Coaching posture derived from goal status, so the coach never pushes "more"
+    /// on a pillar that is already met.
+    var coachingDirective: String {
+        var directives: [String] = []
+        for metric in metrics where metric.isAtOrAboveGoal {
+            directives.append(
+                "\(metric.name) is already at or above goal — affirm and protect it; do NOT ask for more \(metric.name.lowercased())."
+            )
+        }
+        for metric in metrics where metric.level == .missing {
+            directives.append(
+                "\(metric.name) has no data today — treat as unlogged, not as failure; do not assume the behavior didn't happen."
+            )
+        }
+        if metrics.allSatisfy({ $0.isAtOrAboveGoal }) {
+            directives.append("All pillars met: shift to maintenance, recovery, or a non-scored pillar (stress, connection).")
+        } else if let weakest = metrics
+            .filter({ !$0.isAtOrAboveGoal && $0.level != .missing })
+            .min(by: { ($0.value / max($0.goal, 0.001)) < ($1.value / max($1.goal, 0.001)) }) {
+            directives.append("If offering one step, focus on \(weakest.name.lowercased()).")
+        }
+        return directives.isEmpty ? "No special directives." : directives.joined(separator: "\n")
     }
 }
 
