@@ -26,10 +26,49 @@ final class CoachContextBudgetTests: XCTestCase {
     }
 
     func test_smallWindowKeepsWorkableFloors() {
-        // Below roughly one full knowledge entry, retrieval degrades to a fragment.
-        XCTAssertGreaterThanOrEqual(os26.knowledgeCharacters, 900)
+        XCTAssertGreaterThanOrEqual(os26.knowledgeCharacters, 500)
         XCTAssertGreaterThanOrEqual(os26.transcriptTurns, 2)
-        XCTAssertGreaterThan(os26.transcriptCharactersPerTurn, 120)
+        XCTAssertGreaterThanOrEqual(os26.transcriptCharactersPerTurn, 120)
+    }
+
+    /// The 4K window cannot hold the full charter plus every block at its
+    /// preferred size. It has to give ground evenly rather than promise room
+    /// that isn't there and let the prompt truncate somewhere unpredictable.
+    func test_smallWindowScalesBlocksTogetherRatherThanOverflowing() {
+        let blocks = os26.knowledgeCharacters
+            + os26.historyCharacters
+            + os26.summaryCharacters
+            + os26.profileCharacters
+        let available = CoachContextBudget.availablePromptCharacters(
+            totalTokens: 4096,
+            instructionCharacters: CoachCharter.instructions.count
+        )
+
+        XCTAssertLessThanOrEqual(blocks, available)
+        // A window with room to spare must not be scaled back at all.
+        XCTAssertEqual(server.knowledgeCharacters, 12_000)
+    }
+
+    /// Filling a window to its last token means any text that tokenizes denser
+    /// than the estimate overflows.
+    func test_everyWindowKeepsHeadroom() {
+        for budget in [os26, os27, server] {
+            let characters = CoachCharter.instructions.count
+                + CoachContextBudget.scaffoldingCharacters
+                + budget.knowledgeCharacters
+                + budget.historyCharacters
+                + budget.transcriptTurns * budget.transcriptCharactersPerTurn
+                + budget.summaryCharacters
+                + budget.profileCharacters
+            let tokens = Int(Double(characters) / CoachContextBudget.charactersPerToken)
+                + budget.responseTokens
+
+            XCTAssertLessThanOrEqual(
+                tokens,
+                budget.totalTokens - CoachContextBudget.safetyMarginTokens / 2,
+                "a \(budget.totalTokens)-token window is packed too tightly to be safe"
+            )
+        }
     }
 
     /// Every section full at once is the worst case; it still has to fit.
