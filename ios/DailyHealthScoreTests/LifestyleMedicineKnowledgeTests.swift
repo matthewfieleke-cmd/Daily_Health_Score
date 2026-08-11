@@ -48,6 +48,39 @@ final class LifestyleMedicineKnowledgeTests: XCTestCase {
         XCTAssertLessThanOrEqual(block.count, 600)
     }
 
+    /// A tight budget on the smaller context window must still yield a usable
+    /// fragment rather than nothing, which would leave the model improvising.
+    func test_oversizedEntryIsTruncatedRatherThanDropped() {
+        let block = LifestyleMedicineKnowledge.promptBlock(
+            query: "are seed oils bad",
+            limit: 4,
+            characterBudget: 200
+        )
+        XCTAssertFalse(block.isEmpty)
+        XCTAssertLessThanOrEqual(block.count, 200)
+    }
+
+    func test_commonWellnessQuestionsAllRetrieveSomething() {
+        let questions = [
+            "are seed oils inflammatory", "should i take creatine", "is diet soda bad",
+            "do i need a multivitamin", "are eggs bad for cholesterol", "is soy bad for men",
+            "should i eat organic", "does spot reduction work for belly fat",
+            "should i stretch before i work out", "how many steps should i take",
+            "what lowers blood pressure", "what is a good a1c", "is sauna good for you",
+            "how do i eat healthy on a budget", "i work night shift and can't sleep",
+            "my knee hurts when i walk", "what about menopause and sleep",
+            "is melatonin safe", "do probiotics work", "is red meat bad",
+            "is gluten bad for you", "does keto work", "why is my metabolism slow",
+            "is it bad to eat late at night", "should i do hiit or steady cardio"
+        ]
+        for question in questions {
+            XCTAssertFalse(
+                LifestyleMedicineKnowledge.retrieve(query: question).isEmpty,
+                "no reference material for: \(question)"
+            )
+        }
+    }
+
     func test_unmatchedQueryReturnsNoNoise() {
         let entries = LifestyleMedicineKnowledge.retrieve(query: "zzzz qqqq")
         XCTAssertTrue(entries.isEmpty)
