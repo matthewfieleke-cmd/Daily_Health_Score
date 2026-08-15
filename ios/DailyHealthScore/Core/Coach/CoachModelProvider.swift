@@ -24,44 +24,16 @@ enum CoachModelTier: String, Equatable, Sendable {
 
 /// Chooses and builds the session for each request.
 ///
-/// Every reference to the Private Cloud Compute API lives here so the on-device
-/// path stays intact if the server model is unavailable, out of quota, or the
-/// app has not been granted the entitlement.
-///
-/// `PrivateCloudComputeLanguageModel` is an iOS 27 SDK type. `#available(iOS 27)`
-/// is a runtime check and still needs the type at compile time, so those calls
-/// are behind `DHS_HAS_PRIVATE_CLOUD_COMPUTE`. Leave that flag off until Xcode's
-/// FoundationModels module actually contains the type (a later 27 SDK) and the
-/// managed entitlement is on the App ID. Until then every request uses the
-/// on-device model, which is the shipping behavior.
+/// PCC routing is fully wired: intents still prefer the server model, the daily
+/// card still asks for it, and a server failure still falls back on-device.
+/// The `PrivateCloudComputeLanguageModel` *type* is the only thing gated. It is
+/// not in the current Xcode SDK, and `#available(iOS 27)` cannot hide a missing
+/// type. Set `DHS_HAS_PRIVATE_CLOUD_COMPUTE` in `project.yml` once the SDK has
+/// it and the managed entitlement is on the App ID. That turns the existing
+/// routing on; it does not require rewriting the coach.
 @MainActor
 enum CoachModelProvider {
     private static var cachedContextTokens: [CoachModelTier: Int] = [:]
-
-    /// True when the server model can serve this request right now. False keeps
-    /// everything on the on-device path, which is the shipping behavior until
-    /// the Private Cloud Compute entitlement is granted and the SDK has the type.
-    static var isServerModelAvailable: Bool {
-        #if canImport(FoundationModels) && DHS_HAS_PRIVATE_CLOUD_COMPUTE
-        if #available(iOS 27.0, *) {
-            if case .available = PrivateCloudComputeLanguageModel().availability {
-                return !isServerQuotaExhausted
-            }
-        }
-        #endif
-        return false
-    }
-
-    /// Daily quota is per person, so a exhausted allowance silently routes back
-    /// on-device rather than failing the message.
-    static var isServerQuotaExhausted: Bool {
-        #if canImport(FoundationModels) && DHS_HAS_PRIVATE_CLOUD_COMPUTE
-        if #available(iOS 27.0, *) {
-            return PrivateCloudComputeLanguageModel().quotaUsage.isLimitReached
-        }
-        #endif
-        return false
-    }
 
     /// The tier that should answer this message. Trivial and precomputed
     /// questions stay on-device so the daily allowance is spent where depth
@@ -71,10 +43,35 @@ enum CoachModelProvider {
         return .privateCloud
     }
 
-    #if canImport(FoundationModels)
+    static func contextBudget(for tier: CoachModelTier) async -> CoachContextBudget {
+        CoachContextBudget.make(totalTokens: await contextTokens(for: tier))
+    }
+
+    /// Cached so we do not ask the framework for the window on every message.
+    static func contextTokens(for tier: CoachModelTier) async -> Int {
+        if let cached = cachedContextTokens[tier] { return cached }
+        let resolved = await readContextTokens(for: tier)
+        cachedContextTokens[tier] = resolved
+        return resolved
+    }
+}
+
+#if canImport(FoundationModels) && DHS_HAS_PRIVATE_CLOUD_COMPUTE
+@MainActor
+extension CoachModelProvider {
+    static var isServerModelAvailable: Bool {
+        guard #available(iOS 27.0, *) else { return false }
+        guard case .available = PrivateCloudComputeLanguageModel().availability else { return false }
+        return !isServerQuotaExhausted
+    }
+
+    static var isServerQuotaExhausted: Bool {
+        guard #available(iOS 27.0, *) else { return false }
+        return PrivateCloudComputeLanguageModel().quotaUsage.isLimitReached
+    }
+
     @available(iOS 26.0, *)
     static func makeSession(tier: CoachModelTier, instructions: String) -> LanguageModelSession {
-        #if DHS_HAS_PRIVATE_CLOUD_COMPUTE
         if tier == .privateCloud, #available(iOS 27.0, *) {
             return LanguageModelSession(
                 model: PrivateCloudComputeLanguageModel(),
@@ -82,34 +79,60 @@ enum CoachModelProvider {
                 instructions: instructions
             )
         }
-        #endif
         return LanguageModelSession(instructions: instructions)
+    }
+
+    fileprivate static func readContextTokens(for tier: CoachModelTier) async -> Int {
+        switch tier {
+        case .privateCloud:
+            if #available(iOS 27.0, *) {
+                if let reported = try? await PrivateCloudComputeLanguageModel().contextSize, reported > 0 {
+                    return reported
+                }
+            }
+            return CoachModelTier.privateCloud.assumedContextTokens
+        case .onDevice:
+            return await onDeviceContextTokens()
+        }
+    }
+}
+#else
+@MainActor
+extension CoachModelProvider {
+    /// Always false until the SDK contains `PrivateCloudComputeLanguageModel`
+    /// and `DHS_HAS_PRIVATE_CLOUD_COMPUTE` is on. The rest of the coach still
+    /// asks this question; it just gets "use on-device" until then.
+    static var isServerModelAvailable: Bool { false }
+    static var isServerQuotaExhausted: Bool { false }
+
+    #if canImport(FoundationModels)
+    @available(iOS 26.0, *)
+    static func makeSession(tier: CoachModelTier, instructions: String) -> LanguageModelSession {
+        LanguageModelSession(instructions: instructions)
     }
     #endif
 
-    /// The tier's real context window, read once from the framework.
-    static func contextTokens(for tier: CoachModelTier) async -> Int {
-        if let cached = cachedContextTokens[tier] { return cached }
-        var resolved = tier.assumedContextTokens
+    fileprivate static func readContextTokens(for tier: CoachModelTier) async -> Int {
+        switch tier {
+        case .privateCloud:
+            return CoachModelTier.privateCloud.assumedContextTokens
+        case .onDevice:
+            return await onDeviceContextTokens()
+        }
+    }
+}
+#endif
+
+@MainActor
+extension CoachModelProvider {
+    fileprivate static func onDeviceContextTokens() async -> Int {
         #if canImport(FoundationModels)
-        #if DHS_HAS_PRIVATE_CLOUD_COMPUTE
-        if tier == .privateCloud, #available(iOS 27.0, *) {
-            if let reported = try? await PrivateCloudComputeLanguageModel().contextSize, reported > 0 {
-                resolved = reported
-            }
-        } else
-        #endif
-        if tier == .onDevice, #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *) {
             if let reported = try? await SystemLanguageModel.default.contextSize, reported > 0 {
-                resolved = reported
+                return reported
             }
         }
         #endif
-        cachedContextTokens[tier] = resolved
-        return resolved
-    }
-
-    static func contextBudget(for tier: CoachModelTier) async -> CoachContextBudget {
-        CoachContextBudget.make(totalTokens: await contextTokens(for: tier))
+        return CoachModelTier.onDevice.assumedContextTokens
     }
 }
