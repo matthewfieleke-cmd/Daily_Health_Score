@@ -55,6 +55,16 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("Apple Watch") {
+                    Toggle("Afternoon & evening reminders", isOn: paceNudgeBinding)
+                    Text("If fiber or movement is still low later in the day, your Watch (or iPhone, if no Watch is paired) will remind you. Fiber reminders ask you to log a meal on iPhone or eat a high-fiber food — they never log from the Watch.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Add the Daily Health Score complication from the Watch face editor after installing the Watch app.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("DHS Lifestyle Coach") {
                     Button(role: .destructive) {
                         showClearCoachConfirm = true
@@ -155,6 +165,24 @@ struct SettingsView: View {
                 selectedFiberGoal = newGoal
                 appState.settingsStore.settings.fiberGoal = newGoal
                 Task { await appState.refreshTodayAfterGoalChange() }
+            }
+        )
+    }
+
+    private var paceNudgeBinding: Binding<Bool> {
+        Binding(
+            get: { appState.settingsStore.paceNudgesEnabled },
+            set: { enabled in
+                appState.settingsStore.paceNudgesEnabled = enabled
+                if enabled {
+                    Task {
+                        _ = await SMARTNotificationService.requestAuthorization()
+                        appState.watchSync.publish()
+                    }
+                } else {
+                    PaceNudgeScheduler.cancelAll()
+                    appState.watchSync.publish()
+                }
             }
         )
     }

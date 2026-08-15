@@ -24,6 +24,11 @@ enum HealthKitError: LocalizedError {
 
 final class HealthKitService {
     let store = HKHealthStore()
+    private var observerQueries: [HKObserverQuery] = []
+    private var didStartBackgroundDelivery = false
+
+    /// Called on a HealthKit background queue when new samples arrive.
+    var onBackgroundChange: (@Sendable () -> Void)?
 
     var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
 
@@ -36,6 +41,43 @@ final class HealthKitService {
             throw HealthKitError.unavailable
         }
         try await store.requestAuthorization(toShare: [], read: [sleep, fiber, exercise, hrv])
+    }
+
+    /// Wakes the app when sleep, fiber, or exercise land in Health so today can
+    /// be rebuilt and pushed to the Watch without opening the iPhone app.
+    func startBackgroundDelivery() async {
+        guard isAvailable, !didStartBackgroundDelivery else { return }
+        guard let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis),
+              let fiber = HKObjectType.quantityType(forIdentifier: .dietaryFiber),
+              let exercise = HKObjectType.quantityType(forIdentifier: .appleExerciseTime) else {
+            return
+        }
+        didStartBackgroundDelivery = true
+        await enableDelivery(for: sleep, frequency: .hourly)
+        await enableDelivery(for: fiber, frequency: .immediate)
+        await enableDelivery(for: exercise, frequency: .immediate)
+        observe(sleep)
+        observe(fiber)
+        observe(exercise)
+    }
+
+    private func enableDelivery(for type: HKObjectType, frequency: HKUpdateFrequency) async {
+        do {
+            try await store.enableBackgroundDelivery(for: type, frequency: frequency)
+        } catch {
+            // Delivery is best-effort; scheduled pace checks still catch a silent day.
+        }
+    }
+
+    private func observe(_ type: HKSampleType) {
+        let query = HKObserverQuery(sampleType: type, predicate: nil) { [weak self] _, completionHandler, error in
+            if error == nil {
+                self?.onBackgroundChange?()
+            }
+            completionHandler()
+        }
+        observerQueries.append(query)
+        store.execute(query)
     }
 
     /// Reads sleep, fiber, exercise, and optional sleep HRV for a day. Score

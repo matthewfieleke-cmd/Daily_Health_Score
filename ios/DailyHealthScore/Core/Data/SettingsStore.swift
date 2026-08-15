@@ -10,6 +10,7 @@ final class SettingsStore: ObservableObject {
         static let usedDiscouragement = "dhs.usedDiscouragement"
         static let usedMotivation = "dhs.usedMotivation"
         static let hrvSensitivity = "dhs.hrvSensitivity"
+        static let paceNudgesEnabled = "dhs.paceNudgesEnabled"
     }
 
     @Published var settings: UserSettings {
@@ -21,6 +22,13 @@ final class SettingsStore: ObservableObject {
     @Published var hrvSensitivity: HRVSensitivity {
         didSet {
             UserDefaults.standard.set(hrvSensitivity.rawValue, forKey: Keys.hrvSensitivity)
+        }
+    }
+
+    /// Afternoon and evening fiber/movement reminders. Default on.
+    @Published var paceNudgesEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(paceNudgesEnabled, forKey: Keys.paceNudgesEnabled)
         }
     }
 
@@ -36,6 +44,11 @@ final class SettingsStore: ObservableObject {
         settings = UserSettings(sleepGoal: sleep, fiberGoal: fiber)
         hrvSensitivity = UserDefaults.standard.string(forKey: Keys.hrvSensitivity)
             .flatMap(HRVSensitivity.init(rawValue:)) ?? .balanced
+        if UserDefaults.standard.object(forKey: Keys.paceNudgesEnabled) == nil {
+            paceNudgesEnabled = true
+        } else {
+            paceNudgesEnabled = UserDefaults.standard.bool(forKey: Keys.paceNudgesEnabled)
+        }
         loadRotationState()
     }
 

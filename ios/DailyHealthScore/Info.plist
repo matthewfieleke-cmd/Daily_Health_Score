@@ -33,7 +33,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Daily Health Score does not use your location. This description is required because Apple Health libraries may reference location APIs; the app never collects or stores your location.</string>
 	<key>NSUserNotificationsUsageDescription</key>
-	<string>Daily Health Score can send neutral reminders for your SMART goals.</string>
+	<string>Daily Health Score can remind you about SMART goals and, later in the day, if fiber or movement is still low.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -41,5 +41,9 @@
 	</dict>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>healthkit</string>
+	</array>
 </dict>
 </plist>
