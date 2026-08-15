@@ -22,7 +22,7 @@ open DailyHealthScore.xcodeproj
 ### Option B — Manual Xcode project
 
 1. **File → New → Project → App** (SwiftUI, Swift, iOS 17).
-2. Product name: `DailyHealthScore`, bundle ID: `com.dailyhealthscore.app`, iOS 26.
+2. Product name: `DailyHealthScore`, bundle ID: `com.dailyhealthscore.app.mf`, iOS 26.
 3. Drag the `DailyHealthScore/` source folder into the target.
 4. Add **HealthKit** capability (Signing & Capabilities).
 5. Set **Info.plist** `NSHealthShareUsageDescription` (included in this repo).
