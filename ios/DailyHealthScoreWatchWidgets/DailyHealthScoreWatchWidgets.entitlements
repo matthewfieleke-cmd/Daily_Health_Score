@@ -4,7 +4,7 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.dailyhealthscore.app</string>
+		<string>group.com.dailyhealthscore.app.mf</string>
 	</array>
 </dict>
 </plist>

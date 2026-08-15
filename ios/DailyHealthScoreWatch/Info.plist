@@ -21,7 +21,7 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>WKCompanionAppBundleIdentifier</key>
-	<string>com.dailyhealthscore.app</string>
+	<string>com.dailyhealthscore.app.mf</string>
 	<key>WKApplication</key>
 	<true/>
 	<key>WKWatchOnlyApp</key>

@@ -7,7 +7,7 @@ import Foundation
 /// entitlement so Xcode signs them together; bytes move between devices only
 /// through Watch Connectivity.
 enum WatchBridge {
-    static let appGroupIdentifier = "group.com.dailyhealthscore.app"
+    static let appGroupIdentifier = "group.com.dailyhealthscore.app.mf"
     static let snapshotDefaultsKey = "dhs.watch.snapshotJSON"
     static let pendingCheckInsDefaultsKey = "dhs.watch.pendingCheckInsJSON"
     static let applicationContextSnapshotKey = "snapshotJSON"
