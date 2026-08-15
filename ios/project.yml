@@ -5,6 +5,10 @@ options:
     iOS: "26.0"
 settings:
   SWIFT_VERSION: "5.9"
+  # PCC's PrivateCloudComputeLanguageModel is not in every iOS 27 SDK. Leave this
+  # unset so the coach compiles and runs on-device. When Xcode's FoundationModels
+  # module contains that type AND the managed entitlement is on the App ID, add:
+  # SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) DHS_HAS_PRIVATE_CLOUD_COMPUTE
 targets:
   DailyHealthScore:
     type: application
