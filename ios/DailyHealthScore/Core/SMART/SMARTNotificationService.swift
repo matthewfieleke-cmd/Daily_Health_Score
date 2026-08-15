@@ -39,6 +39,8 @@ enum SMARTNotificationService {
             content.title = "SMART goal reminder"
             content.body = goal.specificText
             content.sound = .default
+            content.categoryIdentifier = NotificationCategoryID.smartGoal
+            content.userInfo = ["goalId": goal.id.uuidString]
 
             let trigger = UNCalendarNotificationTrigger(dateMatching: date, repeats: true)
             let request = UNNotificationRequest(

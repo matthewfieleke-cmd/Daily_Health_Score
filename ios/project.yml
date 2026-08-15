@@ -3,8 +3,11 @@ options:
   bundleIdPrefix: com.dailyhealthscore
   deploymentTarget:
     iOS: "26.0"
+    watchOS: "26.0"
 settings:
   SWIFT_VERSION: "5.9"
+  MARKETING_VERSION: "1.7.0"
+  CURRENT_PROJECT_VERSION: "12"
   # PCC's PrivateCloudComputeLanguageModel is not in every iOS 27 SDK. Leave this
   # unset so the coach compiles and runs on-device. When Xcode's FoundationModels
   # module contains that type AND the managed entitlement is on the App ID, add:
@@ -17,6 +20,9 @@ targets:
       - path: DailyHealthScore
         excludes:
           - "**/.DS_Store"
+      - path: DailyHealthScoreShared
+        excludes:
+          - "**/.DS_Store"
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.dailyhealthscore.app
       INFOPLIST_FILE: DailyHealthScore/Info.plist
@@ -26,9 +32,65 @@ targets:
       # interface orientations in Info.plist or setting UIRequiresFullScreen.
       TARGETED_DEVICE_FAMILY: "1"
       MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "11"
+      CURRENT_PROJECT_VERSION: "12"
     entitlements:
       path: DailyHealthScore/DailyHealthScore.entitlements
+    dependencies:
+      - target: DailyHealthScoreWatch
+        embed: true
+        codeSign: true
+
+  DailyHealthScoreWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: DailyHealthScoreWatch
+        excludes:
+          - "**/.DS_Store"
+      - path: DailyHealthScoreShared
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.dailyhealthscore.app.watchkitapp
+      INFOPLIST_FILE: DailyHealthScoreWatch/Info.plist
+      CODE_SIGN_ENTITLEMENTS: DailyHealthScoreWatch/DailyHealthScoreWatch.entitlements
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      TARGETED_DEVICE_FAMILY: "4"
+      SDKROOT: watchos
+      SKIP_INSTALL: YES
+      MARKETING_VERSION: "1.7.0"
+      CURRENT_PROJECT_VERSION: "12"
+    entitlements:
+      path: DailyHealthScoreWatch/DailyHealthScoreWatch.entitlements
+    dependencies:
+      - target: DailyHealthScoreWatchWidgets
+        embed: true
+        codeSign: true
+
+  DailyHealthScoreWatchWidgets:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - path: DailyHealthScoreWatchWidgets
+        excludes:
+          - "**/.DS_Store"
+      - path: DailyHealthScoreShared
+        excludes:
+          - "**/.DS_Store"
+          - PaceNudgeScheduler.swift
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.dailyhealthscore.app.watchkitapp.widgets
+      INFOPLIST_FILE: DailyHealthScoreWatchWidgets/Info.plist
+      CODE_SIGN_ENTITLEMENTS: DailyHealthScoreWatchWidgets/DailyHealthScoreWatchWidgets.entitlements
+      TARGETED_DEVICE_FAMILY: "4"
+      SDKROOT: watchos
+      SKIP_INSTALL: YES
+      APPLICATION_EXTENSION_API_ONLY: YES
+      LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/Frameworks @executable_path/../../Frameworks
+      MARKETING_VERSION: "1.7.0"
+      CURRENT_PROJECT_VERSION: "12"
+    entitlements:
+      path: DailyHealthScoreWatchWidgets/DailyHealthScoreWatchWidgets.entitlements
 
   DailyHealthScoreTests:
     type: bundle.unit-test
@@ -48,6 +110,8 @@ schemes:
     build:
       targets:
         DailyHealthScore: all
+        DailyHealthScoreWatch: all
+        DailyHealthScoreWatchWidgets: all
         DailyHealthScoreTests: [test]
     test:
       targets:

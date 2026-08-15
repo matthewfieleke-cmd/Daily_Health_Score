@@ -80,7 +80,7 @@ enum SMARTWizardStep: Int, CaseIterable, Identifiable {
 
 // MARK: - Domain model
 
-struct SMARTGoal: Identifiable, Equatable {
+struct SMARTGoal: Identifiable, Equatable, Codable {
     var id: UUID
     var specificText: String
     var targetCount: Int
@@ -118,5 +118,17 @@ struct SMARTGoal: Identifiable, Equatable {
         } else {
             filledMask &= ~(1 << index)
         }
+    }
+
+    /// Fills the lowest empty circle. Used by Watch check-ins so two in-flight
+    /// taps cannot overwrite each other by sending a stale mask.
+    @discardableResult
+    mutating func fillNextEmpty() -> Bool {
+        guard status == .active, !isComplete else { return false }
+        for index in 0 ..< targetCount where !isFilled(index) {
+            setFilled(index, filled: true)
+            return true
+        }
+        return false
     }
 }

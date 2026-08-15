@@ -25,6 +25,7 @@ final class AppState: ObservableObject {
     let recordStore: RecordStore
     let smartGoalStore: SMARTGoalStore
     let coach: LifestyleCoachController
+    let watchSync: WatchSyncCoordinator
 
     @Published var healthSyncBannerPhase: HealthSyncBannerPhase = .hidden
     /// True while sync work runs and through the minimum syncing-banner display window.
@@ -40,6 +41,31 @@ final class AppState: ObservableObject {
         recordStore = RecordStore(modelContext: modelContext)
         smartGoalStore = SMARTGoalStore(modelContext: modelContext)
         coach = LifestyleCoachController(modelContext: modelContext)
+        watchSync = WatchSyncCoordinator(
+            recordStore: recordStore,
+            smartGoalStore: smartGoalStore,
+            settingsStore: settingsStore
+        )
+        healthKit.onBackgroundChange = { [weak self] in
+            Task { @MainActor in
+                await self?.syncTodayFromHealth(silent: true)
+            }
+        }
+        NotificationActionRouter.handleSMARTCheckIn = { [weak self] goalId in
+            self?.watchSync.applyCheckIn(goalId: goalId)
+        }
+        smartGoalStore.onChange = { [weak self] in
+            self?.watchSync.publish()
+        }
+    }
+
+    func startWatchAndBackgroundDelivery() async {
+        watchSync.activate()
+        if settingsStore.paceNudgesEnabled {
+            _ = await SMARTNotificationService.requestAuthorization()
+        }
+        await healthKit.startBackgroundDelivery()
+        watchSync.publish()
     }
 
     func requestHealthAccess() async {
@@ -53,13 +79,20 @@ final class AppState: ObservableObject {
     }
 
     /// Syncs today and backfills/updates stored days in the retention window from Apple Health.
-    func syncTodayFromHealth(userInitiated: Bool = false) async {
-        activeSyncGeneration &+= 1
-        let generation = activeSyncGeneration
+    func syncTodayFromHealth(userInitiated: Bool = false, silent: Bool = false) async {
+        let generation: UInt
         let syncStartedAt = Date()
-
-        healthSyncBannerPhase = .syncing
-        isSyncingHealth = true
+        if silent {
+            // Background Health wakes must not steal the user-visible banner
+            // generation; a silent sync finishing first used to leave "Syncing"
+            // stuck on screen.
+            generation = activeSyncGeneration
+        } else {
+            activeSyncGeneration &+= 1
+            generation = activeSyncGeneration
+            healthSyncBannerPhase = .syncing
+            isSyncingHealth = true
+        }
 
         var succeeded = false
         do {
@@ -83,26 +116,33 @@ final class AppState: ObservableObject {
             recordStore.save(todayRecord)
             existingByDate[today] = todayRecord
 
-            // Backfill never aborts because of an individual day; failures simply
-            // skip that day and the rest of the window still updates.
-            var backfillBatch: [DailyRecord] = []
-            for dateKey in windowKeys where dateKey != today {
-                guard let record = await buildRecordIfNeeded(
-                    dateKey: dateKey,
-                    todayKey: today,
-                    existingByDate: existingByDate
-                ) else { continue }
-                backfillBatch.append(record)
-                existingByDate[dateKey] = record
+            if !silent {
+                // Backfill never aborts because of an individual day; failures simply
+                // skip that day and the rest of the window still updates.
+                var backfillBatch: [DailyRecord] = []
+                for dateKey in windowKeys where dateKey != today {
+                    guard let record = await buildRecordIfNeeded(
+                        dateKey: dateKey,
+                        todayKey: today,
+                        existingByDate: existingByDate
+                    ) else { continue }
+                    backfillBatch.append(record)
+                    existingByDate[dateKey] = record
+                }
+                recordStore.saveBatch(backfillBatch)
             }
-            recordStore.saveBatch(backfillBatch)
             lastSyncError = nil
             succeeded = true
             if userInitiated {
                 userRefreshToken &+= 1
             }
+            watchSync.publish()
         } catch {
             lastSyncError = error.localizedDescription
+        }
+
+        if silent {
+            return
         }
 
         await waitForMinimumSyncingBannerDuration(since: syncStartedAt)
@@ -137,6 +177,7 @@ final class AppState: ObservableObject {
             sleepHrvSDNNMs: existing?.sleepHrvSDNNMs
         )
         recordStore.save(record)
+        watchSync.publish()
     }
 
     /// Refreshes today's suggestion when the day/evening phase changes (e.g. after 7:30 PM).
@@ -261,5 +302,6 @@ final class AppState: ObservableObject {
             updatedAt: Date()
         )
         recordStore.save(updated)
+        watchSync.publish()
     }
 }

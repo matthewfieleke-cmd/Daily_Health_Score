@@ -12,6 +12,7 @@ final class SMARTGoalStore: ObservableObject {
 
     private let modelContext: ModelContext
     @Published private(set) var goals: [SMARTGoal] = []
+    var onChange: (() -> Void)?
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -26,9 +27,28 @@ final class SMARTGoalStore: ObservableObject {
         )
         let entities = (try? modelContext.fetch(descriptor)) ?? []
         goals = entities.map { $0.toSMARTGoal() }
+        onChange?()
     }
 
     func save(_ goal: SMARTGoal) {
+        persist(goal)
+        Task { await SMARTNotificationService.scheduleReminder(for: goal) }
+    }
+
+    /// Watch check-in: fill the next empty circle on the live goal, then persist.
+    /// A missing, ended, or already-complete goal is a no-op.
+    func fillNextEmpty(on goalId: UUID) {
+        guard var goal = goals.first(where: { $0.id == goalId }) else { return }
+        guard goal.fillNextEmpty() else { return }
+        persist(goal)
+        if goal.isComplete {
+            SMARTNotificationService.cancelReminders(for: goalId)
+        } else {
+            Task { await SMARTNotificationService.scheduleReminder(for: goal) }
+        }
+    }
+
+    private func persist(_ goal: SMARTGoal) {
         let id = goal.id
         let descriptor = FetchDescriptor<SMARTGoalEntity>(
             predicate: #Predicate { $0.id == id }
@@ -40,7 +60,6 @@ final class SMARTGoalStore: ObservableObject {
         }
         try? modelContext.save()
         reload()
-        Task { await SMARTNotificationService.scheduleReminder(for: goal) }
     }
 
     func delete(id: UUID) {

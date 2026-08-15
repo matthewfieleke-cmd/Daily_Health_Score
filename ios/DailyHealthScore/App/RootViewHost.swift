@@ -42,6 +42,7 @@ private struct AppRootContent: View {
         .task {
             await appState.requestHealthAccess()
             await appState.syncTodayFromHealth()
+            await appState.startWatchAndBackgroundDelivery()
             didFinishLaunchSync = true
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
