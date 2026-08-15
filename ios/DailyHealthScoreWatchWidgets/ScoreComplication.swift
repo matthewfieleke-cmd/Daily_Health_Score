@@ -55,29 +55,56 @@ struct ScoreComplicationView: View {
     }
 
     var body: some View {
-        switch family {
-        case .accessoryCircular, .accessoryCorner:
-            circular
-        case .accessoryRectangular:
-            rectangular
-        case .accessoryInline:
-            Text("DHS \(label)")
-        default:
-            circular
+        Group {
+            switch family {
+            case .accessoryCircular:
+                circular
+            case .accessoryCorner:
+                corner
+            case .accessoryRectangular:
+                rectangular
+            case .accessoryInline:
+                Text("DHS \(label)")
+            default:
+                circular
+            }
+        }
+        .containerBackground(for: .widget) {
+            AccessoryWidgetBackground()
         }
     }
 
     private var circular: some View {
         Gauge(value: fraction) {
+            Text("Score")
+        } currentValueLabel: {
             Text(label)
         }
         .gaugeStyle(.accessoryCircularCapacity)
         .tint(WatchBrand.ringColor(fraction: fraction))
+        .accessibilityLabel("Daily score")
+        .accessibilityValue("\(label) out of ten")
+    }
+
+    private var corner: some View {
+        Text(label)
+            .font(.headline.monospacedDigit())
+            .widgetLabel {
+                Gauge(value: fraction) {
+                    Text("Score")
+                }
+                .gaugeStyle(.accessoryCircularCapacity)
+                .tint(WatchBrand.ringColor(fraction: fraction))
+            }
+            .accessibilityLabel("Daily score")
+            .accessibilityValue("\(label) out of ten")
     }
 
     private var rectangular: some View {
         HStack(spacing: 8) {
             Gauge(value: fraction) {
+                Text("Score")
+            } currentValueLabel: {
                 Text(label)
             }
             .gaugeStyle(.accessoryCircularCapacity)
@@ -94,5 +121,7 @@ struct ScoreComplicationView: View {
                 }
             }
         }
+        .accessibilityLabel("Daily score")
+        .accessibilityValue("\(label) out of ten")
     }
 }

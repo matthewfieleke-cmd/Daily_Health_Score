@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct WatchRootView: View {
-    @EnvironmentObject private var snapshot: WatchSnapshotController
-
     var body: some View {
         TabView {
             NavigationStack { TodayBreakdownView() }
@@ -23,6 +21,12 @@ struct TodayBreakdownView: View {
                     Text("of 10")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    if !snapshot.isForDay(Date()) {
+                        Text("Open iPhone to send today.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                     ForEach(snapshot.pillars, id: \.name) { pillar in
                         pillarRow(pillar)
                     }
@@ -57,15 +61,16 @@ struct SMARTCheckInListView: View {
     @EnvironmentObject private var controller: WatchSnapshotController
 
     var body: some View {
-        if controller.snapshot == nil {
-            EmptyHandshakeView()
-        } else if let goals = controller.snapshot?.goals, goals.isEmpty {
-            Text("Add a SMART goal on iPhone.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding()
-        } else if let goals = controller.snapshot?.goals {
+        Group {
+            if controller.snapshot == nil {
+                EmptyHandshakeView()
+            } else if let goals = controller.snapshot?.goals, goals.isEmpty {
+                Text("Add a SMART goal on iPhone.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding()
+            } else if let goals = controller.snapshot?.goals {
                 List {
                     ForEach(goals) { goal in
                         Button {
@@ -96,7 +101,9 @@ struct SMARTCheckInListView: View {
                         .disabled(goal.isComplete || !goal.isActive)
                     }
                 }
+            }
         }
+        .navigationTitle("Goals")
     }
 }
 

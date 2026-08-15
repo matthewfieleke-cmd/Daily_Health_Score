@@ -1,6 +1,6 @@
+#if canImport(SwiftUI)
 import SwiftUI
 
-#if canImport(SwiftUI)
 /// Teal → leaf, matching the iPhone score ring. Shared so the Watch app and
 /// the complication draw the same colors.
 enum WatchBrand {
@@ -27,3 +27,4 @@ enum WatchBrand {
         }
     }
 }
+#endif

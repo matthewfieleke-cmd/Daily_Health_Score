@@ -45,7 +45,6 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         WatchSnapshotStore.save(snapshot)
         refreshPaceNudges(with: snapshot)
         sendToWatch(snapshot)
-        lastPublished = snapshot
     }
 
     func applyCheckIn(goalId: UUID) {
@@ -98,6 +97,7 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
                 || $0.sleep.value != snapshot.sleep.value
                 || $0.goals != snapshot.goals
         } ?? true
+        lastPublished = snapshot
         if faceChanged, session.isComplicationEnabled {
             session.transferCurrentComplicationUserInfo([WatchBridge.applicationContextSnapshotKey: json])
         }
@@ -123,7 +123,7 @@ extension WatchSyncCoordinator: WCSessionDelegate {
         session.activate()
     }
 
-    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
         Task { @MainActor in
             self.handleIncomingCheckIn(userInfo)
         }

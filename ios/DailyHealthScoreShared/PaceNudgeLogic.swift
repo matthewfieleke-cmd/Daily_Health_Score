@@ -116,9 +116,13 @@ enum PaceNudgeLogic {
                 slot: slot,
                 kind: .combined,
                 title: "Fiber and movement",
-                body: exerciseCopy(slot: slot, minutes: exerciseMinutes, goal: exerciseGoal)
-                    + " "
-                    + fiberCopy(slot: slot, grams: fiberGrams, goal: fiberGoal)
+                body: combinedCopy(
+                    slot: slot,
+                    fiberGrams: fiberGrams,
+                    fiberGoal: fiberGoal,
+                    exerciseMinutes: exerciseMinutes,
+                    exerciseGoal: exerciseGoal
+                )
             )
         case (true, false):
             return PaceNudgeDecision(
@@ -172,6 +176,27 @@ enum PaceNudgeLogic {
         )
         guard let first, let lastBound else { return true }
         return now < first || now >= lastBound
+    }
+
+    private static func combinedCopy(
+        slot: PaceNudgeSlot,
+        fiberGrams: Double,
+        fiberGoal: Double,
+        exerciseMinutes: Double,
+        exerciseGoal: Double
+    ) -> String {
+        let gramsText = Int(fiberGrams.rounded())
+        let fiberGoalText = Int(fiberGoal.rounded())
+        let minutesText = Int(exerciseMinutes.rounded())
+        let exerciseGoalText = Int(exerciseGoal.rounded())
+        switch slot {
+        case .afternoon:
+            return "Movement is at \(minutesText) of \(exerciseGoalText) min and fiber is \(gramsText) of \(fiberGoalText) g. A short walk plus beans, berries, or a salad — or log a meal on iPhone — will get both on the board."
+        case .lateAfternoon:
+            return "Still \(minutesText) of \(exerciseGoalText) min and \(gramsText) of \(fiberGoalText) g fiber. A brisk walk before dinner and a high-fiber dinner (or log it on iPhone) will catch this up."
+        case .evening:
+            return "Still short: \(minutesText) of \(exerciseGoalText) min and \(gramsText) of \(fiberGoalText) g fiber. A short walk and logging tonight’s food on iPhone — or a cup of beans or fruit — is enough."
+        }
     }
 
     private static func fiberCopy(slot: PaceNudgeSlot, grams: Double, goal: Double) -> String {

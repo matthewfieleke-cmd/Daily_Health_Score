@@ -1,5 +1,5 @@
+import Combine
 import Foundation
-import SwiftUI
 #if canImport(WatchConnectivity)
 import WatchConnectivity
 #endif
@@ -9,8 +9,13 @@ import WidgetKit
 import UserNotifications
 
 /// Watch-side snapshot, check-ins, and wrist nudges.
+///
+/// A singleton so background Watch launches (complication transfer, application
+/// context) activate `WCSession` even when the UI `.task` has not run.
 @MainActor
 final class WatchSnapshotController: NSObject, ObservableObject {
+    static let shared = WatchSnapshotController()
+
     @Published private(set) var snapshot: WatchSnapshot?
     @Published var handshakeNeeded: Bool = true
 
@@ -18,26 +23,39 @@ final class WatchSnapshotController: NSObject, ObservableObject {
     private var pendingOutgoing: [WatchCheckInEvent] = []
     private var didActivate = false
 
-    override init() {
+    private override init() {
         super.init()
         snapshot = WatchSnapshotStore.load()
         handshakeNeeded = snapshot == nil
+        pendingOutgoing = WatchPendingCheckInStore.load()
+        rebuildPendingFills()
     }
 
     func activate() {
         guard !didActivate else { return }
         didActivate = true
         NotificationCategories.register()
+        UNUserNotificationCenter.current().delegate = self
+        #if canImport(WatchConnectivity)
+        if WCSession.isSupported() {
+            let session = WCSession.default
+            session.delegate = self
+            session.activate()
+        }
+        #endif
+        refreshNudges()
+    }
+
+    /// Prompt only when the UI is on screen. A background first launch must not
+    /// consume the system prompt and then skip it on the next open.
+    func requestNotificationAccessIfNeeded() {
         Task {
             _ = try? await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound])
         }
-        #if canImport(WatchConnectivity)
-        guard WCSession.isSupported() else { return }
-        let session = WCSession.default
-        session.delegate = self
-        session.activate()
-        #endif
+    }
+
+    func refreshForForeground() {
         refreshNudges()
     }
 
@@ -56,28 +74,17 @@ final class WatchSnapshotController: NSObject, ObservableObject {
     }
 
     private func applyIncoming(_ incoming: WatchSnapshot) {
-        let merged = merge(incoming)
-        snapshot = merged
+        let merged = WatchCheckInMerge.apply(
+            current: snapshot,
+            incoming: incoming,
+            pendingFills: pendingFills
+        )
+        snapshot = merged.snapshot
+        pendingFills = merged.pendingFills
         handshakeNeeded = false
-        WatchSnapshotStore.save(merged)
+        WatchSnapshotStore.save(merged.snapshot)
         reloadWidgets()
         refreshNudges()
-    }
-
-    private func merge(_ incoming: WatchSnapshot) -> WatchSnapshot {
-        guard let current = snapshot else { return incoming }
-        var result = incoming
-        for index in result.goals.indices {
-            let id = result.goals[index].id
-            guard pendingFills[id, default: 0] > 0,
-                  let local = current.goals.first(where: { $0.id == id }) else { continue }
-            if result.goals[index].filledCount >= local.filledCount {
-                pendingFills[id] = nil
-            } else {
-                result.goals[index].filledMask = local.filledMask
-            }
-        }
-        return result
     }
 
     private func sendCheckIn(_ event: WatchCheckInEvent) {
@@ -85,17 +92,29 @@ final class WatchSnapshotController: NSObject, ObservableObject {
         guard WCSession.isSupported() else { return }
         guard WCSession.default.activationState == .activated else {
             pendingOutgoing.append(event)
+            WatchPendingCheckInStore.save(pendingOutgoing)
             return
         }
         guard let json = WatchBridge.encode(event) else { return }
         WCSession.default.transferUserInfo([WatchBridge.userInfoCheckInKey: json])
+        #else
+        pendingOutgoing.append(event)
+        WatchPendingCheckInStore.save(pendingOutgoing)
         #endif
     }
 
     private func flushOutgoingCheckIns() {
         let queued = pendingOutgoing
         pendingOutgoing = []
+        WatchPendingCheckInStore.save([])
         queued.forEach(sendCheckIn)
+    }
+
+    private func rebuildPendingFills() {
+        pendingFills = [:]
+        for event in pendingOutgoing {
+            pendingFills[event.goalId, default: 0] += 1
+        }
     }
 
     private func refreshNudges() {
@@ -112,6 +131,28 @@ final class WatchSnapshotController: NSObject, ObservableObject {
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
+    }
+}
+
+extension WatchSnapshotController: UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let info = response.notification.request.content.userInfo
+        guard response.actionIdentifier == NotificationCategoryID.logCheckInAction,
+              let raw = info["goalId"] as? String,
+              let goalId = UUID(uuidString: raw) else { return }
+        await MainActor.run {
+            self.logCheckIn(goalId: goalId)
+        }
     }
 }
 
@@ -139,7 +180,7 @@ extension WatchSnapshotController: WCSessionDelegate {
         }
     }
 
-    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
         Task { @MainActor in
             guard let json = userInfo[WatchBridge.applicationContextSnapshotKey] as? String,
                   let incoming = WatchBridge.decode(WatchSnapshot.self, from: json) else { return }

@@ -24,6 +24,10 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
     var formattedScore: String {
         String(format: "%.1f", (totalScore * 10).rounded() / 10)
     }
+
+    func isForDay(_ date: Date, calendar: Calendar = .current) -> Bool {
+        dateKey == WatchBridge.localDateKey(from: date, calendar: calendar)
+    }
 }
 
 struct WatchPillarSnapshot: Codable, Equatable, Sendable {
@@ -90,12 +94,37 @@ struct WatchGoalSnapshot: Codable, Equatable, Identifiable, Sendable {
     /// Fills the lowest empty circle. Returns false when there is nothing to fill.
     @discardableResult
     mutating func fillNextEmpty() -> Bool {
-        guard !isComplete, targetCount > 0 else { return false }
+        guard isActive, targetCount > 0 else { return false }
         for index in 0 ..< targetCount where !isFilled(index) {
             filledMask |= (1 << index)
             return true
         }
         return false
+    }
+}
+
+/// Watch-side merge: keep in-flight local taps (bit OR) until the iPhone snapshot
+/// includes those bits. Missing / ended goals are whatever the iPhone sent.
+enum WatchCheckInMerge {
+    static func apply(
+        current: WatchSnapshot?,
+        incoming: WatchSnapshot,
+        pendingFills: [UUID: Int]
+    ) -> (snapshot: WatchSnapshot, pendingFills: [UUID: Int]) {
+        guard let current else { return (incoming, pendingFills) }
+        var pending = pendingFills
+        var result = incoming
+        for index in result.goals.indices {
+            let id = result.goals[index].id
+            guard pending[id, default: 0] > 0,
+                  let local = current.goals.first(where: { $0.id == id }) else { continue }
+            let incomingMask = result.goals[index].filledMask
+            result.goals[index].filledMask = incomingMask | local.filledMask
+            if (incomingMask & local.filledMask) == local.filledMask {
+                pending[id] = nil
+            }
+        }
+        return (result, pending)
     }
 }
 

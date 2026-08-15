@@ -24,6 +24,8 @@
 	<string>com.dailyhealthscore.app</string>
 	<key>WKApplication</key>
 	<true/>
+	<key>WKWatchOnlyApp</key>
+	<false/>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>Daily Health Score can remind you later in the day if fiber or movement is still low, and when a SMART goal check-in is due.</string>
 </dict>

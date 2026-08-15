@@ -154,6 +154,44 @@ final class PaceNudgeLogicTests: XCTestCase {
             )
         )
     }
+
+    func test_strictlyBelowTheBarFires() {
+        let decision = PaceNudgeLogic.decision(
+            for: .afternoon,
+            fiberGrams: 7.9,
+            fiberGoal: 40,
+            exerciseMinutes: 5.9,
+            exerciseGoal: 30,
+            now: date(hour: 14),
+            calendar: calendar,
+            skipIfAlreadyPassed: false
+        )
+        XCTAssertEqual(decision?.kind, .combined)
+    }
+
+    func test_combinedCopyMentionsWalkAndIPhoneNotSleep() {
+        let decision = PaceNudgeLogic.decision(
+            for: .evening,
+            fiberGrams: 0,
+            fiberGoal: 40,
+            exerciseMinutes: 8,
+            exerciseGoal: 30,
+            now: date(hour: 18),
+            calendar: calendar,
+            skipIfAlreadyPassed: false
+        )
+        XCTAssertEqual(decision?.kind, .combined)
+        let body = decision?.body.lowercased() ?? ""
+        XCTAssertTrue(body.contains("walk"))
+        XCTAssertTrue(body.contains("iphone"))
+        XCTAssertFalse(body.contains("sleep"))
+        XCTAssertTrue(body.contains("8"))
+    }
+
+    func test_quietHoursAfterEveningBound() {
+        XCTAssertTrue(PaceNudgeLogic.isInQuietHours(now: date(hour: 20, minute: 30), calendar: calendar))
+        XCTAssertFalse(PaceNudgeLogic.isInQuietHours(now: date(hour: 19, minute: 30), calendar: calendar))
+    }
 }
 
 final class WatchSnapshotTests: XCTestCase {
@@ -197,6 +235,143 @@ final class WatchSnapshotTests: XCTestCase {
         XCTAssertTrue(goal.fillNextEmpty())
         XCTAssertTrue(goal.isComplete)
         XCTAssertFalse(goal.fillNextEmpty())
+    }
+
+    func test_endedGoalDoesNotFillOnWatchSnapshot() {
+        var goal = WatchGoalSnapshot(
+            id: UUID(),
+            specificText: "walk",
+            targetCount: 3,
+            filledMask: 1,
+            statusRaw: "ended"
+        )
+        XCTAssertFalse(goal.fillNextEmpty())
+        XCTAssertEqual(goal.filledMask, 1)
+    }
+
+    func test_mergeORsLocalPendingBitsUntilPhoneCatchesUp() {
+        let id = UUID()
+        let pillar = WatchPillarSnapshot(name: "Sleep", value: 7, goal: 7.5, unit: "hr", points: 3.7, maxPoints: 4)
+        let fiber = WatchPillarSnapshot(name: "Fiber", value: 10, goal: 40, unit: "g", points: 1, maxPoints: 4)
+        let exercise = WatchPillarSnapshot(name: "Exercise", value: 0, goal: 30, unit: "min", points: 0, maxPoints: 2)
+        let current = WatchSnapshot(
+            dateKey: "2026-08-15",
+            totalScore: 4,
+            sleep: pillar,
+            fiber: fiber,
+            exercise: exercise,
+            goals: [
+                WatchGoalSnapshot(id: id, specificText: "walk", targetCount: 3, filledMask: 1, statusRaw: "active")
+            ],
+            updatedAt: Date(),
+            paceNudgesEnabled: true
+        )
+        let incoming = WatchSnapshot(
+            dateKey: "2026-08-15",
+            totalScore: 4,
+            sleep: pillar,
+            fiber: fiber,
+            exercise: exercise,
+            goals: [
+                WatchGoalSnapshot(id: id, specificText: "walk", targetCount: 3, filledMask: 2, statusRaw: "active")
+            ],
+            updatedAt: Date(),
+            paceNudgesEnabled: true
+        )
+        let merged = WatchCheckInMerge.apply(current: current, incoming: incoming, pendingFills: [id: 1])
+        XCTAssertEqual(merged.snapshot.goals.first?.filledMask, 3)
+        XCTAssertEqual(merged.pendingFills[id], 1)
+
+        let caughtUpIncoming = WatchSnapshot(
+            dateKey: "2026-08-15",
+            totalScore: 4,
+            sleep: pillar,
+            fiber: fiber,
+            exercise: exercise,
+            goals: [
+                WatchGoalSnapshot(id: id, specificText: "walk", targetCount: 3, filledMask: 3, statusRaw: "active")
+            ],
+            updatedAt: Date(),
+            paceNudgesEnabled: true
+        )
+        let caughtUp = WatchCheckInMerge.apply(
+            current: merged.snapshot,
+            incoming: caughtUpIncoming,
+            pendingFills: merged.pendingFills
+        )
+        XCTAssertEqual(caughtUp.snapshot.goals.first?.filledMask, 3)
+        XCTAssertNil(caughtUp.pendingFills[id])
+    }
+
+    func test_mergeWithoutPendingTakesIncomingIncludingUncheck() {
+        let id = UUID()
+        let pillar = WatchPillarSnapshot(name: "Sleep", value: 7, goal: 7.5, unit: "hr", points: 3.7, maxPoints: 4)
+        let fiber = WatchPillarSnapshot(name: "Fiber", value: 10, goal: 40, unit: "g", points: 1, maxPoints: 4)
+        let exercise = WatchPillarSnapshot(name: "Exercise", value: 0, goal: 30, unit: "min", points: 0, maxPoints: 2)
+        let current = WatchSnapshot(
+            dateKey: "2026-08-15",
+            totalScore: 4,
+            sleep: pillar,
+            fiber: fiber,
+            exercise: exercise,
+            goals: [
+                WatchGoalSnapshot(id: id, specificText: "walk", targetCount: 3, filledMask: 1, statusRaw: "active")
+            ],
+            updatedAt: Date(),
+            paceNudgesEnabled: true
+        )
+        let incoming = WatchSnapshot(
+            dateKey: "2026-08-15",
+            totalScore: 4,
+            sleep: pillar,
+            fiber: fiber,
+            exercise: exercise,
+            goals: [
+                WatchGoalSnapshot(id: id, specificText: "walk", targetCount: 3, filledMask: 0, statusRaw: "active")
+            ],
+            updatedAt: Date(),
+            paceNudgesEnabled: true
+        )
+        let merged = WatchCheckInMerge.apply(current: current, incoming: incoming, pendingFills: [:])
+        XCTAssertEqual(merged.snapshot.goals.first?.filledMask, 0)
+    }
+
+    func test_staleDateKeyIsNotToday() {
+        let snapshot = WatchSnapshot(
+            dateKey: "2020-01-01",
+            totalScore: 9,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 8, goal: 7.5, unit: "hr", points: 4, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Fiber", value: 40, goal: 40, unit: "g", points: 4, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Exercise", value: 30, goal: 30, unit: "min", points: 2, maxPoints: 2),
+            goals: [],
+            updatedAt: Date(),
+            paceNudgesEnabled: true
+        )
+        XCTAssertFalse(snapshot.isForDay(Date(), calendar: Calendar(identifier: .gregorian)))
+    }
+
+    func test_watchBridgeDateKeyMatchesDateHelpers() {
+        let date = Date(timeIntervalSince1970: 1_787_000_000)
+        XCTAssertEqual(WatchBridge.localDateKey(from: date), DateHelpers.localDateKey(from: date))
+    }
+
+    func test_pendingCheckInsRoundTrip() throws {
+        let event = WatchCheckInEvent(goalId: UUID(), createdAt: Date(timeIntervalSince1970: 1_787_000_000))
+        let json = try XCTUnwrap(WatchBridge.encode([event]))
+        let decoded = try XCTUnwrap(WatchBridge.decode([WatchCheckInEvent].self, from: json))
+        XCTAssertEqual(decoded, [event])
+    }
+
+    func test_pendingStorePersistsAndClears() {
+        let suiteName = "dhs.pendingCheckIn.tests"
+        UserDefaults().removePersistentDomain(forName: suiteName)
+        let defaults = UserDefaults(suiteName: suiteName)
+        let event = WatchCheckInEvent(goalId: UUID(), createdAt: Date(timeIntervalSince1970: 1_787_000_000))
+        WatchPendingCheckInStore.save([event], defaults: defaults)
+        XCTAssertEqual(WatchPendingCheckInStore.load(defaults: defaults), [event])
+        WatchPendingCheckInStore.save([], defaults: defaults)
+        XCTAssertTrue(WatchPendingCheckInStore.load(defaults: defaults).isEmpty)
+        UserDefaults().removePersistentDomain(forName: suiteName)
     }
 
     func test_scoreFractionClamps() {
@@ -281,5 +456,96 @@ final class SMARTGoalWatchMergeTests: XCTestCase {
         let data = try JSONEncoder().encode(goal)
         let decoded = try JSONDecoder().decode(SMARTGoal.self, from: data)
         XCTAssertEqual(decoded, goal)
+    }
+}
+
+final class WatchSnapshotBuilderTests: XCTestCase {
+    func test_nilTodayStillUsesLocalDateKeyAndZeroScore() {
+        let snapshot = WatchSnapshotBuilder.build(today: nil, goals: [], paceNudgesEnabled: true)
+        XCTAssertEqual(snapshot.dateKey, DateHelpers.localDateKey())
+        XCTAssertEqual(snapshot.totalScore, 0)
+        XCTAssertEqual(snapshot.fiber.goal, 40)
+        XCTAssertEqual(snapshot.exercise.goal, 30)
+        XCTAssertTrue(snapshot.paceNudgesEnabled)
+    }
+
+    func test_compactGoalsDropsEndedAndCompleteWhenOverCap() {
+        let ended = sampleGoal(text: "ended", status: .ended, filledMask: 1)
+        let complete = sampleGoal(text: "done", status: .active, targetCount: 1, filledMask: 1)
+        var extras: [SMARTGoal] = []
+        for index in 0 ..< 10 {
+            extras.append(sampleGoal(text: "g\(index)", status: .active, filledMask: 0))
+        }
+        let snapshot = WatchSnapshotBuilder.build(
+            today: sampleRecord(),
+            goals: [ended, complete] + extras,
+            paceNudgesEnabled: false
+        )
+        XCTAssertFalse(snapshot.goals.contains(where: { $0.specificText == "ended" }))
+        XCTAssertFalse(snapshot.goals.contains(where: { $0.specificText == "done" }))
+        XCTAssertEqual(snapshot.goals.count, 8)
+        XCTAssertTrue(snapshot.goals.allSatisfy { !$0.isComplete })
+        XCTAssertFalse(snapshot.paceNudgesEnabled)
+        XCTAssertEqual(snapshot.totalScore, 6.5, accuracy: 0.01)
+    }
+
+    func test_completeActiveGoalIsIncludedWhenUnderCap() {
+        let complete = sampleGoal(text: "done", status: .active, targetCount: 1, filledMask: 1)
+        let snapshot = WatchSnapshotBuilder.build(
+            today: sampleRecord(),
+            goals: [complete],
+            paceNudgesEnabled: true
+        )
+        XCTAssertEqual(snapshot.goals.count, 1)
+        XCTAssertTrue(snapshot.goals[0].isComplete)
+        XCTAssertEqual(snapshot.sleep.value, 7.5)
+        XCTAssertEqual(snapshot.fiber.value, 20)
+        XCTAssertEqual(snapshot.exercise.value, 8)
+    }
+
+    private func sampleRecord() -> DailyRecord {
+        DailyRecord(
+            date: "2026-08-15",
+            sleepHours: 7.5,
+            fiberGrams: 20,
+            exerciseMinutes: 8,
+            sleepGoal: .sevenHalf,
+            fiberGoal: .forty,
+            sleepScore: 4,
+            fiberScore: 2,
+            exerciseScore: 0.5,
+            totalScore: 6.5,
+            sleepPercent: 1,
+            fiberPercent: 0.5,
+            exercisePercent: 8.0 / 30.0,
+            primaryFocus: .fiber,
+            suggestion: "",
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+    }
+
+    private func sampleGoal(
+        text: String,
+        status: SMARTGoalStatus,
+        targetCount: Int = 3,
+        filledMask: Int
+    ) -> SMARTGoal {
+        SMARTGoal(
+            id: UUID(),
+            specificText: text,
+            targetCount: targetCount,
+            relevantTheme: .health,
+            timeWindowDays: 7,
+            endDate: Date().addingTimeInterval(86_400),
+            createdAt: Date(),
+            generatedSummary: "",
+            filledMask: filledMask,
+            status: status,
+            remindersEnabled: false,
+            reminderHour: 9,
+            reminderMinute: 0,
+            reminderWeekdaysMask: 127
+        )
     }
 }

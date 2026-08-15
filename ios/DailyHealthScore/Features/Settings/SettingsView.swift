@@ -1,10 +1,7 @@
 import SwiftUI
 
-/// Settings is a single-screen native iOS Form. Sections are trimmed so the
-/// whole screen fits inside the safe area on the standard iPhone 15 without
-/// scrolling. We use inline title display, drop the "About" / explanatory
-/// blurbs, and merge "Apple Health" + "Edit data" into one Apple Health
-/// section.
+/// Settings is a native iOS Form. The Apple Watch section may make the screen
+/// scroll on smaller phones; that is preferred to hiding the pace-nudge toggle.
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @State private var showEditDay = false

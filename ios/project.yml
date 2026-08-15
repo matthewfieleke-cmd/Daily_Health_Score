@@ -38,6 +38,7 @@ targets:
     dependencies:
       - target: DailyHealthScoreWatch
         embed: true
+        codeSign: true
 
   DailyHealthScoreWatch:
     type: application
@@ -64,6 +65,7 @@ targets:
     dependencies:
       - target: DailyHealthScoreWatchWidgets
         embed: true
+        codeSign: true
 
   DailyHealthScoreWatchWidgets:
     type: app-extension
@@ -84,6 +86,7 @@ targets:
       SDKROOT: watchos
       SKIP_INSTALL: YES
       APPLICATION_EXTENSION_API_ONLY: YES
+      LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/Frameworks @executable_path/../../Frameworks
       MARKETING_VERSION: "1.7.0"
       CURRENT_PROJECT_VERSION: "12"
     entitlements:

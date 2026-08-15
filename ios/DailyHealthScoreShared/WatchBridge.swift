@@ -9,8 +9,17 @@ import Foundation
 enum WatchBridge {
     static let appGroupIdentifier = "group.com.dailyhealthscore.app"
     static let snapshotDefaultsKey = "dhs.watch.snapshotJSON"
+    static let pendingCheckInsDefaultsKey = "dhs.watch.pendingCheckInsJSON"
     static let applicationContextSnapshotKey = "snapshotJSON"
     static let userInfoCheckInKey = "checkInJSON"
+
+    /// Same `yyyy-MM-dd` local key as iPhone `DateHelpers.localDateKey`.
+    static func localDateKey(from date: Date = Date(), calendar: Calendar = .current) -> String {
+        let year = calendar.component(.year, from: date)
+        let month = calendar.component(.month, from: date)
+        let day = calendar.component(.day, from: date)
+        return String(format: "%04d-%02d-%02d", year, month, day)
+    }
 
     static var encoder: JSONEncoder {
         let encoder = JSONEncoder()

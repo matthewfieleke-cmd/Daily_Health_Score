@@ -80,11 +80,16 @@ final class AppState: ObservableObject {
 
     /// Syncs today and backfills/updates stored days in the retention window from Apple Health.
     func syncTodayFromHealth(userInitiated: Bool = false, silent: Bool = false) async {
-        activeSyncGeneration &+= 1
-        let generation = activeSyncGeneration
+        let generation: UInt
         let syncStartedAt = Date()
-
-        if !silent {
+        if silent {
+            // Background Health wakes must not steal the user-visible banner
+            // generation; a silent sync finishing first used to leave "Syncing"
+            // stuck on screen.
+            generation = activeSyncGeneration
+        } else {
+            activeSyncGeneration &+= 1
+            generation = activeSyncGeneration
             healthSyncBannerPhase = .syncing
             isSyncingHealth = true
         }

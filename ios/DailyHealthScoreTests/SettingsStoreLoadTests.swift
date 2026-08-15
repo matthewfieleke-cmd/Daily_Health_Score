@@ -17,6 +17,7 @@ final class SettingsStoreLoadTests: XCTestCase {
         // A throwaway UserDefaults suite so we don't trample the user's real Defaults.
         UserDefaults().removePersistentDomain(forName: suiteName)
         defaults = UserDefaults(suiteName: suiteName)
+        writeStandard(nil, forKey: "dhs.paceNudgesEnabled")
     }
 
     override func tearDown() {
@@ -46,6 +47,7 @@ final class SettingsStoreLoadTests: XCTestCase {
             "dhs.usedMotivation",
             "dhs.sleepGoal",
             "dhs.fiberGoal",
+            "dhs.paceNudgesEnabled",
         ]
         for key in keys {
             UserDefaults.standard.removeObject(forKey: key)
@@ -59,6 +61,19 @@ final class SettingsStoreLoadTests: XCTestCase {
         // First call ever — used to crash on assignment back into the dictionary.
         let text = store.nextSuggestion(for: .fiber, phase: .day)
         XCTAssertFalse(text.isEmpty)
+    }
+
+    func test_paceNudgesDefaultOnWhenKeyMissing() {
+        writeStandard(nil, forKey: "dhs.paceNudgesEnabled")
+        let store = SettingsStore()
+        XCTAssertTrue(store.paceNudgesEnabled)
+    }
+
+    func test_paceNudgesRespectsStoredFalse() {
+        writeStandard(false, forKey: "dhs.paceNudgesEnabled")
+        let store = SettingsStore()
+        XCTAssertFalse(store.paceNudgesEnabled)
+        writeStandard(nil, forKey: "dhs.paceNudgesEnabled")
     }
 
     func test_load_storedAsValidStringDictionary_isPreserved() {

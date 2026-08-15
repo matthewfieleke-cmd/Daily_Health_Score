@@ -23,3 +23,20 @@ enum WatchSnapshotStore {
         UserDefaults(suiteName: WatchBridge.appGroupIdentifier)
     }
 }
+
+/// Check-ins that have not yet been handed to `WCSession.transferUserInfo`.
+enum WatchPendingCheckInStore {
+    static func load(defaults: UserDefaults? = WatchSnapshotStore.groupedDefaults) -> [WatchCheckInEvent] {
+        guard let json = defaults?.string(forKey: WatchBridge.pendingCheckInsDefaultsKey) else { return [] }
+        return WatchBridge.decode([WatchCheckInEvent].self, from: json) ?? []
+    }
+
+    static func save(_ events: [WatchCheckInEvent], defaults: UserDefaults? = WatchSnapshotStore.groupedDefaults) {
+        if events.isEmpty {
+            defaults?.removeObject(forKey: WatchBridge.pendingCheckInsDefaultsKey)
+            return
+        }
+        guard let json = WatchBridge.encode(events) else { return }
+        defaults?.set(json, forKey: WatchBridge.pendingCheckInsDefaultsKey)
+    }
+}

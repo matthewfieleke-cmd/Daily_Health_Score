@@ -24,7 +24,7 @@ enum PaceNudgeScheduler {
         calendar: Calendar = .current,
         center: UNUserNotificationCenter = .current()
     ) async {
-        guard enabled, snapshot.paceNudgesEnabled else {
+        guard enabled, snapshot.paceNudgesEnabled, snapshot.isForDay(now, calendar: calendar) else {
             cancelAll(center: center)
             return
         }
