@@ -129,6 +129,17 @@ final class CoachIntentTests: XCTestCase {
         )
     }
 
+    /// The PCC type is compiled out until Xcode's SDK actually contains it.
+    /// Until then, even an education question that *prefers* the server model
+    /// must stay on-device or the app cannot build — or run — without PCC.
+    @MainActor
+    func test_withoutPCCSDKFlag_everyIntentStaysOnDevice() {
+        XCTAssertFalse(CoachModelProvider.isServerModelAvailable)
+        XCTAssertEqual(CoachModelProvider.tier(for: .education), .onDevice)
+        XCTAssertEqual(CoachModelProvider.tier(for: .planning), .onDevice)
+        XCTAssertEqual(CoachModelProvider.tier(for: .support), .onDevice)
+    }
+
     func test_contractsEncodeCriticalRules() {
         XCTAssertTrue(CoachIntent.education.contract.contains("Do NOT recite the user's daily metrics"))
         XCTAssertTrue(CoachIntent.dataLookup.contract.contains("including the goal value"))
