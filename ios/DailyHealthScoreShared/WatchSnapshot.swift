@@ -25,6 +25,19 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
         String(format: "%.1f", (totalScore * 10).rounded() / 10)
     }
 
+    /// One-line pillar summary for the rectangular Watch face slot.
+    var rectangularPillarLine: String {
+        "Sleep \(sleep.compactFaceValue)  Fiber \(fiber.compactFaceValue)  Ex \(exercise.compactFaceValue)"
+    }
+
+    var rectangularPillarLineSleepFiber: String {
+        "Sleep \(sleep.compactFaceValue)  Fiber \(fiber.compactFaceValue)"
+    }
+
+    var rectangularPillarLineExercise: String {
+        "Ex \(exercise.compactFaceValue)"
+    }
+
     func isForDay(_ date: Date, calendar: Calendar = .current) -> Bool {
         dateKey == WatchBridge.localDateKey(from: date, calendar: calendar)
     }
@@ -64,6 +77,20 @@ struct WatchPillarSnapshot: Codable, Equatable, Sendable {
         let rounded = (points * 10).rounded() / 10
         let maxRounded = (maxPoints * 10).rounded() / 10
         return "\(formatOnePlace(rounded)) / \(formatOnePlace(maxRounded))"
+    }
+
+    /// Short unit suffix for the rectangular complication: 5.4h, 12g, 8m.
+    var compactFaceValue: String {
+        switch unit {
+        case "hr", "h", "hours":
+            return "\(formattedValue)h"
+        case "g", "gram", "grams":
+            return "\(formattedValue)g"
+        case "min", "m", "minutes":
+            return "\(formattedValue)m"
+        default:
+            return "\(formattedValue)\(unit)"
+        }
     }
 
     private func formatOnePlace(_ value: Double) -> String {

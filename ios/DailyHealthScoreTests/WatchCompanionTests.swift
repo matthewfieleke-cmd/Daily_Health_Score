@@ -222,6 +222,25 @@ final class WatchSnapshotTests: XCTestCase {
         XCTAssertEqual(decoded.exercise.formattedValue, "8")
     }
 
+    func test_rectangularPillarLineUsesCompactUnits() {
+        let snapshot = WatchSnapshot(
+            dateKey: "2026-08-15",
+            totalScore: 3.0,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 5.4, goal: 7.5, unit: "hr", points: 2.9, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Fiber", value: 12, goal: 40, unit: "g", points: 1.2, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Exercise", value: 8, goal: 30, unit: "min", points: 0.5, maxPoints: 2),
+            goals: [],
+            updatedAt: Date(),
+            paceNudgesEnabled: true
+        )
+        XCTAssertEqual(snapshot.rectangularPillarLine, "Sleep 5.4h  Fiber 12g  Ex 8m")
+        XCTAssertEqual(snapshot.rectangularPillarLineSleepFiber, "Sleep 5.4h  Fiber 12g")
+        XCTAssertEqual(snapshot.rectangularPillarLineExercise, "Ex 8m")
+        XCTAssertEqual(snapshot.sleep.compactFaceValue, "5.4h")
+        XCTAssertEqual(snapshot.fiber.compactFaceValue, "12g")
+        XCTAssertEqual(snapshot.exercise.compactFaceValue, "8m")
+    }
+
     func test_fillNextEmptyAdvancesTheLowestOpenCircle() {
         var goal = WatchGoalSnapshot(
             id: UUID(),
