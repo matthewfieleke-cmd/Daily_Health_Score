@@ -36,7 +36,7 @@ struct ScoreComplication: Widget {
             ScoreComplicationView(entry: entry)
         }
         .configurationDisplayName("Daily Health Score")
-        .description("Today’s score as a filling ring.")
+        .description("Today’s score, with sleep, fiber, and exercise in the expanded slot.")
         .supportedFamilies([
             .accessoryCircular,
             .accessoryRectangular,
@@ -69,20 +69,7 @@ struct ScoreComplicationView: View {
                             .monospacedDigit()
                     }
             case .accessoryRectangular:
-                HStack(spacing: 8) {
-                    WatchScoreRing(score: score, placeholder: placeholder)
-                        .frame(width: 36, height: 36)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(label)
-                            .font(.headline.monospacedDigit())
-                        if let snapshot = entry.snapshot {
-                            Text("S \(snapshot.sleep.formattedValue)  F \(snapshot.fiber.formattedValue)  E \(snapshot.exercise.formattedValue)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                }
+                rectangularBody
             case .accessoryInline:
                 Text("DHS \(label)")
             default:
@@ -93,6 +80,63 @@ struct ScoreComplicationView: View {
             AccessoryWidgetBackground()
         }
         .accessibilityLabel("Daily score")
-        .accessibilityValue(placeholder ? "No score yet" : "\(label) out of ten")
+        .accessibilityValue(accessibilityValue)
+    }
+
+    /// Modular's expanded slot is a Graphic Rectangular template: a capacity
+    /// gauge plus header/body text. Custom GeometryReader rings steal the
+    /// width and WidgetKit leaves the text slots as skeleton bars.
+    private var rectangularBody: some View {
+        HStack(alignment: .center, spacing: 6) {
+            Gauge(value: placeholder ? 0 : min(max(score, 0), 10), in: 0...10) {
+                Text("Score")
+            } currentValueLabel: {
+                Text(label)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .monospacedDigit()
+            }
+            .gaugeStyle(.accessoryCircularCapacity)
+            .tint(WatchBrand.ringColor(fraction: placeholder ? 0 : min(max(score / 10, 0), 1)))
+            .frame(width: 36, height: 36)
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Today")
+                    .font(.headline)
+                    .widgetAccentable()
+                    .lineLimit(1)
+                if let snapshot = entry.snapshot {
+                    ViewThatFits(in: .horizontal) {
+                        Text(snapshot.rectangularPillarLine)
+                            .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(snapshot.rectangularPillarLineSleepFiber)
+                                .lineLimit(1)
+                            Text(snapshot.rectangularPillarLineExercise)
+                                .lineLimit(1)
+                        }
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                } else {
+                    Text("Open iPhone")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .unredacted()
+    }
+
+    private var accessibilityValue: String {
+        guard let snapshot = entry.snapshot else { return "No score yet" }
+        if family == .accessoryRectangular {
+            return "\(label) out of ten. \(snapshot.rectangularPillarLine)"
+        }
+        return "\(label) out of ten"
     }
 }
