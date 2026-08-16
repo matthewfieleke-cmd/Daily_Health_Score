@@ -6,7 +6,9 @@ enum CoachSnapshotBuilder {
         records: [DailyRecord],
         goals: [SMARTGoal] = [],
         hrvSensitivity: HRVSensitivity = .balanced,
-        phase: DayPhase = .current()
+        phase: DayPhase = .current(),
+        now: Date = Date(),
+        calendar: Calendar = .current
     ) -> CoachSnapshot {
         let weekKeys = DateHelpers.rollingDateKeys(days: 7)
         let weekStats = RollingStatsCalculator.compute(records: records, windowKeys: weekKeys)
@@ -28,6 +30,8 @@ enum CoachSnapshotBuilder {
         return CoachSnapshot(
             todayKey: today.date,
             dayPhase: phase,
+            timeOfDay: CoachTimeOfDay.current(from: now, calendar: calendar),
+            clockLabel: CoachClock.promptLabel(from: now, calendar: calendar),
             totalScore: today.totalScore,
             sleep: status(
                 name: "Sleep",

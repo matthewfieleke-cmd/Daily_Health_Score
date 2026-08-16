@@ -87,9 +87,8 @@ final class FoundationModelsCoach {
                     .content
             }
             return DailyCoachCardContent(
-                acknowledgment: content.acknowledgment.trimmedForCoach(),
-                whyItMatters: content.whyItMatters.trimmedForCoach(),
-                nextStep: content.nextStep.trimmedForCoach()
+                whereYouAre: content.whereYouAre.trimmedForCoach().endingOnSentence(maxCharacters: 340),
+                nextMove: content.nextMove.trimmedForCoach().endingOnSentence(maxCharacters: 240)
             )
         }
         #endif
@@ -348,14 +347,11 @@ final class FoundationModelsCoach {
 @available(iOS 26.0, *)
 @Generable
 struct GenerableDailyCoachCard {
-    @Guide(description: "Warm acceptance of where the person is today, 1-2 sentences.")
-    var acknowledgment: String
+    @Guide(description: "2-3 complete sentences summarizing today's score and sleep, fiber, and exercise versus goals. Use exact status words. No ellipses.")
+    var whereYouAre: String
 
-    @Guide(description: "Why the relevant Lifestyle Medicine pillar matters now, 1-2 sentences.")
-    var whyItMatters: String
-
-    @Guide(description: "One concrete feasible next step, 1-2 sentences.")
-    var nextStep: String
+    @Guide(description: "1-2 complete sentences. One concrete action still possible from the current clock time. No ellipses. Do not suggest a window that has already passed.")
+    var nextMove: String
 }
 
 @available(iOS 26.0, *)

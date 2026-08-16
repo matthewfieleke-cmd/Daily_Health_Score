@@ -1,10 +1,40 @@
 import Foundation
 
-/// Structured daily card content shown on Today.
+/// Structured daily card content shown on Today: where you are, then one move.
 struct DailyCoachCardContent: Equatable, Codable, Sendable {
-    var acknowledgment: String
-    var whyItMatters: String
-    var nextStep: String
+    var whereYouAre: String
+    var nextMove: String
+
+    init(whereYouAre: String, nextMove: String) {
+        self.whereYouAre = whereYouAre
+        self.nextMove = nextMove
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case whereYouAre, nextMove
+        case acknowledgment, whyItMatters, nextStep
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let whereYouAre = try container.decodeIfPresent(String.self, forKey: .whereYouAre),
+           let nextMove = try container.decodeIfPresent(String.self, forKey: .nextMove),
+           !whereYouAre.isEmpty {
+            self.whereYouAre = whereYouAre
+            self.nextMove = nextMove
+            return
+        }
+        let acknowledgment = try container.decodeIfPresent(String.self, forKey: .acknowledgment) ?? ""
+        let why = try container.decodeIfPresent(String.self, forKey: .whyItMatters) ?? ""
+        whereYouAre = [acknowledgment, why].filter { !$0.isEmpty }.joined(separator: " ")
+        nextMove = try container.decodeIfPresent(String.self, forKey: .nextStep) ?? ""
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(whereYouAre, forKey: .whereYouAre)
+        try container.encode(nextMove, forKey: .nextMove)
+    }
 }
 
 /// Durable preferences/constraints that INFORM the coach; never override the charter.
@@ -112,6 +142,8 @@ struct CoachMetricStatus: Equatable, Sendable {
 struct CoachSnapshot: Equatable, Sendable {
     var todayKey: String
     var dayPhase: DayPhase
+    var timeOfDay: CoachTimeOfDay
+    var clockLabel: String
     var totalScore: Double
     var sleep: CoachMetricStatus
     var fiber: CoachMetricStatus
@@ -147,7 +179,9 @@ struct CoachSnapshot: Equatable, Sendable {
     /// because a model that can see the metrics will steer the answer toward them.
     var minimalBlock: String {
         """
-        TODAY: \(todayDisplay) (\(dayPhase.rawValue))
+        TODAY: \(todayDisplay)
+        LOCAL CLOCK: \(clockLabel)
+        TIME RULES: \(timeOfDay.promptRules)
         USER'S GOALS: \(goalsBlock)
         Today's metric details were not requested. Do not recite or refer to them.
         """
@@ -156,7 +190,9 @@ struct CoachSnapshot: Equatable, Sendable {
     var promptBlock: String {
         var lines: [String] = []
         lines.append("USER'S GOALS: \(goalsBlock)")
-        lines.append("DATE: \(todayDisplay) (\(dayPhase.rawValue))")
+        lines.append("DATE: \(todayDisplay)")
+        lines.append("LOCAL CLOCK: \(clockLabel)")
+        lines.append("TIME RULES: \(timeOfDay.promptRules)")
         lines.append(String(format: "TODAY'S SCORE: %.1f of 10", totalScore))
         lines.append("TODAY'S METRICS (comparisons already computed — repeat them exactly):")
         for metric in metrics {

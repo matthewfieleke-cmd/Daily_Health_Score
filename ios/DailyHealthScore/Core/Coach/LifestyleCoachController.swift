@@ -39,14 +39,15 @@ final class LifestyleCoachController: ObservableObject {
         records: [DailyRecord],
         goals: [SMARTGoal] = [],
         hrvSensitivity: HRVSensitivity = .balanced,
-        force: Bool = false
+        force: Bool = false,
+        now: Date = Date(),
+        calendar: Calendar = .current
     ) async {
         refreshAvailability()
-        let phase = DayPhase.current()
-        // Keyed by phase as well as day: a card written at 7am was written when
-        // fiber and exercise were still zero, and it should not still be sitting
-        // on the dashboard at 9pm.
-        let cacheKey = "\(record.date)#\(phase.rawValue)"
+        let timeOfDay = CoachTimeOfDay.current(from: now, calendar: calendar)
+        // Keyed by clock window as well as day: a morning card must not still
+        // sit on Home at 6pm suggesting lunch.
+        let cacheKey = "\(record.date)#\(timeOfDay.rawValue)"
         if !force,
            memory.cachedDailyCardDateKey == cacheKey,
            let cached = memory.cachedDailyCard {
@@ -56,13 +57,18 @@ final class LifestyleCoachController: ObservableObject {
         }
 
         guard availability == .available else {
-            dailyCard = nil
+            dailyCard = HomeCoachCardCopy.fallbackCard(for: record, now: now, calendar: calendar)
             dailyCardError = nil
             return
         }
 
         isGeneratingDailyCard = true
         dailyCardError = nil
+        if memory.cachedDailyCardDateKey != cacheKey {
+            // Drop a morning card before the evening rewrite, so Home never
+            // keeps showing "after lunch" while the new note generates.
+            dailyCard = nil
+        }
         defer { isGeneratingDailyCard = false }
 
         do {
@@ -71,7 +77,9 @@ final class LifestyleCoachController: ObservableObject {
                 records: records,
                 goals: goals,
                 hrvSensitivity: hrvSensitivity,
-                phase: phase
+                phase: DayPhase.current(from: now, calendar: calendar),
+                now: now,
+                calendar: calendar
             )
             let card = try await model.generateDailyCard(
                 snapshot: snapshot,
@@ -81,6 +89,7 @@ final class LifestyleCoachController: ObservableObject {
             memory.saveDailyCard(card, dateKey: cacheKey)
             dailyCard = card
         } catch {
+            dailyCard = HomeCoachCardCopy.fallbackCard(for: record, now: now, calendar: calendar)
             dailyCardError = error.localizedDescription
         }
     }

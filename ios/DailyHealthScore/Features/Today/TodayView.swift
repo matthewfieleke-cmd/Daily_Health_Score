@@ -102,6 +102,7 @@ struct TodayView: View {
 
                 TodayLifestyleCoachCard(record: record) { showCoachChat = true }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    // Remaining height is the grouped screen, not empty card chrome.
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
