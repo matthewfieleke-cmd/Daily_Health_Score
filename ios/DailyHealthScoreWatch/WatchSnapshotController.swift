@@ -43,7 +43,9 @@ final class WatchSnapshotController: NSObject, ObservableObject {
             session.activate()
         }
         #endif
+        persistSnapshotForComplication()
         refreshNudges()
+        reloadWidgets()
     }
 
     /// Prompt only when the UI is on screen. A background first launch must not
@@ -56,7 +58,18 @@ final class WatchSnapshotController: NSObject, ObservableObject {
     }
 
     func refreshForForeground() {
+        if snapshot == nil {
+            snapshot = WatchSnapshotStore.load()
+            handshakeNeeded = snapshot == nil
+        }
+        persistSnapshotForComplication()
         refreshNudges()
+        reloadWidgets()
+    }
+
+    private func persistSnapshotForComplication() {
+        guard let snapshot else { return }
+        WatchSnapshotStore.save(snapshot)
     }
 
     func logCheckIn(goalId: UUID) {
@@ -129,6 +142,7 @@ final class WatchSnapshotController: NSObject, ObservableObject {
 
     private func reloadWidgets() {
         #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadTimelines(ofKind: WatchBridge.scoreComplicationKind)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
     }

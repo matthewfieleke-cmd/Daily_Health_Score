@@ -362,6 +362,27 @@ final class WatchSnapshotTests: XCTestCase {
         XCTAssertEqual(decoded, [event])
     }
 
+    func test_snapshotStoreFileRoundTrip() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let snapshot = WatchSnapshot(
+            dateKey: "2026-08-16",
+            totalScore: 2.9,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 5.4, goal: 7.5, unit: "hr", points: 2.9, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Fiber", value: 0, goal: 40, unit: "g", points: 0, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Exercise", value: 0, goal: 30, unit: "min", points: 0, maxPoints: 2),
+            goals: [],
+            updatedAt: Date(timeIntervalSince1970: 1_787_000_000),
+            paceNudgesEnabled: true
+        )
+        XCTAssertTrue(WatchSnapshotStore.save(snapshot, defaults: nil, containerURL: dir))
+        let loaded = try XCTUnwrap(WatchSnapshotStore.load(defaults: nil, containerURL: dir))
+        XCTAssertEqual(loaded.formattedScore, "2.9")
+        XCTAssertEqual(loaded.sleep.value, 5.4, accuracy: 0.01)
+    }
+
     func test_pendingStorePersistsAndClears() {
         let suiteName = "dhs.pendingCheckIn.tests"
         UserDefaults().removePersistentDomain(forName: suiteName)

@@ -23,14 +23,16 @@ struct ScoreProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ScoreEntry>) -> Void) {
-        let entry = ScoreEntry(date: Date(), snapshot: WatchSnapshotStore.load())
-        completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(30 * 60))))
+        let snapshot = WatchSnapshotStore.load()
+        let entry = ScoreEntry(date: Date(), snapshot: snapshot)
+        let retry = snapshot == nil ? 60.0 : 15 * 60.0
+        completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(retry))))
     }
 }
 
 struct ScoreComplication: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "DHSScoreComplication", provider: ScoreProvider()) { entry in
+        StaticConfiguration(kind: WatchBridge.scoreComplicationKind, provider: ScoreProvider()) { entry in
             ScoreComplicationView(entry: entry)
         }
         .configurationDisplayName("Daily Health Score")
@@ -49,79 +51,48 @@ struct ScoreComplicationView: View {
     let entry: ScoreEntry
 
     private var score: Double { entry.snapshot?.totalScore ?? 0 }
-    private var fraction: Double { max(0, min(score / 10, 1)) }
+    private var placeholder: Bool { entry.snapshot == nil }
     private var label: String {
-        entry.snapshot == nil ? "--" : String(format: "%.1f", (score * 10).rounded() / 10)
+        placeholder ? "--" : String(format: "%.1f", (score * 10).rounded() / 10)
     }
 
     var body: some View {
         Group {
             switch family {
             case .accessoryCircular:
-                circular
+                WatchScoreRing(score: score, placeholder: placeholder)
+                    .padding(1)
             case .accessoryCorner:
-                corner
+                WatchScoreRing(score: score, placeholder: placeholder)
+                    .widgetLabel {
+                        Text(label)
+                            .monospacedDigit()
+                    }
             case .accessoryRectangular:
-                rectangular
+                HStack(spacing: 8) {
+                    WatchScoreRing(score: score, placeholder: placeholder)
+                        .frame(width: 36, height: 36)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(label)
+                            .font(.headline.monospacedDigit())
+                        if let snapshot = entry.snapshot {
+                            Text("S \(snapshot.sleep.formattedValue)  F \(snapshot.fiber.formattedValue)  E \(snapshot.exercise.formattedValue)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
             case .accessoryInline:
                 Text("DHS \(label)")
             default:
-                circular
+                WatchScoreRing(score: score, placeholder: placeholder)
             }
         }
         .containerBackground(for: .widget) {
             AccessoryWidgetBackground()
         }
-    }
-
-    private var circular: some View {
-        Gauge(value: fraction) {
-            Text("Score")
-        } currentValueLabel: {
-            Text(label)
-        }
-        .gaugeStyle(.accessoryCircularCapacity)
-        .tint(WatchBrand.ringColor(fraction: fraction))
         .accessibilityLabel("Daily score")
-        .accessibilityValue("\(label) out of ten")
-    }
-
-    private var corner: some View {
-        Text(label)
-            .font(.headline.monospacedDigit())
-            .widgetLabel {
-                Gauge(value: fraction) {
-                    Text("Score")
-                }
-                .gaugeStyle(.accessoryCircularCapacity)
-                .tint(WatchBrand.ringColor(fraction: fraction))
-            }
-            .accessibilityLabel("Daily score")
-            .accessibilityValue("\(label) out of ten")
-    }
-
-    private var rectangular: some View {
-        HStack(spacing: 8) {
-            Gauge(value: fraction) {
-                Text("Score")
-            } currentValueLabel: {
-                Text(label)
-            }
-            .gaugeStyle(.accessoryCircularCapacity)
-            .tint(WatchBrand.ringColor(fraction: fraction))
-            .frame(width: 36, height: 36)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("DHS \(label)")
-                    .font(.headline)
-                if let snapshot = entry.snapshot {
-                    Text("S \(snapshot.sleep.formattedValue)  F \(snapshot.fiber.formattedValue)  E \(snapshot.exercise.formattedValue)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-        }
-        .accessibilityLabel("Daily score")
-        .accessibilityValue("\(label) out of ten")
+        .accessibilityValue(placeholder ? "No score yet" : "\(label) out of ten")
     }
 }

@@ -17,7 +17,8 @@ struct TodayBreakdownView: View {
         if let snapshot = controller.snapshot {
             ScrollView {
                 VStack(spacing: 10) {
-                    WatchScoreRing(score: snapshot.totalScore, size: 88, lineWidth: 8)
+                    WatchScoreRing(score: snapshot.totalScore, lineWidth: 8)
+                        .frame(width: 88, height: 88)
                     Text("of 10")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -119,33 +120,5 @@ struct EmptyHandshakeView: View {
                 .foregroundStyle(.secondary)
         }
         .padding()
-    }
-}
-
-struct WatchScoreRing: View {
-    let score: Double
-    var size: CGFloat = 88
-    var lineWidth: CGFloat = 8
-
-    private var fraction: Double { max(0, min(score / 10, 1)) }
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(WatchBrand.primary.opacity(0.18), lineWidth: lineWidth)
-            Circle()
-                .trim(from: 0, to: fraction)
-                .stroke(
-                    WatchBrand.ringColor(fraction: fraction),
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-            Text(String(format: "%.1f", (score * 10).rounded() / 10))
-                .font(.system(size: size * 0.28, weight: .bold, design: .rounded))
-                .monospacedDigit()
-        }
-        .frame(width: size, height: size)
-        .accessibilityLabel("Daily score")
-        .accessibilityValue("\(String(format: "%.1f", score)) out of ten")
     }
 }
