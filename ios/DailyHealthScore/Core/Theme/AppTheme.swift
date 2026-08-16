@@ -92,9 +92,14 @@ enum AppTheme {
         static let cardPadding: CGFloat = 16
         static let sectionSpacing: CGFloat = 20
         static let stackSpacing: CGFloat = 12
-        static let heroCornerRadius: CGFloat = 24
+        static let heroCornerRadius: CGFloat = 20
         /// Taller than the system default so sync status pills can sit centered in the nav row.
         static let navigationBarRowHeight: CGFloat = 60
+        /// Today home top bar: brand, title, and feature icons.
+        static let todayTopBarHeight: CGFloat = 66
+        static let todayBrandSize: CGFloat = 50
+        static let todayFeatureIconSize: CGFloat = 34
+        static let todayHeroRingSize: CGFloat = 96
     }
 
     enum Shadow {
