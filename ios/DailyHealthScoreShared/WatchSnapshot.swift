@@ -27,15 +27,19 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
 
     /// One-line pillar summary for the rectangular Watch face slot.
     var rectangularPillarLine: String {
-        "Sleep \(sleep.compactFaceValue)  Fiber \(fiber.compactFaceValue)  Ex \(exercise.compactFaceValue)"
+        "S \(sleep.compactFaceValue)  F \(fiber.compactFaceValue)  E \(exercise.compactFaceValue)"
     }
 
     var rectangularPillarLineSleepFiber: String {
-        "Sleep \(sleep.compactFaceValue)  Fiber \(fiber.compactFaceValue)"
+        "S \(sleep.compactFaceValue)  F \(fiber.compactFaceValue)"
     }
 
     var rectangularPillarLineExercise: String {
-        "Ex \(exercise.compactFaceValue)"
+        "E \(exercise.compactFaceValue)"
+    }
+
+    var rectangularAccessibilityLine: String {
+        "Sleep \(sleep.compactFaceValue), fiber \(fiber.compactFaceValue), exercise \(exercise.compactFaceValue)"
     }
 
     func isForDay(_ date: Date, calendar: Calendar = .current) -> Bool {

@@ -111,6 +111,7 @@ struct ScoreComplicationView: View {
                     ViewThatFits(in: .horizontal) {
                         Text(snapshot.rectangularPillarLine)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.85)
                         VStack(alignment: .leading, spacing: 0) {
                             Text(snapshot.rectangularPillarLineSleepFiber)
                                 .lineLimit(1)
@@ -118,7 +119,7 @@ struct ScoreComplicationView: View {
                                 .lineLimit(1)
                         }
                     }
-                    .font(.caption2)
+                    .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
                 } else {
                     Text("Open iPhone")
@@ -135,7 +136,7 @@ struct ScoreComplicationView: View {
     private var accessibilityValue: String {
         guard let snapshot = entry.snapshot else { return "No score yet" }
         if family == .accessoryRectangular {
-            return "\(label) out of ten. \(snapshot.rectangularPillarLine)"
+            return "\(label) out of ten. \(snapshot.rectangularAccessibilityLine)"
         }
         return "\(label) out of ten"
     }
