@@ -4,6 +4,7 @@ options:
   deploymentTarget:
     iOS: "26.0"
     watchOS: "26.0"
+  xcodeVersion: "27.0"
 settings:
   SWIFT_VERSION: "5.9"
   MARKETING_VERSION: "1.7.0"
@@ -41,6 +42,12 @@ targets:
       - target: DailyHealthScoreWatch
         embed: true
         codeSign: true
+        # Xcode 26/27 treat a companion Watch app as a Foundation extension.
+        # It must live in PlugIns/, not the legacy Watch/ folder, or the
+        # Watch app appears in the iPhone Watch app but will not install
+        # (WCErrorCodeWatchAppNotInstalled).
+        copy:
+          destination: plugins
 
   DailyHealthScoreWatch:
     type: application
