@@ -5,8 +5,9 @@ options:
     iOS: "26.0"
     watchOS: "26.0"
   xcodeVersion: "27.0"
-  # Force Embed Watch Content to Watch/ (iOS lists companions from there).
-  # A post-build script also copies the .app into PlugIns/ for Xcode 27 install.
+  # Pin Embed Watch Content to Watch/. Apple's App Store layout (and iOS
+  # Available Apps) expect the companion there. Some XcodeGen versions would
+  # put it in PlugIns/ instead.
   postGenCommand: python3 scripts/patch_watch_embed.py
 settings:
   SWIFT_VERSION: "5.9"
@@ -46,12 +47,6 @@ targets:
         embed: true
         codeSign: true
         link: false
-    postBuildScripts:
-      - path: scripts/mirror_watch_embed.sh
-        name: Mirror Watch companion into Watch and PlugIns
-        shell: /bin/sh
-        basedOnDependencyAnalysis: false
-        showEnvVars: false
 
   DailyHealthScoreWatch:
     type: application

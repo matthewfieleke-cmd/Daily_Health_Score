@@ -38,7 +38,11 @@ open DailyHealthScore.xcodeproj
 
 ## Watch companion (Series 10 / Ultra)
 
-The Watch app is a companion of the iPhone app (not independent). iOS looks for it in the iPhone app’s **Watch/** folder. After `xcodegen generate`, confirm **DailyHealthScore → Build Phases → Embed Watch Content**: Destination should be **Products Directory** and Subpath should contain `Watch` — not “Plugins and Foundation…”.
+The Watch app is a companion of the iPhone app (not independent). Apple’s layout is:
+
+`DailyHealthScore.app/Watch/DailyHealthScoreWatch.app` (widgets live in that Watch app’s own PlugIns folder).
+
+After `xcodegen generate`, confirm **DailyHealthScore → Build Phases → Embed Watch Content**: Destination **Products Directory**, Subpath contains `Watch` — not “Plugins and Foundation…”.
 
 `xcodegen generate` clears **Team**. Set Team again on **DailyHealthScore**, **DailyHealthScoreWatch**, and **DailyHealthScoreWatchWidgets** (not Tests). Enable App Group `group.com.dailyhealthscore.app.mf` on those three. Do not add Background Modes.
 

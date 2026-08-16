@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Keep XcodeGen's Embed Watch Content phase pointed at Watch/.
+"""Pin XcodeGen's Embed Watch Content phase to Watch/.
 
-iOS 27 lists companion Watch apps from Watch/ inside the iPhone .app.
-XcodeGen (and a previous workaround) may emit PlugIns/ instead. PlugIns is
-still filled at build time by mirror_watch_embed.sh for the device installer.
+Apple's bundle layout and App Store validation require:
+
+  DailyHealthScore.app/Watch/DailyHealthScoreWatch.app
+
+The widget extension belongs in PlugIns *inside that Watch .app*, not next
+to it in the iPhone bundle. Some XcodeGen versions emit PlugIns/ for the
+Watch .app itself; rewrite only the Embed Watch Content phase.
 """
 from __future__ import annotations
 
