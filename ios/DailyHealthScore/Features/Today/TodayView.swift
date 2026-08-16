@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Today dashboard: hero score, metric row, and DHS Lifestyle Coach. SMART
 /// goals, HRV analysis, the coach, and refresh are all reached from the top
-/// bar, which keeps the dashboard itself to a single screen.
+/// bar. The dashboard itself is a single screen — it never scrolls. Extra
+/// coaching depth lives in the chat sheet.
 struct TodayView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
@@ -30,7 +31,8 @@ struct TodayView: View {
                 content
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
-                    .padding(.bottom, 4)
+                    .padding(.bottom, 6)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showSMARTGoals) {
@@ -88,21 +90,21 @@ struct TodayView: View {
     @ViewBuilder
     private var content: some View {
         if let record = displayRecord {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 10) {
-                    if let error = appState.lastSyncError {
-                        errorBanner(error)
-                    }
-
-                    heroCard(for: record)
-
-                    metricRow(for: record)
-                        .animation(DialUpAnimation.timing, value: dialUpProgress)
-
-                    TodayLifestyleCoachCard(record: record) { showCoachChat = true }
+            VStack(spacing: 12) {
+                if let error = appState.lastSyncError {
+                    errorBanner(error)
                 }
-                .padding(.bottom, 8)
+
+                heroCard(for: record)
+
+                metricRow(for: record)
+                    .animation(DialUpAnimation.timing, value: dialUpProgress)
+
+                TodayLifestyleCoachCard(record: record) { showCoachChat = true }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         } else if hasAnyRecords || appState.isSyncingHealth {
             // Returning user (or first sync in flight): build today's record before
             // showing anything, rather than flashing stale data or the connect prompt.
@@ -136,31 +138,35 @@ struct TodayView: View {
     // MARK: - Hero card (date + score ring)
 
     private func heroCard(for record: DailyRecord) -> some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .center, spacing: 10) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Today")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.75))
-                        .textCase(.uppercase)
-                        .tracking(1)
-                    Text(DateHelpers.formatDisplayDate(record.date))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-                Spacer(minLength: 0)
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Today")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.72))
+                    .textCase(.uppercase)
+                    .tracking(1.2)
+                Text(DateHelpers.formatHeroWeekday(record.date))
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Text(DateHelpers.formatHeroMonthDay(record.date))
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.88))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             ScoreRingView(
                 score: record.totalScore,
                 animationProgress: dialUpProgress,
-                lineWidth: 10,
-                size: 118
+                lineWidth: 8,
+                size: AppTheme.Layout.todayHeroRingSize,
+                onDarkBackground: true
             )
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
         .background(
@@ -171,7 +177,8 @@ struct TodayView: View {
             RoundedRectangle(cornerRadius: AppTheme.Layout.heroCornerRadius, style: .continuous)
                 .stroke(.white.opacity(0.06), lineWidth: 0.5)
         )
-        .shadow(color: AppTheme.backgroundDeep.opacity(0.25), radius: 14, x: 0, y: 6)
+        .shadow(color: AppTheme.backgroundDeep.opacity(0.22), radius: 12, x: 0, y: 5)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Three compact metric cards in a single row

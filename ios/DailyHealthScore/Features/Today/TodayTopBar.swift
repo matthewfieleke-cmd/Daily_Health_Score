@@ -1,8 +1,11 @@
 import SwiftUI
 
 /// Custom top bar for Today: brand mark, title, and the three feature entry
-/// points (coach, SMART goals, HRV analysis) plus refresh. These icons replace
-/// the cards that used to push Today into a scroll.
+/// points (coach, SMART goals, HRV analysis) plus refresh.
+///
+/// The title is centered in the gap between the brand mark and the Lifestyle
+/// Coach icon — not left-aligned against the mark, and not centered on the
+/// full screen width.
 struct TodayTopBar: View {
     let smartGoalAttentionCount: Int
     let onAskCoach: () -> Void
@@ -10,26 +13,27 @@ struct TodayTopBar: View {
     let onOpenHRVAnalysis: () -> Void
     let onRefresh: () -> Void
 
-    private let iconSize: CGFloat = 28
+    private let brandSize = AppTheme.Layout.todayBrandSize
+    private let iconSize = AppTheme.Layout.todayFeatureIconSize
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Image("BrandMark")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(width: brandSize, height: brandSize)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHidden(true)
 
             Text("Daily Health Score")
-                .font(.headline.weight(.semibold))
+                .font(.title3.weight(.semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.68)
+                .frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center)
 
-            Spacer(minLength: 6)
-
-            HStack(spacing: 2) {
+            HStack(spacing: 6) {
                 iconButton(
                     imageName: "DHSLifestyleCoach",
                     label: "Ask DHS Lifestyle Coach",
@@ -53,14 +57,15 @@ struct TodayTopBar: View {
 
                 Button(action: onRefresh) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.body.weight(.medium))
+                        .font(.title3.weight(.semibold))
+                        .frame(width: iconSize, height: iconSize)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Refresh from Apple Health")
-                .padding(.leading, 2)
             }
         }
         .padding(.horizontal, 16)
-        .frame(height: AppTheme.Layout.navigationBarRowHeight)
+        .frame(height: AppTheme.Layout.todayTopBarHeight)
         .frame(maxWidth: .infinity)
         .background(AppTheme.screenBackground)
         .tint(AppTheme.primary)
@@ -78,14 +83,14 @@ struct TodayTopBar: View {
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(width: iconSize, height: iconSize)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .overlay(alignment: .topTrailing) {
                     if badge > 0 {
                         Text("\(badge)")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 3)
-                            .frame(minWidth: 15, minHeight: 15)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: 16, minHeight: 16)
                             .background(
                                 Capsule()
                                     .fill(AppTheme.primary)
@@ -94,10 +99,6 @@ struct TodayTopBar: View {
                             .offset(x: 6, y: -5)
                     }
                 }
-                // Padding rather than a larger icon: keeps the 28pt look while
-                // giving each button a comfortable tap target.
-                .padding(.horizontal, 4)
-                .padding(.vertical, 8)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

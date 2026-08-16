@@ -6,6 +6,8 @@ struct ScoreRingView: View {
     var animationProgress: Double = 1
     var lineWidth: CGFloat = 14
     var size: CGFloat = 168
+    /// Hero cards sit on the navy gradient; use light type and track.
+    var onDarkBackground: Bool = false
 
     private var displayedScore: Double {
         score * max(0, min(animationProgress, 1))
@@ -14,6 +16,8 @@ struct ScoreRingView: View {
     private var fraction: Double {
         max(0, min(displayedScore / 10.0, 1))
     }
+
+    private var scoreFontSize: CGFloat { max(24, size * 0.40) }
 
     private var ringColor: Color {
         let t = fraction
@@ -34,7 +38,10 @@ struct ScoreRingView: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(AppTheme.primary.opacity(0.12), lineWidth: lineWidth)
+                .stroke(
+                    onDarkBackground ? Color.white.opacity(0.20) : AppTheme.primary.opacity(0.12),
+                    lineWidth: lineWidth
+                )
 
             Circle()
                 .trim(from: 0, to: fraction)
@@ -44,15 +51,17 @@ struct ScoreRingView: View {
                 )
                 .rotationEffect(.degrees(-90))
 
-            VStack(spacing: 2) {
+            VStack(spacing: size >= 130 ? 2 : 1) {
                 Text(formatted(displayedScore))
-                    .font(.system(size: 52, weight: .bold, design: .rounded))
+                    .font(.system(size: scoreFontSize, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(AppTheme.backgroundDeep)
+                    .foregroundStyle(onDarkBackground ? Color.white : AppTheme.backgroundDeep)
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
                     .contentTransition(.numericText(value: displayedScore))
                 Text("/ 10")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(size >= 130 ? .subheadline.weight(.semibold) : .caption.weight(.semibold))
+                    .foregroundStyle(onDarkBackground ? Color.white.opacity(0.58) : Color.secondary)
             }
         }
         .animation(DialUpAnimation.timing, value: animationProgress)

@@ -25,6 +25,18 @@ enum DateHelpers {
         return d.formatted(.dateTime.weekday(.wide).month(.wide).day().year())
     }
 
+    /// Weekday only, for the compact Today hero.
+    static func formatHeroWeekday(_ key: String) -> String {
+        guard let d = date(from: key) else { return key }
+        return d.formatted(.dateTime.weekday(.wide))
+    }
+
+    /// Month and day only, for the compact Today hero.
+    static func formatHeroMonthDay(_ key: String) -> String {
+        guard let d = date(from: key) else { return key }
+        return d.formatted(.dateTime.month(.wide).day())
+    }
+
     static func addDays(to key: String, days: Int) -> String? {
         guard let start = date(from: key) else { return nil }
         guard let next = Calendar.current.date(byAdding: .day, value: days, to: start) else { return nil }

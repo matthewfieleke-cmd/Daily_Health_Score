@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Today card: acknowledgment, why it matters, and the next step to act on.
-/// Falls back to the app's own focus suggestion whenever the model has nothing,
-/// so the card is never dead space on a device without Apple Intelligence.
+/// Today card: a height-bounded teaser. Acknowledgment and why-it-matters
+/// truncate; the next step keeps the visual weight; full depth belongs in
+/// the chat sheet so Home never scrolls — including when PCC writes more.
 struct TodayLifestyleCoachCard: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var coach: LifestyleCoachController
@@ -15,26 +15,33 @@ struct TodayLifestyleCoachCard: View {
     private var phase: DayPhase { .current() }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             header
 
-            if coach.availability != .available {
-                statusBody
-                // Without Apple Intelligence this card would otherwise never say
-                // anything, so it falls back to the focus suggestion the app
-                // computes on its own.
-                fallbackBody
-            } else if coach.isGeneratingDailyCard && coach.dailyCard == nil {
-                loadingBody
-            } else if let card = coach.dailyCard {
-                cardBody(card)
-                askCoachButton
-            } else {
-                fallbackBody
-                askCoachButton
+            Group {
+                if coach.availability != .available {
+                    statusBody
+                    fallbackBody
+                    Spacer(minLength: 6)
+                    askCoachButton
+                } else if coach.isGeneratingDailyCard && coach.dailyCard == nil {
+                    loadingBody
+                    Spacer(minLength: 0)
+                    askCoachButton
+                } else if let card = coach.dailyCard {
+                    cardBody(card)
+                } else {
+                    fallbackBody
+                    Spacer(minLength: 6)
+                    askCoachButton
+                }
             }
         }
-        .dhsCard(padding: 14)
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(AppTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
+        .cardShadow()
         .task(id: "\(record?.date ?? "")#\(phase.rawValue)") {
             guard let record else { return }
             await coach.ensureDailyCard(
@@ -88,30 +95,26 @@ struct TodayLifestyleCoachCard: View {
             Image("DHSLifestyleCoach")
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(width: 34, height: 34)
+                .frame(width: 32, height: 32)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("DHS Lifestyle Coach")
-                    .font(.subheadline.weight(.semibold))
-                Text(CoachCharter.philosophy)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
+            Text("DHS Lifestyle Coach")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
             Spacer(minLength: 0)
         }
     }
 
     private var statusBody: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(coach.availability.title)
                 .font(.footnote.weight(.semibold))
+                .lineLimit(1)
             Text(coach.availability.guidance)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
         }
     }
 
@@ -121,21 +124,35 @@ struct TodayLifestyleCoachCard: View {
             Text("Preparing today’s coaching note…")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 
     private func cardBody(_ card: DailyCoachCardContent) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            coachSection(title: "With you", text: card.acknowledgment)
-            coachSection(title: "Why it matters", text: card.whyItMatters)
-            // The next step is the only part that asks anything of the reader,
-            // so it gets the visual weight rather than sitting third in a stack
-            // of three identical paragraphs.
+        VStack(alignment: .leading, spacing: 8) {
+            ViewThatFits(in: .vertical) {
+                VStack(alignment: .leading, spacing: 8) {
+                    coachSection(title: "With you", text: card.acknowledgment, lineLimit: 2)
+                    coachSection(title: "Why it matters", text: card.whyItMatters, lineLimit: 2)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    coachSection(title: "With you", text: card.acknowledgment, lineLimit: 2)
+                    coachSection(title: "Why it matters", text: card.whyItMatters, lineLimit: 1)
+                }
+                coachSection(title: "With you", text: card.acknowledgment, lineLimit: 2)
+                coachSection(title: "With you", text: card.acknowledgment, lineLimit: 1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 6)
             nextStepSection(card.nextStep)
+                .layoutPriority(1)
+            askCoachButton
+                .layoutPriority(1)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    private func coachSection(title: String, text: String) -> some View {
+    private func coachSection(title: String, text: String, lineLimit: Int) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title.uppercased())
                 .font(.caption2.weight(.semibold))
@@ -144,7 +161,9 @@ struct TodayLifestyleCoachCard: View {
             Text(text)
                 .font(.footnote)
                 .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(lineLimit)
+                .truncationMode(.tail)
+                .accessibilityLabel(text)
         }
     }
 
@@ -158,7 +177,7 @@ struct TodayLifestyleCoachCard: View {
         }
     }
 
-    private func nextStepSection(_ text: String, title: String = "Next step") -> some View {
+    private func nextStepSection(_ text: String, title: String = "Next step", lineLimit: Int = 3) -> some View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: "arrow.forward.circle.fill")
                 .font(.footnote)
@@ -173,7 +192,9 @@ struct TodayLifestyleCoachCard: View {
                 Text(text)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(lineLimit)
+                    .truncationMode(.tail)
+                    .accessibilityLabel(text)
             }
         }
         .padding(10)

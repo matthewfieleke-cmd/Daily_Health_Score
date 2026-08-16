@@ -77,6 +77,17 @@ final class DateHelpersTests: XCTestCase {
         )
     }
 
+    func test_heroDateFormats_omitYearAndStayNonEmpty() {
+        let weekday = DateHelpers.formatHeroWeekday("2026-08-16")
+        let monthDay = DateHelpers.formatHeroMonthDay("2026-08-16")
+        XCTAssertFalse(weekday.isEmpty)
+        XCTAssertFalse(monthDay.isEmpty)
+        XCTAssertFalse(weekday.contains("2026"))
+        XCTAssertFalse(monthDay.contains("2026"))
+        XCTAssertEqual(DateHelpers.formatHeroWeekday("not-a-date"), "not-a-date")
+        XCTAssertEqual(DateHelpers.formatHeroMonthDay("not-a-date"), "not-a-date")
+    }
+
     func test_rollingDateKeys_returnsKeysInChronologicalOrder() {
         let anchor = date(2026, 5, 21)
         let keys = DateHelpers.rollingDateKeys(days: 30, endingOn: anchor)
