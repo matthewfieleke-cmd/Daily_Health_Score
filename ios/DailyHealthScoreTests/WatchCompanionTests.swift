@@ -233,9 +233,13 @@ final class WatchSnapshotTests: XCTestCase {
             updatedAt: Date(),
             paceNudgesEnabled: true
         )
-        XCTAssertEqual(snapshot.rectangularPillarLine, "Sleep 5.4h  Fiber 12g  Ex 8m")
-        XCTAssertEqual(snapshot.rectangularPillarLineSleepFiber, "Sleep 5.4h  Fiber 12g")
-        XCTAssertEqual(snapshot.rectangularPillarLineExercise, "Ex 8m")
+        XCTAssertEqual(snapshot.rectangularPillarLine, "S 5.4h  F 12g  E 8m")
+        XCTAssertEqual(snapshot.rectangularPillarLineSleepFiber, "S 5.4h  F 12g")
+        XCTAssertEqual(snapshot.rectangularPillarLineExercise, "E 8m")
+        XCTAssertEqual(
+            snapshot.rectangularAccessibilityLine,
+            "Sleep 5.4h, fiber 12g, exercise 8m"
+        )
         XCTAssertEqual(snapshot.sleep.compactFaceValue, "5.4h")
         XCTAssertEqual(snapshot.fiber.compactFaceValue, "12g")
         XCTAssertEqual(snapshot.exercise.compactFaceValue, "8m")
