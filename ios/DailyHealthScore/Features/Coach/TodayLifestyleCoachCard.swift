@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Today card: a height-bounded teaser. Acknowledgment and why-it-matters
-/// truncate; the next step keeps the visual weight; full depth belongs in
-/// the chat sheet so Home never scrolls — including when PCC writes more.
+/// Home coach card: two complete beats that hug their content. Leftover
+/// height stays the grouped screen behind the card — never a white hole
+/// inside it. Coaching copy is never ellipsized; if the remaining Home
+/// height is tight, `ViewThatFits` shrinks the type instead.
 struct TodayLifestyleCoachCard: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var coach: LifestyleCoachController
@@ -10,46 +11,20 @@ struct TodayLifestyleCoachCard: View {
     let record: DailyRecord?
     var onAskCoach: (() -> Void)?
 
-    /// Part of the refresh identity: a card written this morning should be
-    /// rewritten once the evening starts, not left sitting there all day.
-    private var phase: DayPhase { .current() }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            header
-
-            Group {
-                if coach.availability != .available {
-                    statusBody
-                    fallbackBody
-                    Spacer(minLength: 6)
-                    askCoachButton
-                } else if coach.isGeneratingDailyCard && coach.dailyCard == nil {
-                    loadingBody
-                    Spacer(minLength: 0)
-                    askCoachButton
-                } else if let card = coach.dailyCard {
-                    cardBody(card)
-                } else {
-                    fallbackBody
-                    Spacer(minLength: 6)
-                    askCoachButton
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            let window = CoachTimeOfDay.current(from: context.date)
+            cardStack
+                .task(id: "\(record?.date ?? "")#\(window.rawValue)") {
+                    guard let record else { return }
+                    await coach.ensureDailyCard(
+                        for: record,
+                        records: appState.recordStore.records,
+                        goals: appState.smartGoalStore.goals,
+                        hrvSensitivity: appState.settingsStore.hrvSensitivity,
+                        now: context.date
+                    )
                 }
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(AppTheme.cardSurface)
-        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
-        .cardShadow()
-        .task(id: "\(record?.date ?? "")#\(phase.rawValue)") {
-            guard let record else { return }
-            await coach.ensureDailyCard(
-                for: record,
-                records: appState.recordStore.records,
-                goals: appState.smartGoalStore.goals,
-                hrvSensitivity: appState.settingsStore.hrvSensitivity
-            )
         }
         .onChange(of: appState.userRefreshToken) { _, _ in
             guard let record else { return }
@@ -63,6 +38,33 @@ struct TodayLifestyleCoachCard: View {
                 )
             }
         }
+    }
+
+    private var cardStack: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header
+
+            if coach.isGeneratingDailyCard && coach.dailyCard == nil {
+                loadingBody
+            } else if let card = displayedCard {
+                twoBeats(card)
+            }
+
+            askCoachButton
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .background(AppTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
+        .cardShadow()
+    }
+
+    /// Model card when we have one; otherwise a complete two-beat note from
+    /// today's numbers so Home is useful even with Apple Intelligence off.
+    private var displayedCard: DailyCoachCardContent? {
+        if let card = coach.dailyCard { return card }
+        guard !coach.isGeneratingDailyCard, let record else { return nil }
+        return HomeCoachCardCopy.fallbackCard(for: record)
     }
 
     @ViewBuilder
@@ -106,100 +108,83 @@ struct TodayLifestyleCoachCard: View {
         }
     }
 
-    private var statusBody: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(coach.availability.title)
-                .font(.footnote.weight(.semibold))
-                .lineLimit(1)
-            Text(coach.availability.guidance)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-        }
-    }
-
     private var loadingBody: some View {
         HStack(spacing: 10) {
             ProgressView()
-            Text("Preparing today’s coaching note…")
+            Text("Preparing today’s coaching note.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private func cardBody(_ card: DailyCoachCardContent) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ViewThatFits(in: .vertical) {
-                VStack(alignment: .leading, spacing: 8) {
-                    coachSection(title: "With you", text: card.acknowledgment, lineLimit: 2)
-                    coachSection(title: "Why it matters", text: card.whyItMatters, lineLimit: 2)
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    coachSection(title: "With you", text: card.acknowledgment, lineLimit: 2)
-                    coachSection(title: "Why it matters", text: card.whyItMatters, lineLimit: 1)
-                }
-                coachSection(title: "With you", text: card.acknowledgment, lineLimit: 2)
-                coachSection(title: "With you", text: card.acknowledgment, lineLimit: 1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Spacer(minLength: 6)
-            nextStepSection(card.nextStep)
-                .layoutPriority(1)
-            askCoachButton
-                .layoutPriority(1)
+    /// Shrink type to fit the remaining Home height; never clip a sentence.
+    private func twoBeats(_ card: DailyCoachCardContent) -> some View {
+        ViewThatFits(in: .vertical) {
+            TwoBeatCopy(whereYouAre: card.whereYouAre, nextMove: card.nextMove, style: .footnote)
+            TwoBeatCopy(whereYouAre: card.whereYouAre, nextMove: card.nextMove, style: .caption)
+            TwoBeatCopy(whereYouAre: card.whereYouAre, nextMove: card.nextMove, style: .caption2)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    private func coachSection(title: String, text: String, lineLimit: Int) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title.uppercased())
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .tracking(0.5)
-            Text(text)
-                .font(.footnote)
-                .foregroundStyle(.primary)
-                .lineLimit(lineLimit)
-                .truncationMode(.tail)
-                .accessibilityLabel(text)
-        }
-    }
-
-    /// Shown when the model has nothing for us: no Apple Intelligence, or a
-    /// generation that failed. A raw framework error is not useful to read.
-    @ViewBuilder
-    private var fallbackBody: some View {
-        let suggestion = record?.suggestion.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !suggestion.isEmpty {
-            nextStepSection(suggestion, title: "Today's focus")
-        }
-    }
-
-    private func nextStepSection(_ text: String, title: String = "Next step", lineLimit: Int = 3) -> some View {
-        HStack(alignment: .top, spacing: 9) {
-            Image(systemName: "arrow.forward.circle.fill")
-                .font(.footnote)
-                .foregroundStyle(AppTheme.leaf)
-                .padding(.top, 1)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title.uppercased())
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(AppTheme.leaf)
-                    .tracking(0.5)
-                Text(text)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(lineLimit)
-                    .truncationMode(.tail)
-                    .accessibilityLabel(text)
-            }
-        }
-        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.leaf.opacity(0.10))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+/// Full sentences at one type size. No `lineLimit`, no spacer.
+private struct TwoBeatCopy: View {
+    enum Style {
+        case footnote, caption, caption2
+
+        var bodyFont: Font {
+            switch self {
+            case .footnote: return .footnote
+            case .caption: return .caption
+            case .caption2: return .caption2
+            }
+        }
+
+        var actionFont: Font {
+            switch self {
+            case .footnote: return .footnote.weight(.medium)
+            case .caption: return .caption.weight(.medium)
+            case .caption2: return .caption2.weight(.medium)
+            }
+        }
+    }
+
+    let whereYouAre: String
+    let nextMove: String
+    let style: Style
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(whereYouAre)
+                .font(style.bodyFont)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(whereYouAre)
+
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: "arrow.forward.circle.fill")
+                    .font(style.bodyFont)
+                    .foregroundStyle(AppTheme.leaf)
+                    .padding(.top, 1)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("RIGHT NOW")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppTheme.leaf)
+                        .tracking(0.5)
+                    Text(nextMove)
+                        .font(style.actionFont)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(nextMove)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppTheme.leaf.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
     }
 }

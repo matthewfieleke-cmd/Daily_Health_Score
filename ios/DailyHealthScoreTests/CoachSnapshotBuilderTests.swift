@@ -157,6 +157,67 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(CoachCharter.instructions.contains("ANSWER-FIRST RULE"))
         XCTAssertTrue(CoachCharter.instructions.contains("Never say someone is above goal"))
         XCTAssertTrue(CoachCharter.instructions.contains("Never state \"I will ...\" as your own plan."))
+        XCTAssertTrue(CoachCharter.instructions.contains("claim academic credentials"))
+        XCTAssertTrue(CoachCharter.dailyCardContract.contains("whereYouAre"))
+        XCTAssertTrue(CoachCharter.dailyCardContract.contains("nextMove"))
+        XCTAssertTrue(CoachCharter.dailyCardContract.contains("TIME RULES"))
+        XCTAssertTrue(CoachCharter.dailyCardContract.contains("ellipsis"))
+    }
+
+    func test_promptBlockIncludesLocalClockAndEveningTimeRules() {
+        let calendar = chicagoCalendar()
+        let sixPM = date(calendar: calendar, hour: 18, minute: 0)
+        let record = makeRecord(date: "2026-08-16", sleep: 7.2, fiber: 12, exercise: 2, focus: .fiber)
+        let snapshot = CoachSnapshotBuilder.build(
+            today: record,
+            records: [record],
+            phase: .day,
+            now: sixPM,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(snapshot.timeOfDay, .evening)
+        XCTAssertTrue(snapshot.clockLabel.contains("evening"))
+        XCTAssertTrue(snapshot.promptBlock.contains("LOCAL CLOCK"))
+        XCTAssertTrue(snapshot.promptBlock.contains("TIME RULES"))
+        XCTAssertTrue(snapshot.promptBlock.contains("Do not"))
+        XCTAssertTrue(snapshot.promptBlock.lowercased().contains("after lunch"))
+        XCTAssertTrue(snapshot.minimalBlock.contains("LOCAL CLOCK"))
+        XCTAssertTrue(snapshot.minimalBlock.contains("TIME RULES"))
+    }
+
+    func test_dailyCard_decodesLegacyAcknowledgmentFields() throws {
+        let json = Data("""
+        {"acknowledgment":"You're at 6.2 of 10.","whyItMatters":"Sleep is still short.","nextStep":"Walk after dinner."}
+        """.utf8)
+        let card = try JSONDecoder().decode(DailyCoachCardContent.self, from: json)
+        XCTAssertEqual(card.whereYouAre, "You're at 6.2 of 10. Sleep is still short.")
+        XCTAssertEqual(card.nextMove, "Walk after dinner.")
+    }
+
+    func test_dailyCard_encodesNewKeysOnly() throws {
+        let card = DailyCoachCardContent(whereYouAre: "Here.", nextMove: "Walk.")
+        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(card)) as! [String: Any]
+        XCTAssertEqual(object["whereYouAre"] as? String, "Here.")
+        XCTAssertEqual(object["nextMove"] as? String, "Walk.")
+        XCTAssertNil(object["acknowledgment"])
+        XCTAssertNil(object["nextStep"])
+    }
+
+    private func chicagoCalendar() -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Chicago")!
+        return calendar
+    }
+
+    private func date(calendar: Calendar, hour: Int, minute: Int) -> Date {
+        var components = DateComponents()
+        components.year = 2026
+        components.month = 8
+        components.day = 16
+        components.hour = hour
+        components.minute = minute
+        return calendar.date(from: components)!
     }
 
     private func makeRecord(
