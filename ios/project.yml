@@ -5,6 +5,8 @@ options:
     iOS: "26.0"
     watchOS: "26.0"
   xcodeVersion: "27.0"
+  # Force Embed Watch Content to Watch/ (iOS lists companions from there).
+  # A post-build script also copies the .app into PlugIns/ for Xcode 27 install.
   postGenCommand: python3 scripts/patch_watch_embed.py
 settings:
   SWIFT_VERSION: "5.9"
@@ -44,6 +46,12 @@ targets:
         embed: true
         codeSign: true
         link: false
+    postBuildScripts:
+      - path: scripts/mirror_watch_embed.sh
+        name: Mirror Watch companion into Watch and PlugIns
+        shell: /bin/sh
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
 
   DailyHealthScoreWatch:
     type: application
@@ -59,7 +67,8 @@ targets:
       PRODUCT_BUNDLE_IDENTIFIER: com.dailyhealthscore.app.mf.watchkitapp
       INFOPLIST_FILE: DailyHealthScoreWatch/Info.plist
       INFOPLIST_KEY_WKCompanionAppBundleIdentifier: com.dailyhealthscore.app.mf
-      INFOPLIST_KEY_WKWatchOnlyApp: NO
+      INFOPLIST_KEY_WKWatchOnlyApp: "NO"
+      INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp: "NO"
       CODE_SIGN_ENTITLEMENTS: DailyHealthScoreWatch/DailyHealthScoreWatch.entitlements
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       TARGETED_DEVICE_FAMILY: "4"
@@ -123,3 +132,12 @@ schemes:
     test:
       targets:
         - DailyHealthScoreTests
+  DailyHealthScoreWatch:
+    build:
+      targets:
+        DailyHealthScoreWatch: all
+        DailyHealthScoreWatchWidgets: all
+        DailyHealthScore: [run, archive]
+    run:
+      config: Debug
+      executable: DailyHealthScoreWatch
