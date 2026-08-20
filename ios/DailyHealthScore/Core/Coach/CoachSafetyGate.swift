@@ -7,6 +7,11 @@ enum CoachSafetyGate {
         case escalate(message: String)
     }
 
+    /// First line of every escalation. The model is instructed to use this
+    /// exact sentence if a crisis slips past the gate.
+    static let immediateHelpSentence =
+        "Please seek immediate medical attention or professional help."
+
     private static let emergencyPhrases = [
         "chest pain", "chest pressure", "crushing chest", "heart attack",
         "can't breathe", "cant breathe", "trouble breathing", "shortness of breath at rest",
@@ -17,7 +22,16 @@ enum CoachSafetyGate {
 
     private static let selfHarmPhrases = [
         "kill myself", "suicidal", "suicide", "end my life", "want to die",
-        "hurt myself", "self harm", "self-harm", "not want to be alive", "no reason to live"
+        "hurt myself", "self harm", "self-harm", "not want to be alive", "no reason to live",
+        "better off dead", "ending it all", "don't want to be here", "dont want to be here"
+    ]
+
+    private static let harmToOthersPhrases = [
+        "kill them", "kill him", "kill her", "kill someone", "kill somebody",
+        "hurt someone", "hurt somebody", "hurt them", "hurt other people",
+        "homicidal", "want to kill him", "want to kill her", "want to kill them",
+        "going to hurt him", "going to hurt her", "going to hurt someone",
+        "harm others", "shoot someone", "stab someone"
     ]
 
     private static let eatingDisorderPhrases = [
@@ -35,41 +49,41 @@ enum CoachSafetyGate {
 
         if selfHarmPhrases.contains(where: text.contains) {
             return .escalate(message: """
-            I'm really glad you told me, and I want to respond to this directly rather than coach around it.
+            \(immediateHelpSentence)
 
-            What you're describing needs support from a person, not an app. If you're in the US, you can call or text 988 to reach the Suicide & Crisis Lifeline any time. If you're outside the US, your local emergency number or a crisis line can connect you now. If you feel you might act on these thoughts, please treat this as an emergency and call your local emergency number.
+            If you're in the US, call or text 988 to reach the Suicide & Crisis Lifeline any time. If you feel you might act on these thoughts, call your local emergency number now.
+            """)
+        }
 
-            You deserve real support, and reaching out for it is a strong move — not a failure. I'll be here for the lifestyle side whenever you want to come back to it.
+        if harmToOthersPhrases.contains(where: text.contains) {
+            return .escalate(message: """
+            \(immediateHelpSentence)
+
+            If you or someone else may be in danger, call your local emergency number now.
             """)
         }
 
         if emergencyPhrases.contains(where: text.contains) {
             return .escalate(message: """
-            What you're describing could be a medical emergency, so I'm going to stop coaching and be direct.
+            \(immediateHelpSentence)
 
-            Please seek urgent medical care now — call your local emergency number or get to an emergency department. Symptoms like these need evaluation by a clinician who can examine you, not guidance from an app.
-
-            When you're safe and cleared, I'm glad to pick back up on sleep, nutrition, and movement with you.
+            Call your local emergency number or go to an emergency department now.
             """)
         }
 
         if eatingDisorderPhrases.contains(where: text.contains) {
             return .escalate(message: """
-            Thank you for trusting me with that. This is beyond what a wellness coach should guide, and giving you food or exercise targets right now could do harm.
+            \(immediateHelpSentence)
 
-            Please consider reaching out to a clinician experienced with eating concerns, or in the US, the National Alliance for Eating Disorders helpline at 1-866-662-1235. Your own physician is also a good starting point.
-
-            I'm not going anywhere, and there's no judgment here at all. When you have that support in place, I'm glad to focus on gentle, non-numeric wellbeing with you.
+            In the US, the National Alliance for Eating Disorders helpline is 1-866-662-1235.
             """)
         }
 
         if withdrawalPhrases.contains(where: text.contains) {
             return .escalate(message: """
-            I want to be straight with you: withdrawal can be genuinely dangerous, and it's not something to manage with lifestyle advice.
+            \(immediateHelpSentence)
 
-            Please contact a clinician or urgent care before making changes on your own. In the US, SAMHSA's helpline at 1-800-662-4357 is free, confidential, and available 24/7.
-
-            Reaching out for medical support here is the strong, self-respecting move. I'll be here for the rest whenever you're ready.
+            Withdrawal can be dangerous. In the US, SAMHSA's helpline at 1-800-662-4357 is free, confidential, and available 24/7.
             """)
         }
 

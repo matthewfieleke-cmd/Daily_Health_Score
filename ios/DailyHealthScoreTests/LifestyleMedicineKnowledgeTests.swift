@@ -178,25 +178,58 @@ final class LifestyleMedicineKnowledgeTests: XCTestCase {
 final class CoachSafetyGateTests: XCTestCase {
     func test_ordinaryMessagesPassThrough() {
         XCTAssertEqual(CoachSafetyGate.evaluate("How do I add more fiber?"), .ordinary)
+        XCTAssertEqual(CoachSafetyGate.evaluate("My knee hurts when I walk"), .ordinary)
+        XCTAssertEqual(CoachSafetyGate.evaluate("Should I take creatine?"), .ordinary)
     }
 
     func test_selfHarmEscalatesDeterministically() {
         guard case .escalate(let message) = CoachSafetyGate.evaluate("I want to kill myself") else {
             return XCTFail("Expected escalation")
         }
+        XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
         XCTAssertTrue(message.contains("988"))
+    }
+
+    func test_harmToOthersEscalatesDeterministically() {
+        guard case .escalate(let message) = CoachSafetyGate.evaluate("I want to hurt someone") else {
+            return XCTFail("Expected escalation")
+        }
+        XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
+        XCTAssertTrue(message.lowercased().contains("emergency"))
     }
 
     func test_chestPainEscalates() {
         guard case .escalate(let message) = CoachSafetyGate.evaluate("I have chest pain when walking") else {
             return XCTFail("Expected escalation")
         }
+        XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
         XCTAssertTrue(message.lowercased().contains("emergency"))
     }
 
     func test_disorderedEatingEscalates() {
-        guard case .escalate = CoachSafetyGate.evaluate("I make myself throw up after eating") else {
+        guard case .escalate(let message) = CoachSafetyGate.evaluate("I make myself throw up after eating") else {
             return XCTFail("Expected escalation")
+        }
+        XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
+    }
+
+    func test_escalationNeverHedgesAboutNotBeingAProfessional() {
+        let crises = [
+            "I want to kill myself",
+            "I want to hurt someone",
+            "I have chest pain when walking",
+            "I make myself throw up after eating",
+            "I have alcohol withdrawal"
+        ]
+        for crisis in crises {
+            guard case .escalate(let message) = CoachSafetyGate.evaluate(crisis) else {
+                return XCTFail("Expected escalation for \(crisis)")
+            }
+            let lowered = message.lowercased()
+            XCTAssertFalse(lowered.contains("not an app"), crisis)
+            XCTAssertFalse(lowered.contains("wellness coach"), crisis)
+            XCTAssertFalse(lowered.contains("not a doctor"), crisis)
+            XCTAssertTrue(message.hasPrefix(CoachSafetyGate.immediateHelpSentence), crisis)
         }
     }
 }

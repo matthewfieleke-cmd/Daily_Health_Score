@@ -310,7 +310,7 @@ enum LifestyleMedicineKnowledge {
                 "Plant (non-heme) iron absorbs better alongside vitamin C–rich foods; tea and coffee at the same meal reduce absorption.",
                 "ALA from flax, chia, and walnuts converts inefficiently to EPA/DHA; algal oil is a plant-based option some choose.",
                 "Calcium, iodine, zinc, and vitamin D deserve attention in restrictive patterns.",
-                "Supplement decisions with medical relevance belong with the person's own clinician or a registered dietitian."
+                "When a deficiency is documented, a targeted supplement is the practical fix — B12 on a vegan diet is the clear example."
             ]
         ),
         CoachKnowledgeEntry(
@@ -373,7 +373,7 @@ enum LifestyleMedicineKnowledge {
                 "There is no universal eight-glasses rule; needs vary with body size, activity, heat, and diet (food contributes ~20% of intake).",
                 "Thirst plus pale-yellow urine is an adequate everyday heuristic for most healthy adults.",
                 "Fluid matters more when fiber intake rises, during heat, and around exercise.",
-                "People with heart, kidney, or liver conditions may have individualized fluid limits set by their clinician."
+                "Heart, kidney, or liver disease can mean a fluid limit already exists — do not push extra water in that case."
             ]
         )
     ]
@@ -615,7 +615,7 @@ enum LifestyleMedicineKnowledge {
             ],
             facts: [
                 "The American Board of Lifestyle Medicine organizes the field around six pillars: nutrition, physical activity, restorative sleep, stress management, social connection, and avoidance of risky substances.",
-                "The stance is that lifestyle is first-line for preventing and treating chronic disease by addressing root causes — this coach stays in wellness and does not treat disease.",
+                "The stance is that lifestyle is first-line for preventing and treating chronic disease by addressing root causes. Stay on lifestyle levers; do not treat disease.",
                 "Nutrition in this tradition is whole-food and plant-predominant, not a purity test and not a medical prescription.",
                 "Movement, sleep, stress skills, connection, and avoiding tobacco and excess alcohol are treated as medicine-grade levers, not optional extras.",
                 "Care is evidence-based and person-centered: evoke the person's own reasons, respect context, and avoid fads."
@@ -655,7 +655,7 @@ enum LifestyleMedicineKnowledge {
                 "Alcohol degrades sleep architecture and next-day HRV even at modest doses.",
                 "Stopping tobacco produces the single largest individual health gain of any behavior change, with benefits beginning within days.",
                 "Cannabis can shorten sleep latency but reduces REM and can impair next-day cognition; regular heavy use is associated with tolerance and rebound insomnia.",
-                "Substance dependence, withdrawal risk, and cessation medications belong with a clinician, not a wellness coach."
+                "Do not improvise a taper or a detox plan. Dependence and dangerous withdrawal need medical support, not a lifestyle workaround."
             ]
         ),
         CoachKnowledgeEntry(
@@ -736,7 +736,7 @@ enum LifestyleMedicineKnowledge {
                 "Improvements in fitness and diet quality are associated with better outcomes even without weight change.",
                 "Weight-focused framing predicts more shame and dropout than behavior-focused framing for many people.",
                 "Behaviors this app tracks — sleep, fiber, activity — improve health independent of what the scale does.",
-                "Rapid-weight-loss advice, calorie prescriptions, and eating-disorder-adjacent guidance are out of scope for a wellness coach."
+                "Do not prescribe crash diets, calorie targets, or eating-disorder-adjacent restriction."
             ]
         )
     ]
@@ -754,7 +754,7 @@ enum LifestyleMedicineKnowledge {
                 "Large trials of multivitamins in well-nourished adults show no reduction in cardiovascular events, cancer, or mortality; they are insurance against deficiency, not a health upgrade.",
                 "The strongest cases are for correcting a documented gap — vitamin B12 on a vegan diet, vitamin D with little sun exposure, iron with diagnosed deficiency, folate in pregnancy.",
                 "Third-party certification (NSF Certified for Sport, USP, Informed Choice) is the practical way to check what is actually in a bottle.",
-                "Supplements interact with medications; anything ongoing is worth running past a clinician or pharmacist."
+                "Some supplements interact with medications. Name a known interaction from the reference material; still give the food-first answer."
             ]
         ),
         CoachKnowledgeEntry(
@@ -765,7 +765,7 @@ enum LifestyleMedicineKnowledge {
             facts: [
                 "Creatine monohydrate is among the best-studied ergogenic aids: roughly 3–5 g/day increases muscle phosphocreatine and modestly improves strength and lean mass gains alongside resistance training.",
                 "Loading protocols are optional; 3–5 g/day reaches saturation in about three to four weeks.",
-                "It does not damage kidneys in healthy adults across decades of trials, though anyone with kidney disease should ask their clinician first.",
+                "It does not damage kidneys in healthy adults across decades of trials. It is not a casual add-on when kidney disease is already present.",
                 "Early weight gain of one to two kilograms is intracellular water, not fat.",
                 "Evidence for cognitive or mood benefits is preliminary and mostly in sleep-deprived or vegetarian populations."
             ]
@@ -817,7 +817,7 @@ enum LifestyleMedicineKnowledge {
             facts: [
                 "Two servings of fatty fish per week is the guideline-level recommendation; salmon, sardines, mackerel, herring, and trout are the practical sources.",
                 "Fish oil supplements have not reduced cardiovascular events in general-population trials such as VITAL and ASCEND.",
-                "High-dose prescription EPA lowers triglycerides substantially and is a clinical decision, not a wellness one.",
+                "High-dose prescription EPA lowers triglycerides substantially. Do not tell someone to start, stop, or substitute that prescription.",
                 "Plant omega-3 (ALA from flax, chia, walnuts) converts to EPA and DHA inefficiently, so vegans often consider an algae-based DHA source.",
                 "Doses above about 3 g/day may increase bleeding risk and atrial fibrillation signals have appeared in some trials."
             ]
@@ -1097,7 +1097,7 @@ enum LifestyleMedicineKnowledge {
                 "Replacing saturated fat with unsaturated fat is the single most effective dietary lever on LDL.",
                 "Five to ten grams per day of viscous soluble fiber — oats, barley, psyllium, legumes — lowers LDL by roughly 5%, and plant sterols at 2 g/day lower it about 8–10%.",
                 "Exercise mainly lowers triglycerides and raises HDL rather than moving LDL much.",
-                "Lipid targets and medication decisions are clinical; the lifestyle contribution is real but complements rather than replaces that conversation."
+                "Lifestyle still moves lipids: viscous fiber, replacing saturated fat, and less ultra-processed food. Do not adjust someone's statin or other lipid medication."
             ]
         ),
         CoachKnowledgeEntry(
@@ -1110,7 +1110,7 @@ enum LifestyleMedicineKnowledge {
                 "A 10–15 minute walk after meals meaningfully blunts post-meal glucose rises, and it works even when the walk is easy.",
                 "Muscle is the largest site of glucose disposal, so resistance training improves glycemic control independently of aerobic work.",
                 "Fiber, protein, and fat slow gastric emptying and flatten the same carbohydrate's glucose curve; eating vegetables and protein before starch has a modest measured effect.",
-                "Continuous glucose monitors in people without diabetes show variation that is largely normal physiology; interpreting A1c or diagnosing anything is a clinician's job."
+                "Continuous glucose monitors in people without diabetes show variation that is largely normal physiology. Do not interpret someone's A1c or diagnose diabetes; talk about the meal and movement levers that flatten glucose."
             ]
         ),
         CoachKnowledgeEntry(
@@ -1167,7 +1167,7 @@ enum LifestyleMedicineKnowledge {
                 "Bone loss accelerates around the menopausal transition, making resistance and impact training especially valuable.",
                 "Cardiovascular risk rises after menopause, so blood pressure and lipids deserve attention during this window.",
                 "Cognitive behavioral therapy has evidence for both insomnia and vasomotor symptom distress in this population.",
-                "Hormone therapy decisions are individualized and belong with a clinician who knows the person's history."
+                "Lifestyle levers here are training, protein, sleep, and stress skills. Do not prescribe or discourage hormone therapy."
             ]
         ),
         CoachKnowledgeEntry(

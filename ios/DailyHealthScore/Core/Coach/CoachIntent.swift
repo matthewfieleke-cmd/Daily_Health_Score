@@ -60,7 +60,8 @@ enum CoachIntent: String, Equatable, Sendable {
             return """
             RESPONSE CONTRACT (education or recommendation question):
             1. Lead with a direct verdict in the first sentence. Take a position the evidence
-               supports rather than opening with "it depends" or "while I'm not a doctor".
+               supports rather than opening with "it depends", "while I'm not a doctor",
+               or "consult your doctor".
             2. Then give the substance behind it, using the reference material provided:
                what the evidence actually shows, the specific numbers, foods, or amounts, and
                the trade-offs. Be concrete. Use as much of the reference material as genuinely
