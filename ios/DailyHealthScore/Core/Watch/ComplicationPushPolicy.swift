@@ -79,3 +79,45 @@ enum ComplicationPushPolicy {
         }
     }
 }
+
+/// A snapshot that could not be sent because Watch Connectivity was still
+/// activating. Always keep the newest snapshot; remember a workout if either
+/// attempt had one.
+struct WatchPendingSend: Equatable {
+    var snapshot: WatchSnapshot
+    var kind: HealthChangeKind
+    var endedWorkoutSinceLastPush: Bool
+    var latestWorkoutEnd: Date?
+}
+
+enum WatchPendingSendMerge {
+    static func replacing(
+        _ current: WatchPendingSend?,
+        with incoming: WatchPendingSend
+    ) -> WatchPendingSend {
+        guard let current else { return incoming }
+        var merged = incoming
+        merged.kind = preferredKind(current.kind, incoming.kind)
+        merged.endedWorkoutSinceLastPush =
+            current.endedWorkoutSinceLastPush || incoming.endedWorkoutSinceLastPush
+        switch (current.latestWorkoutEnd, incoming.latestWorkoutEnd) {
+        case let (older?, newer?):
+            merged.latestWorkoutEnd = max(older, newer)
+        case let (older?, nil):
+            merged.latestWorkoutEnd = older
+        default:
+            break
+        }
+        return merged
+    }
+
+    /// Foreground is the most generous complication rule. A workout flag must
+    /// not be forgotten if a later sleep publish replaces the queued payload.
+    static func preferredKind(_ older: HealthChangeKind, _ newer: HealthChangeKind) -> HealthChangeKind {
+        if older == .foreground || newer == .foreground { return .foreground }
+        if older == .workout || newer == .workout { return .workout }
+        if older == .sleep || newer == .sleep { return .sleep }
+        if older == .fiber || newer == .fiber { return .fiber }
+        return newer
+    }
+}

@@ -17,6 +17,8 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
     private var lastComplicationFace: ComplicationPushPolicy.Face?
     /// Newest workout end we already spent a face update on.
     private(set) var lastPushedWorkoutEndDate: Date = .distantPast
+    /// Held while `WCSession` is still activating so a Health wake is not dropped.
+    private var pendingSend: WatchPendingSend?
 
     init(recordStore: RecordStore, smartGoalStore: SMARTGoalStore, settingsStore: SettingsStore) {
         self.recordStore = recordStore
@@ -52,7 +54,8 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         let transferred = sendToWatch(
             snapshot,
             kind: kind,
-            endedWorkoutSinceLastPush: endedWorkoutSinceLastPush
+            endedWorkoutSinceLastPush: endedWorkoutSinceLastPush,
+            latestWorkoutEnd: latestWorkoutEnd
         )
         if transferred, endedWorkoutSinceLastPush, let latestWorkoutEnd {
             lastPushedWorkoutEndDate = latestWorkoutEnd
@@ -98,12 +101,27 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
     private func sendToWatch(
         _ snapshot: WatchSnapshot,
         kind: HealthChangeKind,
-        endedWorkoutSinceLastPush: Bool
+        endedWorkoutSinceLastPush: Bool,
+        latestWorkoutEnd: Date?,
+        queueIfUnready: Bool = true
     ) -> Bool {
         #if canImport(WatchConnectivity)
         guard WCSession.isSupported() else { return false }
         let session = WCSession.default
-        guard session.activationState == .activated else { return false }
+        guard session.activationState == .activated else {
+            if queueIfUnready {
+                pendingSend = WatchPendingSendMerge.replacing(
+                    pendingSend,
+                    with: WatchPendingSend(
+                        snapshot: snapshot,
+                        kind: kind,
+                        endedWorkoutSinceLastPush: endedWorkoutSinceLastPush,
+                        latestWorkoutEnd: latestWorkoutEnd
+                    )
+                )
+            }
+            return false
+        }
         guard let json = WatchBridge.encode(snapshot) else { return false }
         try? session.updateApplicationContext([WatchBridge.applicationContextSnapshotKey: json])
 
@@ -126,6 +144,24 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         return false
         #endif
     }
+
+    /// Sends the newest queued snapshot. Does not rebuild from disk, so a
+    /// Health wake that finished before activation is not replaced by an
+    /// empty launch publish.
+    private func flushPendingSend() {
+        guard let pending = pendingSend else { return }
+        pendingSend = nil
+        let transferred = sendToWatch(
+            pending.snapshot,
+            kind: pending.kind,
+            endedWorkoutSinceLastPush: pending.endedWorkoutSinceLastPush,
+            latestWorkoutEnd: pending.latestWorkoutEnd,
+            queueIfUnready: false
+        )
+        if transferred, pending.endedWorkoutSinceLastPush, let end = pending.latestWorkoutEnd {
+            lastPushedWorkoutEndDate = end
+        }
+    }
 }
 
 #if canImport(WatchConnectivity)
@@ -136,6 +172,8 @@ extension WatchSyncCoordinator: WCSessionDelegate {
         error: Error?
     ) {
         Task { @MainActor in
+            guard activationState == .activated else { return }
+            self.flushPendingSend()
             self.publish(kind: .foreground)
         }
     }
