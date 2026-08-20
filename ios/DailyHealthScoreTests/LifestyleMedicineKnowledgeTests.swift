@@ -115,6 +115,64 @@ final class LifestyleMedicineKnowledgeTests: XCTestCase {
         XCTAssertFalse(LifestyleMedicineKnowledge.topics(for: .fiber).isEmpty)
         XCTAssertFalse(LifestyleMedicineKnowledge.topics(for: .maintain).isEmpty)
     }
+
+    /// Chat is the heart of coaching. An education question must retrieve the
+    /// topic the person asked about, not today's weakest scored pillar.
+    func test_educationRetrievalFollowsTheQuestionNotTodaysWeakestPillar() {
+        let topics = LifestyleMedicineKnowledge.retrievalTopics(
+            intent: .education,
+            query: "what is the healthiest vegetable?",
+            primaryFocus: .sleep
+        )
+        XCTAssertFalse(topics.contains(.sleep))
+        XCTAssertFalse(topics.contains(.circadian))
+        XCTAssertTrue(
+            topics.contains(.nutrition) || topics.contains(.plantForward) || topics.contains(.fiber)
+        )
+
+        let entries = LifestyleMedicineKnowledge.retrieve(
+            query: "what is the healthiest vegetable?",
+            topics: topics,
+            limit: 12
+        )
+        XCTAssertTrue(entries.contains { $0.id == "vegetable-variety" })
+        XCTAssertFalse(entries.contains { $0.topic == .sleep })
+    }
+
+    func test_planningRetrievalIncludesMotivationalInterviewing() {
+        let topics = LifestyleMedicineKnowledge.retrievalTopics(
+            intent: .planning,
+            query: "help me get started with dinner walks",
+            primaryFocus: .exercise
+        )
+        XCTAssertTrue(topics.contains(.motivationalInterviewing))
+        XCTAssertTrue(topics.contains(.behaviorChange))
+        XCTAssertTrue(topics.contains(.physicalActivity) || topics.contains(.movementSnacks))
+    }
+
+    func test_supportRetrievalKeepsDBTAndMI() {
+        let topics = LifestyleMedicineKnowledge.retrievalTopics(
+            intent: .support,
+            query: "I keep failing and I feel stuck",
+            primaryFocus: .fiber
+        )
+        XCTAssertTrue(topics.contains(.motivationalInterviewing))
+        XCTAssertTrue(topics.contains(.dbtSkills))
+        XCTAssertTrue(topics.contains(.lapses))
+    }
+
+    func test_ablmEntryIsRetrievable() {
+        let entries = LifestyleMedicineKnowledge.retrieve(query: "what is lifestyle medicine")
+        XCTAssertTrue(entries.contains { $0.id == "ablm-pillars" })
+    }
+
+    func test_chatDepthGuidanceIsTighterOnDeviceThanOnTheServer() {
+        let onDevice = CoachCharter.answerDepthGuidance(for: .onDevice)
+        let server = CoachCharter.answerDepthGuidance(for: .privateCloud)
+        XCTAssertTrue(onDevice.contains("3–6") || onDevice.contains("3-6"))
+        XCTAssertTrue(server.contains("large window") || server.contains("Teach fully"))
+        XCTAssertNotEqual(onDevice, server)
+    }
 }
 
 final class CoachSafetyGateTests: XCTestCase {

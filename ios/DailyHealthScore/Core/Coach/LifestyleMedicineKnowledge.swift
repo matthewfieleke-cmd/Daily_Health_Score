@@ -45,6 +45,7 @@ enum CoachKnowledgeTopic: String, CaseIterable, Sendable {
     case cardiometabolic
     case lifeStages
     case practicalEating
+    case lifestyleMedicine
 }
 
 struct CoachKnowledgeEntry: Equatable, Sendable {
@@ -165,7 +166,8 @@ enum LifestyleMedicineKnowledge {
         "pain-and-movement": ["activity-guidelines"],
         "eating-on-a-budget": ["fiber-foods", "meal-building"],
         "travel-and-eating-out": ["meal-building"],
-        "shift-work-jet-lag": ["circadian", "sleep-disruptors"]
+        "shift-work-jet-lag": ["circadian", "sleep-disruptors"],
+        "ablm-pillars": ["plant-forward", "activity-guidelines", "sleep-duration"]
     ]
 
     static func topics(for focus: PrimaryFocus) -> [CoachKnowledgeTopic] {
@@ -174,6 +176,46 @@ enum LifestyleMedicineKnowledge {
         case .fiber: return [.fiber, .plantForward, .nutrition]
         case .exercise: return [.physicalActivity, .aerobic, .movementSnacks]
         case .maintain: return [.behaviorChange, .stress, .socialConnection]
+        }
+    }
+
+    /// Topics whose entries already match the question. Used so education can
+    /// boost the right pillar instead of today's weakest scored one.
+    static func topics(matching query: String) -> [CoachKnowledgeTopic] {
+        var seen = Set<CoachKnowledgeTopic>()
+        var result: [CoachKnowledgeTopic] = []
+        for entry in retrieve(query: query, limit: 8) where seen.insert(entry.topic).inserted {
+            result.append(entry.topic)
+        }
+        return result
+    }
+
+    /// What to boost for this message. Education follows the question, never the
+    /// Home card's weakest pillar. Planning may still include today's focus.
+    /// Support keeps MI/DBT/lapse material and adds whatever the message names.
+    static func retrievalTopics(
+        intent: CoachIntent,
+        query: String,
+        primaryFocus: PrimaryFocus?
+    ) -> [CoachKnowledgeTopic] {
+        switch intent {
+        case .education:
+            let matched = topics(matching: query)
+            return matched.isEmpty
+                ? [.lifestyleMedicine, .nutrition, .physicalActivity, .sleep]
+                : matched
+        case .smallTalk:
+            return []
+        case .dataLookup:
+            return intent.knowledgeTopics
+        case .support:
+            return intent.knowledgeTopics + topics(matching: query)
+        case .planning, .general:
+            var topics = intent.knowledgeTopics + Self.topics(matching: query)
+            if let primaryFocus {
+                topics += Self.topics(for: primaryFocus)
+            }
+            return topics
         }
     }
 
@@ -563,6 +605,22 @@ enum LifestyleMedicineKnowledge {
     // MARK: - Connection, substances, behavior
 
     static let socialAndBehaviorEntries: [CoachKnowledgeEntry] = [
+        CoachKnowledgeEntry(
+            id: "ablm-pillars",
+            topic: .lifestyleMedicine,
+            title: "Lifestyle Medicine as ABLM frames it",
+            keywords: [
+                "lifestyle medicine", "ablm", "american board", "pillars of",
+                "root cause", "food as medicine", "lifestyle as medicine"
+            ],
+            facts: [
+                "The American Board of Lifestyle Medicine organizes the field around six pillars: nutrition, physical activity, restorative sleep, stress management, social connection, and avoidance of risky substances.",
+                "The stance is that lifestyle is first-line for preventing and treating chronic disease by addressing root causes — this coach stays in wellness and does not treat disease.",
+                "Nutrition in this tradition is whole-food and plant-predominant, not a purity test and not a medical prescription.",
+                "Movement, sleep, stress skills, connection, and avoiding tobacco and excess alcohol are treated as medicine-grade levers, not optional extras.",
+                "Care is evidence-based and person-centered: evoke the person's own reasons, respect context, and avoid fads."
+            ]
+        ),
         CoachKnowledgeEntry(
             id: "social-connection",
             topic: .socialConnection,

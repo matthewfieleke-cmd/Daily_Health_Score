@@ -129,13 +129,14 @@ final class FoundationModelsCoach {
                 suggestion, a next step, or an activity idea. Answer only what was asked.
                 """
             }
-            var topics = intent.knowledgeTopics
-            if let snapshot {
-                topics += LifestyleMedicineKnowledge.topics(for: snapshot.primaryFocus)
-            }
+            let topics = LifestyleMedicineKnowledge.retrievalTopics(
+                intent: intent,
+                query: userMessage,
+                primaryFocus: snapshot?.primaryFocus
+            )
             // Every block is sized against whichever model is answering, so the
             // on-device retry re-trims rather than reusing server-sized text.
-            func makePrompt(compact: Bool, budget: CoachContextBudget) -> String {
+            func makePrompt(compact: Bool, budget: CoachContextBudget, answeringTier: CoachModelTier) -> String {
                 let transcript = Self.transcriptBlock(
                     recentTurns,
                     maxTurns: budget.transcriptTurns,
@@ -171,6 +172,9 @@ final class FoundationModelsCoach {
 
                 \(intent.contract)
 
+                \(CoachCharter.chatHeartContract)
+                \(CoachCharter.answerDepthGuidance(for: answeringTier))
+
                 HEALTH SNAPSHOT (authoritative numbers):
                 \(healthBlock)\(historySection)
 
@@ -199,7 +203,7 @@ final class FoundationModelsCoach {
             let content: GenerableCoachChatReply
             do {
                 content = try await session.respond(
-                    to: makePrompt(compact: false, budget: budget),
+                    to: makePrompt(compact: false, budget: budget, answeringTier: tier),
                     generating: GenerableCoachChatReply.self
                 ).content
             } catch {
@@ -215,7 +219,7 @@ final class FoundationModelsCoach {
                 lastTierUsed = .onDevice
                 do {
                     content = try await retrySession.respond(
-                        to: makePrompt(compact: tier == .onDevice, budget: retryBudget),
+                        to: makePrompt(compact: tier == .onDevice, budget: retryBudget, answeringTier: .onDevice),
                         generating: GenerableCoachChatReply.self
                     ).content
                 } catch {
@@ -357,7 +361,7 @@ struct GenerableDailyCoachCard {
 @available(iOS 26.0, *)
 @Generable
 struct GenerableCoachChatReply {
-    @Guide(description: "Coach reply that answers the user's question in its first sentence, written in second person. Usually 3-6 sentences; a substantive question supported by reference material may run to about 10. Plain prose, no lists, headers, or emoji.")
+    @Guide(description: "Coach reply that answers the user's question in its first sentence, written in second person, with conviction and warmth. Usually 3-6 sentences; a substantive question supported by reference material may run longer. Plain prose, no lists, headers, or emoji.")
     var message: String
 
     @Guide(description: "True only when the user stated a durable preference or constraint.")

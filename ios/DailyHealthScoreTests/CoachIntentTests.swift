@@ -144,8 +144,11 @@ final class CoachIntentTests: XCTestCase {
         XCTAssertTrue(CoachIntent.education.contract.contains("Do NOT recite the user's daily metrics"))
         XCTAssertTrue(CoachIntent.dataLookup.contract.contains("including the goal value"))
         XCTAssertTrue(CoachIntent.planning.contract.contains("Never write \"I will ...\" as yourself."))
+        XCTAssertTrue(CoachIntent.planning.contract.contains("permission"))
         XCTAssertTrue(CoachIntent.support.contract.contains("Validate the feeling first"))
+        XCTAssertTrue(CoachIntent.support.contract.contains("urge surfing"))
         XCTAssertTrue(CoachIntent.smallTalk.contract.contains("No metrics"))
         XCTAssertTrue(CoachIntent.education.contract.contains("Be concrete"))
+        XCTAssertTrue(CoachIntent.planning.knowledgeTopics.contains(.motivationalInterviewing))
     }
 }
