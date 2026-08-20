@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         NotificationCategories.register()
+        Task {
+            await HealthKitService.shared.startBackgroundDelivery()
+        }
         return true
     }
 

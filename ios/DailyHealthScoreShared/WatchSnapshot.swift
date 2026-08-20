@@ -45,6 +45,16 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
     func isForDay(_ date: Date, calendar: Calendar = .current) -> Bool {
         dateKey == WatchBridge.localDateKey(from: date, calendar: calendar)
     }
+
+    /// Complication and glance UI must not paint yesterday under a Today label.
+    static func currentIfToday(
+        _ snapshot: WatchSnapshot?,
+        at date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> WatchSnapshot? {
+        guard let snapshot, snapshot.isForDay(date, calendar: calendar) else { return nil }
+        return snapshot
+    }
 }
 
 struct WatchPillarSnapshot: Codable, Equatable, Sendable {

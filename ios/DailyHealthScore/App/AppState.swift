@@ -20,7 +20,7 @@ final class AppState: ObservableObject {
         static let completeDuration: TimeInterval = 1.5
     }
 
-    let healthKit = HealthKitService()
+    let healthKit = HealthKitService.shared
     let settingsStore = SettingsStore()
     let recordStore: RecordStore
     let smartGoalStore: SMARTGoalStore
@@ -36,6 +36,7 @@ final class AppState: ObservableObject {
     @Published private(set) var userRefreshToken: UInt = 0
 
     private var activeSyncGeneration: UInt = 0
+    private var sleepSettleRetry: Task<Void, Never>?
 
     init(modelContext: ModelContext) {
         recordStore = RecordStore(modelContext: modelContext)
@@ -46,16 +47,15 @@ final class AppState: ObservableObject {
             smartGoalStore: smartGoalStore,
             settingsStore: settingsStore
         )
-        healthKit.onBackgroundChange = { [weak self] in
-            Task { @MainActor in
-                await self?.syncTodayFromHealth(silent: true)
-            }
+        watchSync.activate()
+        healthKit.onBackgroundChange = { [weak self] kind in
+            await self?.syncTodayFromHealth(silent: true, kind: kind)
         }
         NotificationActionRouter.handleSMARTCheckIn = { [weak self] goalId in
             self?.watchSync.applyCheckIn(goalId: goalId)
         }
         smartGoalStore.onChange = { [weak self] in
-            self?.watchSync.publish()
+            self?.watchSync.publish(kind: .foreground)
         }
     }
 
@@ -65,7 +65,7 @@ final class AppState: ObservableObject {
             _ = await SMARTNotificationService.requestAuthorization()
         }
         await healthKit.startBackgroundDelivery()
-        watchSync.publish()
+        // Launch sync that follows publishes today's snapshot once Health has been read.
     }
 
     func requestHealthAccess() async {
@@ -79,7 +79,11 @@ final class AppState: ObservableObject {
     }
 
     /// Syncs today and backfills/updates stored days in the retention window from Apple Health.
-    func syncTodayFromHealth(userInitiated: Bool = false, silent: Bool = false) async {
+    func syncTodayFromHealth(
+        userInitiated: Bool = false,
+        silent: Bool = false,
+        kind: HealthChangeKind = .foreground
+    ) async {
         let generation: UInt
         let syncStartedAt = Date()
         if silent {
@@ -109,12 +113,13 @@ final class AppState: ObservableObject {
 
             // Today always gets a record, even if every Health read is empty or
             // fails — a partial day still shows a score (0 for missing metrics).
-            let todayRecord = await buildTodayRecord(
+            let (todayRecord, todayMetrics) = await buildTodayRecord(
                 today: today,
                 existing: existingByDate[today]
             )
             recordStore.save(todayRecord)
             existingByDate[today] = todayRecord
+            scheduleSleepSettleRetryIfNeeded(todayMetrics)
 
             if !silent {
                 // Backfill never aborts because of an individual day; failures simply
@@ -136,7 +141,13 @@ final class AppState: ObservableObject {
             if userInitiated {
                 userRefreshToken &+= 1
             }
-            watchSync.publish()
+            let latestWorkoutEnd = await healthKit.latestWorkoutEndDate(on: today)
+            let endedWorkout = (latestWorkoutEnd ?? .distantPast) > watchSync.lastPushedWorkoutEndDate
+            watchSync.publish(
+                kind: kind,
+                endedWorkoutSinceLastPush: endedWorkout,
+                latestWorkoutEnd: latestWorkoutEnd
+            )
         } catch {
             lastSyncError = error.localizedDescription
         }
@@ -177,7 +188,7 @@ final class AppState: ObservableObject {
             sleepHrvSDNNMs: existing?.sleepHrvSDNNMs
         )
         recordStore.save(record)
-        watchSync.publish()
+        watchSync.publish(kind: .foreground)
     }
 
     /// Refreshes today's suggestion when the day/evening phase changes (e.g. after 7:30 PM).
@@ -212,10 +223,10 @@ final class AppState: ObservableObject {
     /// Builds today's record using whatever Health data is available; `fetchMetrics`
     /// already resolves missing metrics to 0, so this only falls back to all-zeros
     /// if Health is unavailable entirely.
-    private func buildTodayRecord(today: String, existing: DailyRecord?) async -> DailyRecord {
+    private func buildTodayRecord(today: String, existing: DailyRecord?) async -> (DailyRecord, HealthDayMetrics) {
         let healthMetrics = (try? await healthKit.fetchMetrics(forDateKey: today))
             ?? HealthDayMetrics(sleepHours: 0, fiberGrams: 0, exerciseMinutes: 0)
-        return RecordBuilder.build(
+        let record = RecordBuilder.build(
             date: today,
             metrics: DailyMetrics(
                 sleepHours: healthMetrics.sleepHours,
@@ -227,6 +238,18 @@ final class AppState: ObservableObject {
             existing: existing,
             sleepHrvSDNNMs: healthMetrics.sleepHrvSDNNMs
         )
+        return (record, healthMetrics)
+    }
+
+    private func scheduleSleepSettleRetryIfNeeded(_ metrics: HealthDayMetrics) {
+        sleepSettleRetry?.cancel()
+        guard metrics.sleepHasUnsettledSession else { return }
+        sleepSettleRetry = Task { @MainActor in
+            let delay = SleepAttribution.defaultSettleInterval + 15
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            await syncTodayFromHealth(silent: true, kind: .sleep)
+        }
     }
 
     private func buildRecordIfNeeded(
@@ -302,6 +325,6 @@ final class AppState: ObservableObject {
             updatedAt: Date()
         )
         recordStore.save(updated)
-        watchSync.publish()
+        watchSync.publish(kind: .foreground)
     }
 }

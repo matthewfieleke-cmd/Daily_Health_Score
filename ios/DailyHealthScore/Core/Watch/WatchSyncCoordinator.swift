@@ -13,9 +13,10 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
     private let smartGoalStore: SMARTGoalStore
     private let settingsStore: SettingsStore
 
-    /// Last payload actually sent, so complication transfers only fire when the
-    /// face would change.
-    private var lastPublished: WatchSnapshot?
+    /// Last face that actually received a complication transfer.
+    private var lastComplicationFace: ComplicationPushPolicy.Face?
+    /// Newest workout end we already spent a face update on.
+    private(set) var lastPushedWorkoutEndDate: Date = .distantPast
 
     init(recordStore: RecordStore, smartGoalStore: SMARTGoalStore, settingsStore: SettingsStore) {
         self.recordStore = recordStore
@@ -34,7 +35,11 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         #endif
     }
 
-    func publish() {
+    func publish(
+        kind: HealthChangeKind = .foreground,
+        endedWorkoutSinceLastPush: Bool = false,
+        latestWorkoutEnd: Date? = nil
+    ) {
         let todayKey = DateHelpers.localDateKey()
         let today = recordStore.records.first { $0.date == todayKey }
         let snapshot = WatchSnapshotBuilder.build(
@@ -44,12 +49,19 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         )
         WatchSnapshotStore.save(snapshot)
         refreshPaceNudges(with: snapshot)
-        sendToWatch(snapshot)
+        let transferred = sendToWatch(
+            snapshot,
+            kind: kind,
+            endedWorkoutSinceLastPush: endedWorkoutSinceLastPush
+        )
+        if transferred, endedWorkoutSinceLastPush, let latestWorkoutEnd {
+            lastPushedWorkoutEndDate = latestWorkoutEnd
+        }
     }
 
     func applyCheckIn(goalId: UUID) {
         smartGoalStore.fillNextEmpty(on: goalId)
-        publish()
+        publish(kind: .foreground)
     }
 
     fileprivate func handleIncomingCheckIn(_ userInfo: [String: Any]) {
@@ -82,25 +94,36 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         #endif
     }
 
-    private func sendToWatch(_ snapshot: WatchSnapshot) {
+    @discardableResult
+    private func sendToWatch(
+        _ snapshot: WatchSnapshot,
+        kind: HealthChangeKind,
+        endedWorkoutSinceLastPush: Bool
+    ) -> Bool {
         #if canImport(WatchConnectivity)
-        guard WCSession.isSupported() else { return }
+        guard WCSession.isSupported() else { return false }
         let session = WCSession.default
-        guard session.activationState == .activated else { return }
-        guard let json = WatchBridge.encode(snapshot) else { return }
+        guard session.activationState == .activated else { return false }
+        guard let json = WatchBridge.encode(snapshot) else { return false }
         try? session.updateApplicationContext([WatchBridge.applicationContextSnapshotKey: json])
 
-        let faceChanged = lastPublished.map {
-            $0.formattedScore != snapshot.formattedScore
-                || $0.fiber.value != snapshot.fiber.value
-                || $0.exercise.value != snapshot.exercise.value
-                || $0.sleep.value != snapshot.sleep.value
-                || $0.goals != snapshot.goals
-        } ?? true
-        lastPublished = snapshot
-        if faceChanged, session.isComplicationEnabled {
-            session.transferCurrentComplicationUserInfo([WatchBridge.applicationContextSnapshotKey: json])
-        }
+        let nextFace = ComplicationPushPolicy.Face(snapshot)
+        let remaining = session.isComplicationEnabled
+            ? session.remainingComplicationUserInfoTransfers
+            : 0
+        let shouldPush = ComplicationPushPolicy.shouldPushComplication(
+            from: lastComplicationFace,
+            to: nextFace,
+            kind: kind,
+            endedWorkoutSinceLastPush: endedWorkoutSinceLastPush,
+            remainingTransfers: remaining
+        )
+        guard shouldPush, session.isComplicationEnabled else { return false }
+        session.transferCurrentComplicationUserInfo([WatchBridge.applicationContextSnapshotKey: json])
+        lastComplicationFace = nextFace
+        return true
+        #else
+        return false
         #endif
     }
 }
@@ -113,7 +136,7 @@ extension WatchSyncCoordinator: WCSessionDelegate {
         error: Error?
     ) {
         Task { @MainActor in
-            self.publish()
+            self.publish(kind: .foreground)
         }
     }
 
@@ -132,14 +155,14 @@ extension WatchSyncCoordinator: WCSessionDelegate {
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
         Task { @MainActor in
             if session.isReachable {
-                self.publish()
+                self.publish(kind: .foreground)
             }
         }
     }
 
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
         Task { @MainActor in
-            self.publish()
+            self.publish(kind: .foreground)
         }
     }
 }

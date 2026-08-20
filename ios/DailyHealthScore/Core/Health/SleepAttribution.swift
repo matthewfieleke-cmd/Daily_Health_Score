@@ -86,7 +86,9 @@ enum SleepAttribution {
         windowHoursBefore: Int = 6,
         windowHoursAfter: Int = 18,
         sessionGapToleranceMinutes: Int = 60,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        now: Date = Date(),
+        settleAfter: TimeInterval? = nil
     ) -> [SleepInterval] {
         guard
             let windowStart = calendar.date(byAdding: .hour, value: -windowHoursBefore, to: dayStart),
@@ -104,6 +106,9 @@ enum SleepAttribution {
         var attributed: [SleepInterval] = []
         for session in sessions {
             guard session.end >= dayStart, session.end < dayEnd else { continue }
+            if let settleAfter, now.timeIntervalSince(session.end) < settleAfter {
+                continue
+            }
 
             for interval in mergeOverlapping(session.intervals) {
                 let clippedStart = max(interval.start, windowStart)
@@ -114,6 +119,62 @@ enum SleepAttribution {
         }
 
         return mergeOverlapping(attributed)
+    }
+
+    /// How long after a session's last asleep sample we treat the night (or nap)
+    /// as finished. Stage samples during the night keep `end` near "now"; Apple
+    /// Health's Time Asleep summary typically lands 10–15 minutes after wake.
+    static let defaultSettleInterval: TimeInterval = 12 * 60
+
+    /// Asleep hours from wake-day sessions that have been finished for
+    /// `settleAfter`. An in-progress night or nap contributes nothing; a
+    /// settled night earlier today is kept if a later nap is still underway.
+    static func settledHours(
+        intervals: [SleepInterval],
+        dayStart: Date,
+        now: Date,
+        settleAfter: TimeInterval = defaultSettleInterval,
+        windowHoursBefore: Int = 6,
+        windowHoursAfter: Int = 18,
+        sessionGapToleranceMinutes: Int = 60,
+        calendar: Calendar = .current
+    ) -> Double {
+        let clipped = attributedSleepIntervals(
+            intervals: intervals,
+            dayStart: dayStart,
+            windowHoursBefore: windowHoursBefore,
+            windowHoursAfter: windowHoursAfter,
+            sessionGapToleranceMinutes: sessionGapToleranceMinutes,
+            calendar: calendar,
+            now: now,
+            settleAfter: settleAfter
+        )
+        let totalSeconds = clipped.reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
+        return max(0, totalSeconds / 3600.0)
+    }
+
+    /// True when a wake-day session ended so recently that Time Asleep is
+    /// still being written.
+    static func hasUnsettledWakeDaySession(
+        intervals: [SleepInterval],
+        dayStart: Date,
+        now: Date,
+        settleAfter: TimeInterval = defaultSettleInterval,
+        sessionGapToleranceMinutes: Int = 60,
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else {
+            return false
+        }
+        let sessions = groupIntoSessions(
+            intervals,
+            gapTolerance: TimeInterval(sessionGapToleranceMinutes * 60)
+        )
+        return sessions.contains { session in
+            session.end >= dayStart
+                && session.end < dayEnd
+                && now.timeIntervalSince(session.end) < settleAfter
+        }
     }
 
     // MARK: - Sessionization

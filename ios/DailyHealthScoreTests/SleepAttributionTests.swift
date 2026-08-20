@@ -364,4 +364,92 @@ extension SleepAttributionTests {
         // by counting the 10-minute awake gap.
         XCTAssertEqual(hours, 3 + 2 + 50.0/60.0, accuracy: 1e-6)
     }
+
+    func test_inProgressNight_isNotSettled() {
+        let dayStart = date(2026, 5, 21, 0)
+        // Last stage ended two minutes ago — still asleep.
+        let lastEnd = date(2026, 5, 21, 2, 0)
+        let now = date(2026, 5, 21, 2, 2)
+        let intervals = [interval(date(2026, 5, 20, 23), lastEnd)]
+        XCTAssertEqual(
+            SleepAttribution.attributedHours(intervals: intervals, dayStart: dayStart, calendar: calendar),
+            3,
+            accuracy: 1e-9
+        )
+        XCTAssertEqual(
+            SleepAttribution.settledHours(
+                intervals: intervals,
+                dayStart: dayStart,
+                now: now,
+                settleAfter: 12 * 60,
+                calendar: calendar
+            ),
+            0,
+            accuracy: 1e-9
+        )
+        XCTAssertTrue(
+            SleepAttribution.hasUnsettledWakeDaySession(
+                intervals: intervals,
+                dayStart: dayStart,
+                now: now,
+                settleAfter: 12 * 60,
+                calendar: calendar
+            )
+        )
+    }
+
+    func test_twelveMinutesAfterWake_sessionIsSettled() {
+        let dayStart = date(2026, 5, 21, 0)
+        let wake = date(2026, 5, 21, 5, 30)
+        let now = date(2026, 5, 21, 5, 45)
+        let intervals = [interval(date(2026, 5, 20, 23), wake)]
+        XCTAssertEqual(
+            SleepAttribution.settledHours(
+                intervals: intervals,
+                dayStart: dayStart,
+                now: now,
+                settleAfter: 12 * 60,
+                calendar: calendar
+            ),
+            6.5,
+            accuracy: 1e-9
+        )
+        XCTAssertFalse(
+            SleepAttribution.hasUnsettledWakeDaySession(
+                intervals: intervals,
+                dayStart: dayStart,
+                now: now,
+                settleAfter: 12 * 60,
+                calendar: calendar
+            )
+        )
+    }
+
+    func test_settledNightIsKeptWhileAfternoonNapIsInProgress() {
+        let dayStart = date(2026, 5, 22, 0)
+        let night = interval(date(2026, 5, 21, 23), date(2026, 5, 22, 6))
+        let nap = interval(date(2026, 5, 22, 14, 0), date(2026, 5, 22, 14, 20))
+        let now = date(2026, 5, 22, 14, 22)
+        let intervals = [night, nap]
+        XCTAssertEqual(
+            SleepAttribution.settledHours(
+                intervals: intervals,
+                dayStart: dayStart,
+                now: now,
+                settleAfter: 12 * 60,
+                calendar: calendar
+            ),
+            7,
+            accuracy: 1e-9
+        )
+        XCTAssertTrue(
+            SleepAttribution.hasUnsettledWakeDaySession(
+                intervals: intervals,
+                dayStart: dayStart,
+                now: now,
+                settleAfter: 12 * 60,
+                calendar: calendar
+            )
+        )
+    }
 }
