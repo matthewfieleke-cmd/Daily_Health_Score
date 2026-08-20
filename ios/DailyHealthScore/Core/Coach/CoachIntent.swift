@@ -60,11 +60,12 @@ enum CoachIntent: String, Equatable, Sendable {
             return """
             RESPONSE CONTRACT (education or recommendation question):
             1. Lead with a direct verdict in the first sentence. Take a position the evidence
-               supports rather than opening with "it depends" or "while I'm not a doctor".
+               supports rather than opening with "it depends", "while I'm not a doctor",
+               or "consult your doctor".
             2. Then give the substance behind it, using the reference material provided:
                what the evidence actually shows, the specific numbers, foods, or amounts, and
-               the trade-offs. Use as much of the reference material as genuinely answers
-               the question — a real question deserves a real explanation, not three sentences.
+               the trade-offs. Be concrete. Use as much of the reference material as genuinely
+               answers the question — a real question deserves a real explanation, not three sentences.
             3. If a common counter-argument or worry exists in the reference material, name it
                and say what the evidence says about it. That is often the most useful part.
             4. Close with the practical takeaway — what this means for what someone actually
@@ -79,17 +80,21 @@ enum CoachIntent: String, Equatable, Sendable {
             return """
             RESPONSE CONTRACT (planning request):
             1. Briefly acknowledge where they are, using correct goal status if relevant.
-            2. Offer two or three concrete options, then let them choose. Never issue commands.
-            3. Phrase any implementation intention as THEIR plan and in second person, e.g.
+            2. Ask permission or offer a choice before advising if they have not already asked
+               for a plan. Elicit what they already know, then offer options.
+            3. Offer two or three concrete options, then let them choose. Never issue commands.
+            4. Phrase any implementation intention as THEIR plan and in second person, e.g.
                "You could try: after dinner, walk 10 minutes." Never write "I will ..." as yourself.
-            4. Keep the plan smaller than feels necessary.
+            5. Keep the plan smaller than feels necessary. If they sound unsure, shrink it
+               and ask how confident they feel, 0 to 10.
             """
         case .support:
             return """
             RESPONSE CONTRACT (emotional support):
             1. Validate the feeling first, specifically and without rushing to fix it.
             2. Normalize ambivalence or setback; a lapse is information, never a character verdict.
-            3. Offer one small optional restart, or simply ask what would help. Advice is optional here.
+            3. If a skill would help, offer one in plain language (paced breathing, urge surfing,
+               opposite action, STOP) as an invitation, not an assignment. Otherwise ask what would help.
             4. No metrics dump. No cheerleading clichés.
             """
         case .smallTalk:
@@ -116,7 +121,8 @@ enum CoachIntent: String, Equatable, Sendable {
         // interpretation guidance as much as the number.
         case .dataLookup: return [.appScoring, .hrv]
         case .education, .smallTalk, .general: return []
-        case .planning: return [.behaviorChange, .habits]
+        // Planning is where the righting reflex is strongest, so MI craft rides along.
+        case .planning: return [.behaviorChange, .habits, .motivationalInterviewing]
         case .support: return [.lapses, .motivationalInterviewing, .dbtSkills]
         }
     }

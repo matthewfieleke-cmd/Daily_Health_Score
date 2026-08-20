@@ -115,30 +115,121 @@ final class LifestyleMedicineKnowledgeTests: XCTestCase {
         XCTAssertFalse(LifestyleMedicineKnowledge.topics(for: .fiber).isEmpty)
         XCTAssertFalse(LifestyleMedicineKnowledge.topics(for: .maintain).isEmpty)
     }
+
+    /// Chat is the heart of coaching. An education question must retrieve the
+    /// topic the person asked about, not today's weakest scored pillar.
+    func test_educationRetrievalFollowsTheQuestionNotTodaysWeakestPillar() {
+        let topics = LifestyleMedicineKnowledge.retrievalTopics(
+            intent: .education,
+            query: "what is the healthiest vegetable?",
+            primaryFocus: .sleep
+        )
+        XCTAssertFalse(topics.contains(.sleep))
+        XCTAssertFalse(topics.contains(.circadian))
+        XCTAssertTrue(
+            topics.contains(.nutrition) || topics.contains(.plantForward) || topics.contains(.fiber)
+        )
+
+        let entries = LifestyleMedicineKnowledge.retrieve(
+            query: "what is the healthiest vegetable?",
+            topics: topics,
+            limit: 12
+        )
+        XCTAssertTrue(entries.contains { $0.id == "vegetable-variety" })
+        XCTAssertFalse(entries.contains { $0.topic == .sleep })
+    }
+
+    func test_planningRetrievalIncludesMotivationalInterviewing() {
+        let topics = LifestyleMedicineKnowledge.retrievalTopics(
+            intent: .planning,
+            query: "help me get started with dinner walks",
+            primaryFocus: .exercise
+        )
+        XCTAssertTrue(topics.contains(.motivationalInterviewing))
+        XCTAssertTrue(topics.contains(.behaviorChange))
+        XCTAssertTrue(topics.contains(.physicalActivity) || topics.contains(.movementSnacks))
+    }
+
+    func test_supportRetrievalKeepsDBTAndMI() {
+        let topics = LifestyleMedicineKnowledge.retrievalTopics(
+            intent: .support,
+            query: "I keep failing and I feel stuck",
+            primaryFocus: .fiber
+        )
+        XCTAssertTrue(topics.contains(.motivationalInterviewing))
+        XCTAssertTrue(topics.contains(.dbtSkills))
+        XCTAssertTrue(topics.contains(.lapses))
+    }
+
+    func test_ablmEntryIsRetrievable() {
+        let entries = LifestyleMedicineKnowledge.retrieve(query: "what is lifestyle medicine")
+        XCTAssertTrue(entries.contains { $0.id == "ablm-pillars" })
+    }
+
+    func test_chatDepthGuidanceIsTighterOnDeviceThanOnTheServer() {
+        let onDevice = CoachCharter.answerDepthGuidance(for: .onDevice)
+        let server = CoachCharter.answerDepthGuidance(for: .privateCloud)
+        XCTAssertTrue(onDevice.contains("3–6") || onDevice.contains("3-6"))
+        XCTAssertTrue(server.contains("large window") || server.contains("Teach fully"))
+        XCTAssertNotEqual(onDevice, server)
+    }
 }
 
 final class CoachSafetyGateTests: XCTestCase {
     func test_ordinaryMessagesPassThrough() {
         XCTAssertEqual(CoachSafetyGate.evaluate("How do I add more fiber?"), .ordinary)
+        XCTAssertEqual(CoachSafetyGate.evaluate("My knee hurts when I walk"), .ordinary)
+        XCTAssertEqual(CoachSafetyGate.evaluate("Should I take creatine?"), .ordinary)
     }
 
     func test_selfHarmEscalatesDeterministically() {
         guard case .escalate(let message) = CoachSafetyGate.evaluate("I want to kill myself") else {
             return XCTFail("Expected escalation")
         }
+        XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
         XCTAssertTrue(message.contains("988"))
+    }
+
+    func test_harmToOthersEscalatesDeterministically() {
+        guard case .escalate(let message) = CoachSafetyGate.evaluate("I want to hurt someone") else {
+            return XCTFail("Expected escalation")
+        }
+        XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
+        XCTAssertTrue(message.lowercased().contains("emergency"))
     }
 
     func test_chestPainEscalates() {
         guard case .escalate(let message) = CoachSafetyGate.evaluate("I have chest pain when walking") else {
             return XCTFail("Expected escalation")
         }
+        XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
         XCTAssertTrue(message.lowercased().contains("emergency"))
     }
 
     func test_disorderedEatingEscalates() {
-        guard case .escalate = CoachSafetyGate.evaluate("I make myself throw up after eating") else {
+        guard case .escalate(let message) = CoachSafetyGate.evaluate("I make myself throw up after eating") else {
             return XCTFail("Expected escalation")
+        }
+        XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
+    }
+
+    func test_escalationNeverHedgesAboutNotBeingAProfessional() {
+        let crises = [
+            "I want to kill myself",
+            "I want to hurt someone",
+            "I have chest pain when walking",
+            "I make myself throw up after eating",
+            "I have alcohol withdrawal"
+        ]
+        for crisis in crises {
+            guard case .escalate(let message) = CoachSafetyGate.evaluate(crisis) else {
+                return XCTFail("Expected escalation for \(crisis)")
+            }
+            let lowered = message.lowercased()
+            XCTAssertFalse(lowered.contains("not an app"), crisis)
+            XCTAssertFalse(lowered.contains("wellness coach"), crisis)
+            XCTAssertFalse(lowered.contains("not a doctor"), crisis)
+            XCTAssertTrue(message.hasPrefix(CoachSafetyGate.immediateHelpSentence), crisis)
         }
     }
 }

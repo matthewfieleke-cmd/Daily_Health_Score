@@ -76,7 +76,7 @@ struct LifestyleCoachChatView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(CoachCharter.philosophy)
                 .font(.subheadline.weight(.medium))
-            Text("Ask about sleep, nutrition, movement, stress, or building steady habits. Your coach can see today’s score, your goals, your SMART goals, and your HRV trend, and remembers prior chats on this device.")
+            Text("This conversation is the heart of coaching — the Home card is just today’s snapshot. Ask about sleep, nutrition, movement, stress, or building habits. Your coach can see today’s score, your goals, your SMART goals, and your HRV trend, and remembers prior chats on this device.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
