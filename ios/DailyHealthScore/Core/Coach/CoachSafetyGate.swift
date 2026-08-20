@@ -23,7 +23,7 @@ enum CoachSafetyGate {
     private static let selfHarmPhrases = [
         "kill myself", "suicidal", "suicide", "end my life", "want to die",
         "hurt myself", "self harm", "self-harm", "not want to be alive", "no reason to live",
-        "better off dead", "ending it all", "don't want to be here", "dont want to be here"
+        "better off dead", "ending it all", "don't want to be here anymore", "dont want to be here anymore"
     ]
 
     private static let harmToOthersPhrases = [
