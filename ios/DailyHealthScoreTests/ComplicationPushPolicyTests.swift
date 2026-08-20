@@ -151,3 +151,57 @@ final class ComplicationPushPolicyTests: XCTestCase {
         )
     }
 }
+
+final class WatchPendingSendMergeTests: XCTestCase {
+    func test_firstSendIsKeptAsIs() {
+        let incoming = pending(sleep: 7.2, kind: .sleep)
+        let merged = WatchPendingSendMerge.replacing(nil, with: incoming)
+        XCTAssertEqual(merged, incoming)
+    }
+
+    func test_newerSnapshotReplacesOlderAndRemembersWorkout() {
+        let first = pending(sleep: 0, exercise: 30, kind: .workout, endedWorkout: true, workoutEnd: 100)
+        let second = pending(sleep: 7.2, exercise: 30, kind: .sleep, endedWorkout: false, workoutEnd: nil)
+        let merged = WatchPendingSendMerge.replacing(first, with: second)
+        XCTAssertEqual(merged.snapshot.sleep.value, 7.2)
+        XCTAssertEqual(merged.kind, .workout)
+        XCTAssertTrue(merged.endedWorkoutSinceLastPush)
+        XCTAssertEqual(merged.latestWorkoutEnd, Date(timeIntervalSince1970: 100))
+    }
+
+    func test_preferredKindKeepsForeground() {
+        XCTAssertEqual(WatchPendingSendMerge.preferredKind(.sleep, .foreground), .foreground)
+        XCTAssertEqual(WatchPendingSendMerge.preferredKind(.workout, .fiber), .workout)
+        XCTAssertEqual(WatchPendingSendMerge.preferredKind(.fiber, .sleep), .sleep)
+    }
+
+    private func pending(
+        sleep: Double,
+        exercise: Double = 0,
+        kind: HealthChangeKind,
+        endedWorkout: Bool = false,
+        workoutEnd: TimeInterval? = nil
+    ) -> WatchPendingSend {
+        WatchPendingSend(
+            snapshot: WatchSnapshot(
+                dateKey: "2026-08-20",
+                totalScore: sleep + exercise / 10,
+                sleep: WatchPillarSnapshot(
+                    name: "Sleep", value: sleep, goal: 7.5, unit: "hr", points: 0, maxPoints: 4
+                ),
+                fiber: WatchPillarSnapshot(
+                    name: "Fiber", value: 0, goal: 40, unit: "g", points: 0, maxPoints: 4
+                ),
+                exercise: WatchPillarSnapshot(
+                    name: "Exercise", value: exercise, goal: 30, unit: "min", points: 0, maxPoints: 2
+                ),
+                goals: [],
+                updatedAt: Date(timeIntervalSince1970: 1),
+                paceNudgesEnabled: true
+            ),
+            kind: kind,
+            endedWorkoutSinceLastPush: endedWorkout,
+            latestWorkoutEnd: workoutEnd.map { Date(timeIntervalSince1970: $0) }
+        )
+    }
+}
