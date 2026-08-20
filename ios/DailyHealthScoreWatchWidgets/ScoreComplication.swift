@@ -19,14 +19,30 @@ struct ScoreProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (ScoreEntry) -> Void) {
-        completion(ScoreEntry(date: Date(), snapshot: WatchSnapshotStore.load()))
+        let now = Date()
+        completion(
+            ScoreEntry(
+                date: now,
+                snapshot: WatchSnapshot.currentIfToday(WatchSnapshotStore.load(), at: now)
+            )
+        )
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ScoreEntry>) -> Void) {
-        let snapshot = WatchSnapshotStore.load()
-        let entry = ScoreEntry(date: Date(), snapshot: snapshot)
-        let retry = snapshot == nil ? 60.0 : 15 * 60.0
-        completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(retry))))
+        let now = Date()
+        let snapshot = WatchSnapshot.currentIfToday(WatchSnapshotStore.load(), at: now)
+        var entries = [ScoreEntry(date: now, snapshot: snapshot)]
+        let calendar = Calendar.current
+        if let midnight = calendar.nextDate(
+            after: now,
+            matching: DateComponents(hour: 0, minute: 0, second: 0),
+            matchingPolicy: .nextTime
+        ) {
+            entries.append(ScoreEntry(date: midnight, snapshot: nil))
+            completion(Timeline(entries: entries, policy: .after(midnight.addingTimeInterval(60))))
+        } else {
+            completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(60 * 60))))
+        }
     }
 }
 
@@ -50,8 +66,11 @@ struct ScoreComplicationView: View {
     @Environment(\.widgetFamily) private var family
     let entry: ScoreEntry
 
-    private var score: Double { entry.snapshot?.totalScore ?? 0 }
-    private var placeholder: Bool { entry.snapshot == nil }
+    private var score: Double { liveSnapshot?.totalScore ?? 0 }
+    private var placeholder: Bool { liveSnapshot == nil }
+    private var liveSnapshot: WatchSnapshot? {
+        WatchSnapshot.currentIfToday(entry.snapshot, at: Date())
+    }
     private var label: String {
         placeholder ? "--" : String(format: "%.1f", (score * 10).rounded() / 10)
     }
@@ -107,7 +126,7 @@ struct ScoreComplicationView: View {
                     .font(.headline)
                     .widgetAccentable()
                     .lineLimit(1)
-                if let snapshot = entry.snapshot {
+                if let snapshot = liveSnapshot {
                     ViewThatFits(in: .horizontal) {
                         Text(snapshot.rectangularPillarLine)
                             .lineLimit(1)
@@ -134,7 +153,7 @@ struct ScoreComplicationView: View {
     }
 
     private var accessibilityValue: String {
-        guard let snapshot = entry.snapshot else { return "No score yet" }
+        guard let snapshot = liveSnapshot else { return "No score yet" }
         if family == .accessoryRectangular {
             return "\(label) out of ten. \(snapshot.rectangularAccessibilityLine)"
         }

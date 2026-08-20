@@ -1,11 +1,13 @@
 import Foundation
 import HealthKit
+import UIKit
 
 struct HealthDayMetrics: Equatable {
     var sleepHours: Double
     var fiberGrams: Double
     var exerciseMinutes: Double
     var sleepHrvSDNNMs: Double? = nil
+    var sleepHasUnsettledSession: Bool = false
 }
 
 enum HealthKitError: LocalizedError {
@@ -23,12 +25,16 @@ enum HealthKitError: LocalizedError {
 }
 
 final class HealthKitService {
+    static let shared = HealthKitService()
+
     let store = HKHealthStore()
     private var observerQueries: [HKObserverQuery] = []
-    private var didStartBackgroundDelivery = false
+    private var didStartObservers = false
 
-    /// Called on a HealthKit background queue when new samples arrive.
-    var onBackgroundChange: (@Sendable () -> Void)?
+    private init() {}
+
+    /// Set from `AppState`. May be nil for a moment at process launch.
+    var onBackgroundChange: (@Sendable (HealthChangeKind) async -> Void)?
 
     var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
 
@@ -40,44 +46,65 @@ final class HealthKitService {
               let hrv = HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else {
             throw HealthKitError.unavailable
         }
-        try await store.requestAuthorization(toShare: [], read: [sleep, fiber, exercise, hrv])
+        try await store.requestAuthorization(
+            toShare: [],
+            read: [sleep, fiber, exercise, hrv, HKObjectType.workoutType()]
+        )
     }
 
-    /// Wakes the app when sleep, fiber, or exercise land in Health so today can
-    /// be rebuilt and pushed to the Watch without opening the iPhone app.
+    /// Wakes the app when sleep, fiber, exercise minutes, or a workout land in
+    /// Health so today can be rebuilt and pushed to the Watch without opening
+    /// the iPhone UI.
     func startBackgroundDelivery() async {
-        guard isAvailable, !didStartBackgroundDelivery else { return }
+        guard isAvailable else { return }
         guard let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis),
               let fiber = HKObjectType.quantityType(forIdentifier: .dietaryFiber),
               let exercise = HKObjectType.quantityType(forIdentifier: .appleExerciseTime) else {
             return
         }
-        didStartBackgroundDelivery = true
-        await enableDelivery(for: sleep, frequency: .hourly)
+        await enableDelivery(for: sleep, frequency: .immediate)
         await enableDelivery(for: fiber, frequency: .immediate)
         await enableDelivery(for: exercise, frequency: .immediate)
-        observe(sleep)
-        observe(fiber)
-        observe(exercise)
+        await enableDelivery(for: HKObjectType.workoutType(), frequency: .immediate)
+        guard !didStartObservers else { return }
+        didStartObservers = true
+        observe(sleep, kind: .sleep)
+        observe(fiber, kind: .fiber)
+        observe(exercise, kind: .exerciseMinutes)
+        observe(HKObjectType.workoutType(), kind: .workout)
     }
 
     private func enableDelivery(for type: HKObjectType, frequency: HKUpdateFrequency) async {
         do {
             try await store.enableBackgroundDelivery(for: type, frequency: frequency)
         } catch {
-            // Delivery is best-effort; scheduled pace checks still catch a silent day.
+            // Delivery is best-effort; opening the app still syncs.
         }
     }
 
-    private func observe(_ type: HKSampleType) {
+    private func observe(_ type: HKSampleType, kind: HealthChangeKind) {
         let query = HKObserverQuery(sampleType: type, predicate: nil) { [weak self] _, completionHandler, error in
-            if error == nil {
-                self?.onBackgroundChange?()
+            let failed = error != nil
+            HealthBackgroundTask.run {
+                guard !failed else { return }
+                await self?.deliverBackgroundChange(kind)
+            } completion: {
+                completionHandler()
             }
-            completionHandler()
         }
         observerQueries.append(query)
         store.execute(query)
+    }
+
+    /// Waits briefly for `AppState` to attach a handler on a HealthKit launch.
+    private func deliverBackgroundChange(_ kind: HealthChangeKind) async {
+        for _ in 0 ..< 50 {
+            if let onBackgroundChange {
+                await onBackgroundChange(kind)
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
     }
 
     /// Reads sleep, fiber, exercise, and optional sleep HRV for a day. Score
@@ -112,7 +139,8 @@ final class HealthKitService {
             sleepHours: bundle?.hours ?? 0,
             fiberGrams: fiberGrams,
             exerciseMinutes: exerciseMinutes,
-            sleepHrvSDNNMs: sleepHrvSDNNMs
+            sleepHrvSDNNMs: sleepHrvSDNNMs,
+            sleepHasUnsettledSession: bundle?.hasUnsettledSession ?? false
         )
     }
 
@@ -168,6 +196,36 @@ final class HealthKitService {
                 continuation.resume(returning: max(0, value))
             }
             store.execute(query)
+        }
+    }
+}
+
+/// Holds a HealthKit observer wake long enough to read today and push the Watch.
+enum HealthBackgroundTask {
+    static func run(
+        _ work: @escaping @Sendable () async -> Void,
+        completion: @escaping () -> Void
+    ) {
+        Task { @MainActor in
+            var finished = false
+            let finish = {
+                guard !finished else { return }
+                finished = true
+                completion()
+            }
+            var taskId = UIBackgroundTaskIdentifier.invalid
+            taskId = UIApplication.shared.beginBackgroundTask(withName: "dhs.health-sync") {
+                finish()
+                if taskId != .invalid {
+                    UIApplication.shared.endBackgroundTask(taskId)
+                    taskId = .invalid
+                }
+            }
+            await work()
+            finish()
+            if taskId != .invalid {
+                UIApplication.shared.endBackgroundTask(taskId)
+            }
         }
     }
 }

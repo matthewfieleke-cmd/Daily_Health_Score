@@ -7,6 +7,7 @@ extension HealthKitService {
         var asleepIntervals: [SleepInterval]
         var windowStart: Date
         var windowEnd: Date
+        var hasUnsettledSession: Bool = false
     }
 
     func resilientSleepBundle(dayStart: Date, calendar: Calendar) async -> SleepFetchBundle? {
@@ -46,17 +47,32 @@ extension HealthKitService {
                     guard Self.asleepCategoryValues.contains(sample.value) else { return nil }
                     return SleepInterval(start: sample.startDate, end: sample.endDate)
                 }
-                let hours = SleepAttribution.attributedHours(
+                let hours = SleepAttribution.settledHours(
                     intervals: intervals,
                     dayStart: dayStart,
+                    now: Date(),
                     calendar: calendar
+                )
+                let hasUnsettled = SleepAttribution.hasUnsettledWakeDaySession(
+                    intervals: intervals,
+                    dayStart: dayStart,
+                    now: Date(),
+                    calendar: calendar
+                )
+                let settledIntervals = SleepAttribution.attributedSleepIntervals(
+                    intervals: intervals,
+                    dayStart: dayStart,
+                    calendar: calendar,
+                    now: Date(),
+                    settleAfter: SleepAttribution.defaultSettleInterval
                 )
                 continuation.resume(
                     returning: SleepFetchBundle(
                         hours: hours,
-                        asleepIntervals: intervals,
+                        asleepIntervals: settledIntervals,
                         windowStart: windowStart,
-                        windowEnd: windowEnd
+                        windowEnd: windowEnd,
+                        hasUnsettledSession: hasUnsettled
                     )
                 )
             }

@@ -371,7 +371,25 @@ final class WatchSnapshotTests: XCTestCase {
             paceNudgesEnabled: true
         )
         XCTAssertFalse(snapshot.isForDay(Date(), calendar: Calendar(identifier: .gregorian)))
+        XCTAssertNil(WatchSnapshot.currentIfToday(snapshot, at: Date(), calendar: Calendar(identifier: .gregorian)))
     }
+
+    func test_currentIfTodayKeepsTodaysSnapshot() {
+        let key = WatchBridge.localDateKey(from: Date(), calendar: Calendar(identifier: .gregorian))
+        let snapshot = WatchSnapshot(
+            dateKey: key,
+            totalScore: 3.8,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 7.2, goal: 7.5, unit: "hr", points: 3.8, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Fiber", value: 0, goal: 40, unit: "g", points: 0, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Exercise", value: 0, goal: 30, unit: "min", points: 0, maxPoints: 2),
+            goals: [],
+            updatedAt: Date(),
+            paceNudgesEnabled: true
+        )
+        XCTAssertEqual(
+            WatchSnapshot.currentIfToday(snapshot, at: Date(), calendar: Calendar(identifier: .gregorian))?.dateKey,
+            key
+        )
 
     func test_watchBridgeDateKeyMatchesDateHelpers() {
         let date = Date(timeIntervalSince1970: 1_787_000_000)
