@@ -390,10 +390,54 @@ final class WatchSnapshotTests: XCTestCase {
             WatchSnapshot.currentIfToday(snapshot, at: Date(), calendar: Calendar(identifier: .gregorian))?.dateKey,
             key
         )
+    }
+
+    func test_newestCurrentPrefersTheLaterUpdatedSnapshot() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date()
+        let key = WatchBridge.localDateKey(from: now, calendar: calendar)
+        let stale = WatchSnapshot(
+            dateKey: key,
+            totalScore: 7.7,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 6.1, goal: 7.5, unit: "hr", points: 3.3, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Fiber", value: 24.5, goal: 40, unit: "g", points: 2.45, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Exercise", value: 76, goal: 30, unit: "min", points: 2, maxPoints: 2),
+            goals: [],
+            updatedAt: now.addingTimeInterval(-600),
+            paceNudgesEnabled: true
+        )
+        let fresh = WatchSnapshot(
+            dateKey: key,
+            totalScore: 9.3,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 6.1, goal: 7.5, unit: "hr", points: 3.3, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Fiber", value: 54.5, goal: 40, unit: "g", points: 4, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Exercise", value: 79, goal: 30, unit: "min", points: 2, maxPoints: 2),
+            goals: [],
+            updatedAt: now,
+            paceNudgesEnabled: true
+        )
+        let shown = WatchSnapshot.newestCurrent(stale, fresh, at: now, calendar: calendar)
+        XCTAssertEqual(shown?.fiber.value, 54.5)
+        XCTAssertEqual(shown?.formattedScore, "9.3")
+    }
 
     func test_watchBridgeDateKeyMatchesDateHelpers() {
         let date = Date(timeIntervalSince1970: 1_787_000_000)
         XCTAssertEqual(WatchBridge.localDateKey(from: date), DateHelpers.localDateKey(from: date))
+    }
+
+    func test_complicationReloadsOnAShortIntervalBeforeMidnight() {
+        let now = Date(timeIntervalSince1970: 1_787_000_000)
+        let midnight = now.addingTimeInterval(8 * 3600)
+        let reload = WatchComplicationTimeline.reloadDate(now: now, midnight: midnight)
+        XCTAssertEqual(reload.timeIntervalSince(now), WatchComplicationTimeline.refreshInterval, accuracy: 0.1)
+    }
+
+    func test_complicationPrefersMidnightWhenItIsCloserThanTheRefresh() {
+        let now = Date(timeIntervalSince1970: 1_787_000_000)
+        let midnight = now.addingTimeInterval(5 * 60)
+        let reload = WatchComplicationTimeline.reloadDate(now: now, midnight: midnight)
+        XCTAssertEqual(reload.timeIntervalSince(midnight), 60, accuracy: 0.1)
     }
 
     func test_pendingCheckInsRoundTrip() throws {
