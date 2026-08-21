@@ -18,7 +18,7 @@ enum ComplicationPushPolicy {
     /// Leave a few transfers for evening fiber / a late workout.
     static let reserveTransfers = 4
 
-    struct Face: Equatable {
+    struct Face: Equatable, Codable {
         var dateKey: String
         var formattedScore: String
         var sleep: Double
@@ -60,9 +60,15 @@ enum ComplicationPushPolicy {
             || previous?.compactExercise != next.compactExercise
         let scoreChanged = previous?.formattedScore != next.formattedScore
         let goalsChanged = previous?.goals != next.goals
+        let inReserve = remainingTransfers <= reserveTransfers
 
         switch kind {
         case .foreground:
+            if inReserve {
+                // Keep the last few transfers for dinner fiber / a late workout,
+                // not for an app-open that only moved exercise minutes or goals.
+                return sleepChanged || fiberChanged || scoreChanged
+            }
             return sleepChanged || fiberChanged || exerciseChanged || scoreChanged || goalsChanged
         case .sleep:
             return sleepChanged || scoreChanged
@@ -71,11 +77,28 @@ enum ComplicationPushPolicy {
         case .workout:
             return exerciseChanged || scoreChanged
         case .exerciseMinutes:
-            // Streaming minutes during a hike do not get a push. After the
-            // workout object lands, one push is enough even if this observer
-            // fired first.
             guard endedWorkoutSinceLastPush else { return false }
             return exerciseChanged || scoreChanged
+        }
+    }
+}
+
+/// Remembers the last face that actually received a complication transfer so a
+/// HealthKit process launch does not look like "first snapshot" and burn the
+/// daily budget.
+enum LastComplicationFaceStore {
+    static let defaultsKey = "dhs.lastComplicationFaceJSON"
+
+    static func load(defaults: UserDefaults = .standard) -> ComplicationPushPolicy.Face? {
+        guard let json = defaults.string(forKey: defaultsKey) else { return nil }
+        return WatchBridge.decode(ComplicationPushPolicy.Face.self, from: json)
+    }
+
+    static func save(_ face: ComplicationPushPolicy.Face?, defaults: UserDefaults = .standard) {
+        if let face, let json = WatchBridge.encode(face) {
+            defaults.set(json, forKey: defaultsKey)
+        } else {
+            defaults.removeObject(forKey: defaultsKey)
         }
     }
 }

@@ -33,16 +33,16 @@ struct ScoreProvider: TimelineProvider {
         let snapshot = WatchSnapshot.currentIfToday(WatchSnapshotStore.load(), at: now)
         var entries = [ScoreEntry(date: now, snapshot: snapshot)]
         let calendar = Calendar.current
-        if let midnight = calendar.nextDate(
+        let midnight = calendar.nextDate(
             after: now,
             matching: DateComponents(hour: 0, minute: 0, second: 0),
             matchingPolicy: .nextTime
-        ) {
+        )
+        if let midnight {
             entries.append(ScoreEntry(date: midnight, snapshot: nil))
-            completion(Timeline(entries: entries, policy: .after(midnight.addingTimeInterval(60))))
-        } else {
-            completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(60 * 60))))
         }
+        let reloadAfter = WatchComplicationTimeline.reloadDate(now: now, midnight: midnight)
+        completion(Timeline(entries: entries, policy: .after(reloadAfter)))
     }
 }
 
@@ -69,7 +69,7 @@ struct ScoreComplicationView: View {
     private var score: Double { liveSnapshot?.totalScore ?? 0 }
     private var placeholder: Bool { liveSnapshot == nil }
     private var liveSnapshot: WatchSnapshot? {
-        WatchSnapshot.currentIfToday(entry.snapshot, at: Date())
+        WatchSnapshot.newestCurrent(entry.snapshot, WatchSnapshotStore.load(), at: Date())
     }
     private var label: String {
         placeholder ? "--" : String(format: "%.1f", (score * 10).rounded() / 10)

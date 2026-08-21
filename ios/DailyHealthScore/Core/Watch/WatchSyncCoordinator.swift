@@ -25,6 +25,7 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         self.smartGoalStore = smartGoalStore
         self.settingsStore = settingsStore
         super.init()
+        lastComplicationFace = LastComplicationFaceStore.load()
     }
 
     func activate() {
@@ -139,6 +140,7 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         guard shouldPush, session.isComplicationEnabled else { return false }
         session.transferCurrentComplicationUserInfo([WatchBridge.applicationContextSnapshotKey: json])
         lastComplicationFace = nextFace
+        LastComplicationFaceStore.save(nextFace)
         return true
         #else
         return false

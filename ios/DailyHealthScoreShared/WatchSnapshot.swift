@@ -55,6 +55,28 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
         guard let snapshot, snapshot.isForDay(date, calendar: calendar) else { return nil }
         return snapshot
     }
+
+    /// Complication views should show the newest today-snapshot they can see:
+    /// the WidgetKit entry, or the App Group file the Watch app just wrote.
+    static func newestCurrent(
+        _ first: WatchSnapshot?,
+        _ second: WatchSnapshot?,
+        at date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> WatchSnapshot? {
+        let a = currentIfToday(first, at: date, calendar: calendar)
+        let b = currentIfToday(second, at: date, calendar: calendar)
+        switch (a, b) {
+        case let (a?, b?):
+            return a.updatedAt >= b.updatedAt ? a : b
+        case let (a?, nil):
+            return a
+        case let (nil, b?):
+            return b
+        default:
+            return nil
+        }
+    }
 }
 
 struct WatchPillarSnapshot: Codable, Equatable, Sendable {
