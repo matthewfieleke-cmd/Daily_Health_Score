@@ -99,6 +99,15 @@ final class SMARTGoalEditTests: XCTestCase {
         XCTAssertEqual(reopened.filledMask, original.filledMask)
     }
 
+    func test_unpauseWinsOverAStillPausedLatestCopy() throws {
+        var original = goal()
+        original.status = .paused
+        var edit = SMARTGoalEdit(goal: original, now: now)
+        edit.status = .active
+        let saved = try edit.build(latest: original, now: now)
+        XCTAssertEqual(saved.status, .active)
+    }
+
     func test_completedGoalRemainsCompleteWhenItsTextIsEdited() throws {
         let original = goal(target: 3, mask: 0b111)
         var edit = SMARTGoalEdit(goal: original, now: now)

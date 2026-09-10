@@ -254,11 +254,7 @@ final class DHSHRVStudyAnalyzerTests: XCTestCase {
 
     @MainActor
     func test_saveManualDay_preservesExistingHRV() throws {
-        let container = try ModelContainer(
-            for: DailyRecordEntity.self,
-            SMARTGoalEntity.self,
-            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-        )
+        let container = AppDataSchema.makeContainer(inMemory: true)
         let appState = AppState(modelContext: ModelContext(container))
         appState.recordStore.save(record(date: "2026-06-24", score: 8, hrv: 61))
 

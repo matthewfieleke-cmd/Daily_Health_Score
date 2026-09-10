@@ -33,6 +33,7 @@ struct HRVGraphView: View {
     @State private var selectedRange: HRVGraphRange = .thirty
     @State private var sensitivity: HRVSensitivity = .balanced
     @State private var showSensitivityInfo = false
+    @State private var coachFocus: CoachFocusContext?
 
     private var series: HRVTrendSeries {
         HRVTrendSeriesBuilder.build(
@@ -63,6 +64,16 @@ struct HRVGraphView: View {
                         emptyState
                     } else {
                         statusCard
+                        AskCoachButton {
+                            let keys = DateHelpers.rollingDateKeys(days: selectedRange.rawValue)
+                            coachFocus = CoachFocusContextBuilder.hrv(
+                                analysis: analysis,
+                                startDateKey: keys.first ?? todayKey,
+                                endDateKey: keys.last ?? todayKey,
+                                todayKey: todayKey
+                            )
+                        }
+                        .padding(.horizontal, 16)
                         chartCard
                         sensitivityCard
                     }
@@ -77,6 +88,13 @@ struct HRVGraphView: View {
         .onAppear { sensitivity = appState.settingsStore.hrvSensitivity }
         .onChange(of: sensitivity) { _, newValue in
             appState.settingsStore.hrvSensitivity = newValue
+        }
+        .sheet(item: $coachFocus) { focus in
+            NavigationStack {
+                LifestyleCoachChatView(focus: focus)
+                    .environmentObject(appState)
+                    .environmentObject(appState.coach)
+            }
         }
         .infoScrollDialog(
             isPresented: $showSensitivityInfo,

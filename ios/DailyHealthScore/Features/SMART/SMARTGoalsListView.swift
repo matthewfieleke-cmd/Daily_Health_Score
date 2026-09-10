@@ -71,6 +71,7 @@ private struct SMARTGoalsListContent: View {
         .sheet(isPresented: $showCoach) {
             NavigationStack {
                 LifestyleCoachChatView(initialMessage: "Help me formulate a SMART goal")
+                    .environmentObject(appState)
                     .environmentObject(appState.coach)
             }
         }
@@ -139,6 +140,10 @@ private struct SMARTGoalRowView: View {
                     Text("Ended")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.orange)
+                } else if goal.isPaused {
+                    Text("Paused")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
                 } else {
                     Text("\(goal.filledCount)/\(goal.targetCount)")
                         .font(.caption2.weight(.semibold))

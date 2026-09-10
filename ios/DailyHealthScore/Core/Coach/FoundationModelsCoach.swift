@@ -36,7 +36,8 @@ final class FoundationModelsCoach {
     func generateDailyCard(
         snapshot: CoachSnapshot,
         profile: CoachUserProfile,
-        summary: String
+        summary: String,
+        memoryBlock: String = ""
     ) async throws -> DailyCoachCardContent {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
@@ -64,10 +65,10 @@ final class FoundationModelsCoach {
             REFERENCE MATERIAL (authoritative content):
             \(knowledge.isEmpty ? "None." : knowledge)
 
-            USER PROFILE (informational only):
-            \(profile.promptBlock)
+            USER PROFILE (informational only; confirmed facts beat interpretations):
+            \(memoryBlock.isEmpty ? profile.promptBlock : memoryBlock)
 
-            RUNNING SUMMARY (informational only):
+            RUNNING SUMMARY (informational only; do not restore deleted memories):
             \(summary.isEmpty ? "None yet." : summary)
 
             \(CoachCharter.dailyCardContract)
@@ -106,7 +107,10 @@ final class FoundationModelsCoach {
         goals: [SMARTGoal] = [],
         focusedGoalID: UUID? = nil,
         previousProposal: CoachGoalProposal? = nil,
-        planningGoal: Bool = false
+        planningGoal: Bool = false,
+        focus: CoachFocusContext? = nil,
+        memoryBlock: String = "",
+        activitiesByGoal: [UUID: [SMARTGoalActivity]] = [:]
     ) async throws -> (message: String, profileUpdate: CoachUserProfile?, goalProposal: CoachGoalProposal?, proposalRejected: Bool) {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
@@ -123,7 +127,13 @@ final class FoundationModelsCoach {
             lastTierUsed = tier
             let session = CoachModelProvider.makeSession(tier: tier, instructions: instructions)
             let healthBlock: String
-            if let snapshot {
+            if let focus, focus.isHistorical {
+                healthBlock = """
+                \(focus.promptBlock)
+                TODAY (only if the user asks about today; do not substitute it for the selected period):
+                \(snapshot?.minimalBlock ?? "No live daily record is available right now.")
+                """
+            } else if let snapshot {
                 healthBlock = intent.usesFullMetrics ? snapshot.promptBlock : snapshot.minimalBlock
             } else {
                 healthBlock = "No live daily record is available right now. Do not invent personal metrics; answer from general Lifestyle Medicine knowledge."
@@ -150,7 +160,8 @@ final class FoundationModelsCoach {
             func makePrompt(compact: Bool, budget: CoachContextBudget, answeringTier: CoachModelTier) -> String {
                 if isGoalConversation {
                     let goalContext = CoachGoalPlanning.context(
-                        goals: goals, focusedGoalID: focusedGoalID, previousProposal: previousProposal
+                        goals: goals, focusedGoalID: focusedGoalID, previousProposal: previousProposal,
+                        activitiesByGoal: activitiesByGoal
                     ).limitedToCoachBudget(1800)
                     let dialogue = Self.transcriptBlock(
                         recentTurns, maxTurns: compact ? 3 : 6,
@@ -160,10 +171,11 @@ final class FoundationModelsCoach {
                     USER MESSAGE: \(userMessage.limitedToCoachBudget(1200))
                     \(CoachGoalPlanning.contract)
                     \(goalContext)
+                    \(focus.map { $0.promptBlock.limitedToCoachBudget(500) } ?? "")
                     AVAILABLE HEALTH FACTS (only use when relevant):
                     \(snapshot?.metrics.map(\.sentence).joined(separator: "\n").limitedToCoachBudget(650) ?? "No Health record; goal planning is still available.")
-                    USER PREFERENCES:
-                    \(profile.promptBlock.limitedToCoachBudget(400))
+                    USER MEMORY (confirmed facts vs interpretations):
+                    \((memoryBlock.isEmpty ? profile.promptBlock : memoryBlock).limitedToCoachBudget(400))
                     RECENT CONVERSATION (drafts are unsaved until a save confirmation):
                     \(dialogue)
                     Reply in message and supply a goalProposal only for a concrete plan.
@@ -196,6 +208,13 @@ final class FoundationModelsCoach {
                     \($0.limitedToCoachBudget(budget.historyCharacters))
                     """
                 } ?? ""
+                let focusSection = focus.map {
+                    """
+
+
+                    \($0.promptBlock.limitedToCoachBudget(budget.historyCharacters))
+                    """
+                } ?? ""
                 return """
                 Continue the DHS Lifestyle Coach conversation.
 
@@ -210,15 +229,15 @@ final class FoundationModelsCoach {
                 \(CoachCharter.answerDepthGuidance(for: answeringTier))
 
                 HEALTH SNAPSHOT (authoritative numbers):
-                \(healthBlock)\(historySection)
+                \(healthBlock)\(historySection)\(focusSection)
 
                 \(nextStepPolicy)
 
                 REFERENCE MATERIAL (authoritative content — use it to answer accurately):
                 \(compact || knowledge.isEmpty ? "None retrieved; answer from general Lifestyle Medicine knowledge and stay non-diagnostic." : knowledge)
 
-                USER PROFILE (informational only):
-                \(compact ? "Omitted." : profile.promptBlock.limitedToCoachBudget(budget.profileCharacters))
+                USER MEMORY (informational only; confirmed facts beat interpretations; do not restore deleted notes):
+                \(compact ? "Omitted." : (memoryBlock.isEmpty ? profile.promptBlock : memoryBlock).limitedToCoachBudget(budget.profileCharacters))
 
                 RUNNING SUMMARY (informational only):
                 \(compact || summary.isEmpty ? "None yet." : summary.limitedToCoachBudget(budget.summaryCharacters))
@@ -290,7 +309,11 @@ final class FoundationModelsCoach {
                     operation: draft.operation, goalID: draft.goalID,
                     specificText: draft.specificText, targetCount: draft.targetCount,
                     theme: draft.theme, daysFromToday: draft.daysFromToday, goals: goals,
-                    focusedGoalID: focusedGoalID
+                    focusedGoalID: focusedGoalID,
+                    personalReason: draft.personalReason,
+                    cue: draft.cue,
+                    expectedBarriers: draft.expectedBarriers,
+                    fallbackAction: draft.fallbackAction
                 )
             } : nil
             return (message, profileUpdate, proposal, isGoalConversation && content.goalProposal != nil && proposal == nil)
@@ -301,7 +324,8 @@ final class FoundationModelsCoach {
 
     func refreshRunningSummary(
         previousSummary: String,
-        recentTurns: [CoachChatTurn]
+        recentTurns: [CoachChatTurn],
+        currentMemory: String = ""
     ) async throws -> String {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
@@ -312,6 +336,7 @@ final class FoundationModelsCoach {
             Include themes, what helped, open threads, and emotional stance if relevant.
             Record anything the person said they would try, so it can be followed up on once.
             Exclude raw daily metric tables and diagnostic labels.
+            Do not restore facts that are absent from CURRENT MEMORY. Deleted notes stay gone.
             Keep under 900 characters.
             """)
             // Summary refresh runs after every chat turn, so it stays on-device
@@ -325,6 +350,9 @@ final class FoundationModelsCoach {
             let prompt = """
             Previous summary:
             \(previousSummary.isEmpty ? "None" : previousSummary.limitedToCoachBudget(budget.summaryCharacters))
+
+            CURRENT MEMORY (authoritative; do not restate deleted or contradicted notes):
+            \(currentMemory.isEmpty ? "None" : currentMemory.limitedToCoachBudget(budget.profileCharacters))
 
             New turns:
             \(transcript)
@@ -441,6 +469,14 @@ struct GenerableSMARTGoalProposal {
     var theme: String?
     @Guide(description: "Days from today until the deadline, 1 through 30. Required for create; nil for update unless a deadline change was requested.")
     var daysFromToday: Int?
+    @Guide(description: "Optional personal reason. Nil to preserve on update.")
+    var personalReason: String?
+    @Guide(description: "Optional cue such as after lunch. Nil to preserve on update.")
+    var cue: String?
+    @Guide(description: "Optional expected barriers. Ask; do not invent. Nil to preserve on update.")
+    var expectedBarriers: String?
+    @Guide(description: "Optional smaller fallback that does not silently satisfy a larger accepted action.")
+    var fallbackAction: String?
 }
 
 @available(iOS 26.0, *)

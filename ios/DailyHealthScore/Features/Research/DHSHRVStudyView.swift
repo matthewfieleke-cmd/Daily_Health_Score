@@ -10,6 +10,8 @@ struct DHSHRVStudyView: View {
     @State private var selectedWeek: Int?
     @State private var popupAnchor: CGPoint?
     @State private var popupSize: CGSize = .zero
+    @State private var coachFocus: CoachFocusContext?
+    @EnvironmentObject private var appState: AppState
 
     private let cautionColor = Color(red: 0.94, green: 0.55, blue: 0.32)
     private let studySpace = "dhsStudySpace"
@@ -73,6 +75,13 @@ struct DHSHRVStudyView: View {
             title: "How This Chart Works",
             text: methodsText
         )
+        .sheet(item: $coachFocus) { focus in
+            NavigationStack {
+                LifestyleCoachChatView(focus: focus)
+                    .environmentObject(appState)
+                    .environmentObject(appState.coach)
+            }
+        }
     }
 
     // MARK: - Header
@@ -108,6 +117,19 @@ struct DHSHRVStudyView: View {
             Label("Rotate your phone horizontally for a wider chart view.", systemImage: "iphone.landscape")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            AskCoachButton {
+                coachFocus = CoachFocusContextBuilder.hrv(
+                    analysis: HRVBaselineAnalyzer.analyze(
+                        records: records,
+                        todayKey: todayKey,
+                        sensitivity: appState.settingsStore.hrvSensitivity
+                    ),
+                    startDateKey: result.hrvStartDate,
+                    endDateKey: result.hrvEndDate,
+                    todayKey: todayKey
+                )
+            }
         }
         .dhsCard()
     }

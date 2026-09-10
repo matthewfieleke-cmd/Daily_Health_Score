@@ -193,7 +193,44 @@ enum WatchCheckInMerge {
 
 /// One "fill the next empty circle" event from the Watch. The iPhone applies it
 /// against live SwiftData so two in-flight taps cannot clobber each other.
+/// `eventId` is stable across Watch Connectivity retries. `createdAt` is when
+/// the person tapped — not when the iPhone later received the message.
 struct WatchCheckInEvent: Codable, Equatable, Sendable {
+    var eventId: UUID
     var goalId: UUID
     var createdAt: Date
+
+    init(eventId: UUID = UUID(), goalId: UUID, createdAt: Date) {
+        self.eventId = eventId
+        self.goalId = goalId
+        self.createdAt = createdAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case eventId, goalId, createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        goalId = try container.decode(UUID.self, forKey: .goalId)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        eventId = try container.decodeIfPresent(UUID.self, forKey: .eventId)
+            ?? Self.legacyEventId(goalId: goalId, createdAt: createdAt)
+    }
+
+    /// Stable identity for older Watch payloads that only sent goalId + createdAt.
+    static func legacyEventId(goalId: UUID, createdAt: Date) -> UUID {
+        var uuid = goalId.uuid
+        let micros = Int64((createdAt.timeIntervalSince1970 * 1_000_000).rounded())
+        let t = UInt64(bitPattern: micros)
+        uuid.8 ^= UInt8(truncatingIfNeeded: t >> 56)
+        uuid.9 ^= UInt8(truncatingIfNeeded: t >> 48)
+        uuid.10 ^= UInt8(truncatingIfNeeded: t >> 40)
+        uuid.11 ^= UInt8(truncatingIfNeeded: t >> 32)
+        uuid.12 ^= UInt8(truncatingIfNeeded: t >> 24)
+        uuid.13 ^= UInt8(truncatingIfNeeded: t >> 16)
+        uuid.14 ^= UInt8(truncatingIfNeeded: t >> 8)
+        uuid.15 ^= UInt8(truncatingIfNeeded: t)
+        return UUID(uuid: uuid)
+    }
 }

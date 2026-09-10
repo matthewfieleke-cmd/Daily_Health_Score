@@ -14,6 +14,7 @@ final class SMARTGoalDraft: ObservableObject, Identifiable {
     @Published var reminderHour: Int = 9
     @Published var reminderMinute: Int = 0
     @Published var reminderWeekdaysMask: Int = SMARTNotificationService.allWeekdaysMask
+    @Published var personalReason: String = ""
 
     var endDatePreview: Date {
         SMARTGoalLogic.endDate(days: timeWindowDays)
@@ -55,7 +56,8 @@ final class SMARTGoalDraft: ObservableObject, Identifiable {
             remindersEnabled: remindersEnabled,
             reminderHour: reminderHour,
             reminderMinute: reminderMinute,
-            reminderWeekdaysMask: reminderWeekdaysMask
+            reminderWeekdaysMask: reminderWeekdaysMask,
+            plan: SMARTGoalPlan(personalReason: personalReason.trimmingCharacters(in: .whitespacesAndNewlines))
         )
     }
 

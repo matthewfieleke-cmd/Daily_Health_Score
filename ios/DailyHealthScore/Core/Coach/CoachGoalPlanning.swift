@@ -15,7 +15,11 @@ struct CoachGoalProposal: Identifiable, Equatable {
         daysFromToday: Int?,
         goals: [SMARTGoal],
         focusedGoalID: UUID? = nil,
-        now: Date = Date()
+        now: Date = Date(),
+        personalReason: String? = nil,
+        cue: String? = nil,
+        expectedBarriers: String? = nil,
+        fallbackAction: String? = nil
     ) -> CoachGoalProposal? {
         guard ["create", "update"].contains(operation) else { return nil }
         if let targetCount, !(1...30).contains(targetCount) { return nil }
@@ -42,6 +46,10 @@ struct CoachGoalProposal: Identifiable, Equatable {
         if let daysFromToday {
             edit.endDate = SMARTGoalLogic.endDate(createdAt: now, days: daysFromToday)
         }
+        if let personalReason { edit.plan.personalReason = personalReason }
+        if let cue { edit.plan.cue = cue }
+        if let expectedBarriers { edit.plan.expectedBarriers = expectedBarriers }
+        if let fallbackAction { edit.plan.fallbackAction = fallbackAction }
         guard edit.validationMessage(latest: existing, now: now) == nil else { return nil }
         return CoachGoalProposal(id: id, edit: edit)
     }
@@ -52,9 +60,14 @@ enum CoachGoalPlanning {
     SMART GOAL WORK:
     Help formulate or revise one Specific action, Measurable count, Achievable plan,
     Relevant personal reason, and Time-bound deadline. Ask one useful question if the
-    action, count or timeframe is unclear. Explore barriers, a cue and an easier option.
-    For follow-through, use recorded check-ins and ask what helped or got in the way;
-    a missing check-in does not prove the action was missed. Counts have no timestamps.
+    action, count, cue, reason or timeframe is unclear. Explore barriers and a smaller
+    fallback. A fallback is recorded separately and does not satisfy a larger accepted
+    action unless the user reviews and saves a revised plan.
+    For follow-through, use dated activity when dates exist. Migrated check-ins may have
+    no occurrence date — do not invent dates, streaks, missed days, or a daily schedule.
+    A missing check-in does not prove the action was missed. Reducing a target is a plan
+    change, not another completed action. Counts toward the goal come only from accepted
+    check-ins, never from Health metrics.
     For an agreed concrete plan, return goalProposal. operation is create or update;
     update must use an exact goalID from CURRENT GOALS. Never invent an ID. Preserve
     unrequested fields by returning nil for them. daysFromToday is 1...30 for a new goal, and nil for an update
@@ -83,7 +96,8 @@ enum CoachGoalPlanning {
         goals: [SMARTGoal],
         focusedGoalID: UUID? = nil,
         previousProposal: CoachGoalProposal? = nil,
-        now: Date = Date()
+        now: Date = Date(),
+        activitiesByGoal: [UUID: [SMARTGoalActivity]] = [:]
     ) -> String {
         let ordered = goals.sorted { lhs, rhs in
             if (lhs.id == focusedGoalID) != (rhs.id == focusedGoalID) { return lhs.id == focusedGoalID }
@@ -96,8 +110,18 @@ enum CoachGoalPlanning {
         if goals.isEmpty { lines.append("No saved SMART goals. You can help create one without Health data.") }
         for goal in ordered.prefix(4) {
             let marker = goal.id == focusedGoalID ? "SELECTED " : ""
-            lines.append("\(marker)goalID=\(goal.id.uuidString); theme=\(goal.relevantTheme.rawValue); target=\(goal.targetCount); end=\(goal.endDate.formatted(date: .abbreviated, time: .shortened)).")
+            lines.append("\(marker)goalID=\(goal.id.uuidString); theme=\(goal.relevantTheme.rawValue); target=\(goal.targetCount); end=\(goal.endDate.formatted(date: .abbreviated, time: .shortened)); status=\(goal.status.rawValue).")
             lines.append(CoachGoalSummarizer.line(for: goal, today: now))
+            for planLine in goal.plan.promptLines() {
+                lines.append("Plan: \(planLine)")
+            }
+            let history = SMARTGoalActivityLogic.coachHistoryLines(
+                for: activitiesByGoal[goal.id] ?? [],
+                targetCount: goal.targetCount,
+                fallbackAction: goal.plan.fallbackAction,
+                now: now
+            )
+            lines.append(contentsOf: history)
         }
         if goals.count > 4 { lines.append("\(goals.count - 4) more goals are not shown. Ask the user to open a goal to work on it specifically.") }
         if let focusedGoalID, !goals.contains(where: { $0.id == focusedGoalID }) {
@@ -115,7 +139,7 @@ enum CoachGoalPlanning {
     /// The signature stays in the local coach cache, never analytics or logs.
     static func cacheKey(goals: [SMARTGoal]) -> String {
         goals.sorted { $0.id.uuidString < $1.id.uuidString }.map {
-            "\($0.id)|\($0.specificText)|\($0.targetCount)|\($0.filledMask)|\($0.endDate.timeIntervalSince1970)|\($0.status.rawValue)|\($0.relevantTheme.rawValue)"
+            "\($0.id)|\($0.specificText)|\($0.targetCount)|\($0.filledMask)|\($0.endDate.timeIntervalSince1970)|\($0.status.rawValue)|\($0.relevantTheme.rawValue)|\($0.plan.followThroughEnabled)"
         }.joined(separator: ";")
     }
 

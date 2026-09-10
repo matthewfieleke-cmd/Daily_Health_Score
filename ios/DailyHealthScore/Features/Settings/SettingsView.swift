@@ -63,11 +63,27 @@ struct SettingsView: View {
                 }
 
                 Section("DHS Lifestyle Coach") {
+                    Button {
+                        appState.showCoachMemory = true
+                    } label: {
+                        Label("What your coach remembers", systemImage: "brain.head.profile")
+                    }
                     Button(role: .destructive) {
                         showClearCoachConfirm = true
                     } label: {
                         Label("Clear coach chat & memory", systemImage: "bubble.left.and.bubble.right")
                     }
+                }
+
+                Section("Follow-through quiet hours") {
+                    Toggle("Quiet hours", isOn: quietHoursBinding)
+                    if appState.settingsStore.followThroughSettings.quietHoursEnabled {
+                        DatePicker("Start", selection: quietStart, displayedComponents: .hourAndMinute)
+                        DatePicker("End", selection: quietEnd, displayedComponents: .hourAndMinute)
+                    }
+                    Text("Opt-in SMART goal reminders skip these hours. They refresh when the app opens and do not generate coaching in the background.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Data") {
@@ -180,6 +196,56 @@ struct SettingsView: View {
                     PaceNudgeScheduler.cancelAll()
                     appState.watchSync.publish()
                 }
+            }
+        )
+    }
+
+    private var quietHoursBinding: Binding<Bool> {
+        Binding(
+            get: { appState.settingsStore.followThroughSettings.quietHoursEnabled },
+            set: { enabled in
+                var settings = appState.settingsStore.followThroughSettings
+                settings.quietHoursEnabled = enabled
+                appState.settingsStore.followThroughSettings = settings
+                Task { await appState.refreshFollowThrough() }
+            }
+        )
+    }
+
+    private var quietStart: Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(
+                    bySettingHour: appState.settingsStore.followThroughSettings.quietHoursStartHour,
+                    minute: 0,
+                    second: 0,
+                    of: Date()
+                ) ?? Date()
+            },
+            set: {
+                var settings = appState.settingsStore.followThroughSettings
+                settings.quietHoursStartHour = Calendar.current.component(.hour, from: $0)
+                appState.settingsStore.followThroughSettings = settings
+                Task { await appState.refreshFollowThrough() }
+            }
+        )
+    }
+
+    private var quietEnd: Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(
+                    bySettingHour: appState.settingsStore.followThroughSettings.quietHoursEndHour,
+                    minute: 0,
+                    second: 0,
+                    of: Date()
+                ) ?? Date()
+            },
+            set: {
+                var settings = appState.settingsStore.followThroughSettings
+                settings.quietHoursEndHour = Calendar.current.component(.hour, from: $0)
+                appState.settingsStore.followThroughSettings = settings
+                Task { await appState.refreshFollowThrough() }
             }
         )
     }

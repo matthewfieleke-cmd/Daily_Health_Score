@@ -15,16 +15,7 @@ final class RecordStore: ObservableObject {
     /// Not isolated to the main actor: this is called from `App.body` to seed the
     /// `.modelContainer(...)` modifier, before any actor context is established.
     nonisolated static func makeContainer() -> ModelContainer {
-        do {
-            return try ModelContainer(
-                for: DailyRecordEntity.self,
-                SMARTGoalEntity.self,
-                CoachChatMessageEntity.self,
-                CoachMemoryStateEntity.self
-            )
-        } catch {
-            fatalError("SwiftData container failed: \(error)")
-        }
+        AppDataSchema.makeContainer()
     }
 
     func reload() {

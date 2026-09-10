@@ -11,6 +11,7 @@ struct TodayView: View {
     @State private var showCoachChat = false
     @State private var showSMARTGoals = false
     @State private var showHRVAnalysis = false
+    @State private var coachFocus: CoachFocusContext?
     /// Shared 0…1 progress for coordinated dial-up (ring, numbers, bars).
     @State private var dialUpProgress: Double = 0
     @State private var hasPlayedLaunchDialUp = false
@@ -78,10 +79,11 @@ struct TodayView: View {
         .onDisappear { dialUpTask?.cancel() }
         .sheet(isPresented: $showCoachChat) {
             NavigationStack {
-                LifestyleCoachChatView()
+                LifestyleCoachChatView(focus: coachFocus)
                     .environmentObject(appState)
                     .environmentObject(appState.coach)
             }
+            .onDisappear { coachFocus = nil }
         }
     }
 
@@ -198,6 +200,12 @@ struct TodayView: View {
                 systemImage: "moon.stars.fill",
                 tint: AppTheme.primary
             )
+            .contextMenu {
+                Button("Ask Coach about this") {
+                    coachFocus = CoachFocusContextBuilder.metric(.sleep, record: record)
+                    showCoachChat = true
+                }
+            }
             CompactMetricCard(
                 title: "Fiber",
                 metricValue: record.fiberGrams,
@@ -210,6 +218,12 @@ struct TodayView: View {
                 systemImage: "leaf.fill",
                 tint: AppTheme.leaf
             )
+            .contextMenu {
+                Button("Ask Coach about this") {
+                    coachFocus = CoachFocusContextBuilder.metric(.fiber, record: record)
+                    showCoachChat = true
+                }
+            }
             CompactMetricCard(
                 title: "Exercise",
                 metricValue: record.exerciseMinutes,
@@ -222,6 +236,12 @@ struct TodayView: View {
                 systemImage: "figure.run",
                 tint: AppTheme.tint(for: PrimaryFocus.exercise)
             )
+            .contextMenu {
+                Button("Ask Coach about this") {
+                    coachFocus = CoachFocusContextBuilder.metric(.exercise, record: record)
+                    showCoachChat = true
+                }
+            }
         }
     }
 

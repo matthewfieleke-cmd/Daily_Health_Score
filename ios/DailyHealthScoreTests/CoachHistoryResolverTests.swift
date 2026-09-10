@@ -79,6 +79,18 @@ final class CoachHistoryResolverTests: XCTestCase {
         XCTAssertEqual(block?.contains("no record saved"), true)
     }
 
+    func test_selectedDateKeysKeepMissingDaysUnlogged() {
+        let block = CoachHistoryResolver.blockForDateKeys(
+            ["2026-08-01", "2026-08-02"],
+            records: [record(on: "2026-08-01")],
+            characterBudget: 1400
+        )
+        XCTAssertNotNil(block)
+        XCTAssertTrue(block!.contains(DateHelpers.formatDisplayDate("2026-08-01")))
+        XCTAssertTrue(block!.contains("no record saved"))
+        XCTAssertTrue(block!.contains("not zero activity"))
+    }
+
     func test_noReferenceProducesNoBlock() {
         XCTAssertNil(
             CoachHistoryResolver.block(

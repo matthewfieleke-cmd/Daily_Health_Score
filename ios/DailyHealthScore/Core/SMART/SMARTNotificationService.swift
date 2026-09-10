@@ -24,7 +24,7 @@ enum SMARTNotificationService {
 
     static func scheduleReminder(for goal: SMARTGoal) async {
         cancelReminders(for: goal.id)
-        guard goal.remindersEnabled, goal.status == .active, !goal.isComplete, !goal.isExpired else { return }
+        guard goal.remindersEnabled, goal.status == .active, !goal.isComplete, !goal.isExpired, !goal.isPaused else { return }
         guard await isAuthorizedForReminders() else { return }
         guard !Task.isCancelled else { return }
 

@@ -134,4 +134,25 @@ enum CoachHistoryResolver {
 
         return lines.joined(separator: "\n").limitedToCoachBudget(characterBudget)
     }
+
+    static func blockForDateKeys(
+        _ keys: [String],
+        records: [DailyRecord],
+        characterBudget: Int
+    ) -> String? {
+        guard !keys.isEmpty else { return nil }
+        var lines: [String] = []
+        for key in keys.sorted() {
+            let display = DateHelpers.formatDisplayDate(key)
+            guard let record = records.first(where: { $0.date == key }) else {
+                lines.append("\(display): no record saved for that day. Missing data is not zero activity.")
+                continue
+            }
+            lines.append("\(display) — score \(ScoreCalculator.formatDisplayScore(record.totalScore)) of 10:")
+            lines.append("- \(CoachSnapshotBuilder.status(name: "Sleep", value: record.sleepHours, goal: record.sleepGoal.rawValue, unit: "h", decimals: 1, points: record.sleepScore, maxPoints: 4).sentence)")
+            lines.append("- \(CoachSnapshotBuilder.status(name: "Fiber", value: record.fiberGrams, goal: Double(record.fiberGoal.rawValue), unit: "g", decimals: 1, points: record.fiberScore, maxPoints: 4).sentence)")
+            lines.append("- \(CoachSnapshotBuilder.status(name: "Exercise", value: record.exerciseMinutes, goal: Double(record.exerciseGoalMinutes), unit: "min", decimals: 0, points: record.exerciseScore, maxPoints: 2).sentence)")
+        }
+        return lines.joined(separator: "\n").limitedToCoachBudget(characterBudget)
+    }
 }

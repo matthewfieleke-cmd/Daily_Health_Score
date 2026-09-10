@@ -41,6 +41,7 @@ enum SMARTRelevantTheme: String, CaseIterable, Identifiable, Codable {
 enum SMARTGoalStatus: String, Codable {
     case active
     case ended
+    case paused
 }
 
 // MARK: - Wizard
@@ -80,6 +81,51 @@ enum SMARTWizardStep: Int, CaseIterable, Identifiable {
 
 // MARK: - Domain model
 
+/// Practical follow-through details that live on the saved goal, not only in chat.
+struct SMARTGoalPlan: Equatable, Codable, Sendable {
+    var personalReason: String = ""
+    var cue: String = ""
+    var expectedBarriers: String = ""
+    var fallbackAction: String = ""
+    var confidence: Int? = nil
+    var followThroughEnabled: Bool = false
+    var reflectionHour: Int = 20
+    var reflectionMinute: Int = 0
+
+    static let empty = SMARTGoalPlan()
+
+    var hasContent: Bool {
+        !personalReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !cue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !expectedBarriers.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !fallbackAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || confidence != nil
+            || followThroughEnabled
+    }
+
+    func promptLines() -> [String] {
+        func line(_ label: String, _ value: String) -> String? {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : "\(label): \(trimmed)"
+        }
+        var lines = [
+            line("Personal reason", personalReason),
+            line("Intended cue", cue),
+            line("Expected barriers", expectedBarriers),
+            line("Smaller fallback (does not count as the accepted action)", fallbackAction)
+        ].compactMap { $0 }
+        if let confidence {
+            lines.append("Reported confidence: \(confidence) of 10.")
+        }
+        if followThroughEnabled {
+            lines.append(
+                "Follow-through reminders opted in; reflection time \(String(format: "%02d:%02d", reflectionHour, reflectionMinute))."
+            )
+        }
+        return lines
+    }
+}
+
 struct SMARTGoal: Identifiable, Equatable, Codable {
     var id: UUID
     var specificText: String
@@ -89,12 +135,15 @@ struct SMARTGoal: Identifiable, Equatable, Codable {
     var endDate: Date
     var createdAt: Date
     var generatedSummary: String
+    /// Derived display cache of net dated/undated check-ins. The activity ledger
+    /// is the source of truth; this bitmask exists so Watch snapshots stay compact.
     var filledMask: Int
     var status: SMARTGoalStatus
     var remindersEnabled: Bool
     var reminderHour: Int
     var reminderMinute: Int
     var reminderWeekdaysMask: Int
+    var plan: SMARTGoalPlan = .empty
 
     var filledCount: Int {
         (0 ..< targetCount).filter { isFilled($0) }.count
@@ -102,8 +151,14 @@ struct SMARTGoal: Identifiable, Equatable, Codable {
 
     var isComplete: Bool { filledCount >= targetCount }
 
+    var isPaused: Bool { status == .paused }
+
     var isExpired: Bool {
         Date() > endDate && !isComplete
+    }
+
+    var canLogCheckIn: Bool {
+        status == .active && !isComplete && !isExpired
     }
 
     func isFilled(_ index: Int) -> Bool {
@@ -124,7 +179,7 @@ struct SMARTGoal: Identifiable, Equatable, Codable {
     /// taps cannot overwrite each other by sending a stale mask.
     @discardableResult
     mutating func fillNextEmpty() -> Bool {
-        guard status == .active, !isComplete else { return false }
+        guard canLogCheckIn else { return false }
         for index in 0 ..< targetCount where !isFilled(index) {
             setFilled(index, filled: true)
             return true

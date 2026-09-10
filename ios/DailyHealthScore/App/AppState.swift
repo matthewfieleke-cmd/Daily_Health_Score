@@ -35,6 +35,9 @@ final class AppState: ObservableObject {
     @Published var healthAuthorized = false
     /// Incremented when a user-initiated refresh completes (toolbar / settings).
     @Published private(set) var userRefreshToken: UInt = 0
+    @Published var pendingCoachFocus: CoachFocusContext?
+    @Published var pendingGoalId: UUID?
+    @Published var showCoachMemory = false
 
     private var activeSyncGeneration: UInt = 0
     private var sleepSettleRetry: Task<Void, Never>?
@@ -53,13 +56,34 @@ final class AppState: ObservableObject {
             await self?.syncTodayFromHealth(silent: true, kind: kind)
         }
         NotificationActionRouter.handleSMARTCheckIn = { [weak self] goalId in
-            self?.watchSync.applyCheckIn(goalId: goalId)
+            self?.smartGoalStore.fillNextEmpty(on: goalId, source: .notification)
+            self?.watchSync.publish(kind: .foreground)
+        }
+        NotificationActionRouter.handleFollowThroughSnooze = { [weak self] goalId in
+            self?.smartGoalStore.snoozeFollowThrough(
+                goalId: goalId,
+                minutes: self?.settingsStore.followThroughSettings.snoozeMinutes ?? 120
+            )
+            Task { await self?.refreshFollowThrough() }
+        }
+        NotificationActionRouter.handleFollowThroughDismiss = { [weak self] goalId in
+            self?.smartGoalStore.dismissFollowThrough(goalId: goalId)
+            Task { await self?.refreshFollowThrough() }
+        }
+        NotificationActionRouter.handleNotificationOpen = { [weak self] goalId, kind in
+            if kind == SMARTFollowThroughKind.reflection.rawValue
+                || kind == SMARTFollowThroughKind.weeklyReview.rawValue {
+                self?.pendingCoachFocus = CoachFocusContext(feature: .goal, goalId: goalId)
+            } else {
+                self?.pendingGoalId = goalId
+            }
         }
         smartGoalStore.onChange = { [weak self] in
             guard let self else { return }
             self.smartGoalsRevision &+= 1
             self.coach.invalidateDailyCard()
             self.watchSync.publish(kind: .foreground)
+            Task { await self.refreshFollowThrough() }
         }
     }
 
@@ -69,7 +93,17 @@ final class AppState: ObservableObject {
             _ = await SMARTNotificationService.requestAuthorization()
         }
         await healthKit.startBackgroundDelivery()
+        await refreshFollowThrough()
         // Launch sync that follows publishes today's snapshot once Health has been read.
+    }
+
+    func refreshFollowThrough() async {
+        await SMARTFollowThroughScheduler.refresh(
+            goals: smartGoalStore.goals,
+            activities: smartGoalStore.activities,
+            states: smartGoalStore.followThroughStates(),
+            settings: settingsStore.followThroughSettings
+        )
     }
 
     func requestHealthAccess() async {
