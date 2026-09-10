@@ -447,6 +447,18 @@ final class WatchSnapshotTests: XCTestCase {
         XCTAssertEqual(decoded, [event])
     }
 
+    func test_legacyWatchCheckInWithoutEventIdIsStableAcrossRetries() throws {
+        let goalId = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let json = """
+        {"goalId":"\(goalId.uuidString)","createdAt":"2026-08-16T00:53:20Z"}
+        """
+        let first = try XCTUnwrap(WatchBridge.decode(WatchCheckInEvent.self, from: json))
+        let second = try XCTUnwrap(WatchBridge.decode(WatchCheckInEvent.self, from: json))
+        XCTAssertEqual(first.eventId, second.eventId)
+        XCTAssertEqual(first.goalId, goalId)
+        XCTAssertEqual(first.eventId, WatchCheckInEvent.legacyEventId(goalId: first.goalId, createdAt: first.createdAt))
+    }
+
     func test_snapshotStoreFileRoundTrip() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -607,6 +619,18 @@ final class WatchSnapshotBuilderTests: XCTestCase {
         XCTAssertEqual(snapshot.sleep.value, 7.5)
         XCTAssertEqual(snapshot.fiber.value, 20)
         XCTAssertEqual(snapshot.exercise.value, 8)
+    }
+
+    func test_pausedGoalsAreOmittedFromWatchSnapshot() {
+        let paused = sampleGoal(text: "paused", status: .paused, filledMask: 0)
+        let active = sampleGoal(text: "active", status: .active, filledMask: 0)
+        let snapshot = WatchSnapshotBuilder.build(
+            today: sampleRecord(),
+            goals: [paused, active],
+            paceNudgesEnabled: true
+        )
+        XCTAssertFalse(snapshot.goals.contains(where: { $0.specificText == "paused" }))
+        XCTAssertEqual(snapshot.goals.map(\.specificText), ["active"])
     }
 
     private func sampleRecord() -> DailyRecord {

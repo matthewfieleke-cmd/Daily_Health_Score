@@ -65,6 +65,13 @@ final class CoachDataSummariesTests: XCTestCase {
         XCTAssertTrue(line.contains("not a verdict"))
     }
 
+    func test_pausedGoalDoesNotPromptForCheckIns() {
+        let line = CoachGoalSummarizer.line(for: goal(target: 5, filled: 2, endsInDays: 4, status: .paused))
+
+        XCTAssertTrue(line.contains("PAUSED"))
+        XCTAssertTrue(line.contains("Do not prompt for check-ins"))
+    }
+
     func test_goalEndingTodayReadsAsToday() {
         let ending = goal(target: 4, filled: 3, endsInDays: 0)
         let line = CoachGoalSummarizer.line(for: ending, today: ending.endDate.addingTimeInterval(-1))

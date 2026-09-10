@@ -1,41 +1,59 @@
-# SMART goal editing and coaching review
+# SMART goal editing, coach memory, and follow-through
 
-This change makes an existing goal editable in one screen and lets the coach prepare new goals and revisions for review. The coach receives live goal IDs, recorded counts and deadlines, including when no Health record is available. Goal writes remain explicit user actions.
+This change keeps the PR #43 editor and review-before-save flow, then adds dated activity, inspectable coach memory, optional follow-through plans, and “Ask Coach about this” context from history, sleep, and HRV screens.
+
+Goal writes remain explicit user actions. Arithmetic, dates, progress, reminder eligibility, and persistence stay in Swift.
 
 ## Run in Cursor and Xcode
 
-1. Check out this PR branch in the full repository. Run `xcodegen generate` from `ios/`, then open `DailyHealthScore.xcodeproj` in Xcode using the SDK required by `ios/project.yml`.
-2. Select the `DailyHealthScore` scheme and an installed iPhone simulator. Run the unit tests, including `SMARTGoalEditTests`, `CoachGoalPlanningTests` and `CoachDataSummariesTests`.
-3. Build the companion Watch targets. Run the interaction checks below on an Apple Intelligence-capable iPhone and paired Watch. Generated coach output needs device validation; a simulator build alone is insufficient.
+1. Check out this branch. Run `xcodegen generate` from `ios/`, then open `DailyHealthScore.xcodeproj` in Xcode using the SDK required by `ios/project.yml`.
+2. Select the `DailyHealthScore` scheme and an installed iPhone simulator. Run the unit tests, including `SMARTGoalEditTests`, `CoachGoalPlanningTests`, `SMARTGoalActivityTests`, `CoachMemoryAndFollowThroughTests`, `CoachDataSummariesTests`, and `WatchCompanionTests`.
+3. Build the iPhone app and the companion Watch targets. Generated coach output still needs an Apple Intelligence–capable iPhone. Simulator tests cover persistence, eligibility, and context rules.
 
 Suggested Cursor task:
 
-> Build this branch and run the DailyHealthScore tests. Fix any compiler or test failures with focused changes. Walk through docs/smart-goal-coaching-review.md. Preserve the rule that goal edits merge the latest stored check-ins, AI proposals never write directly, and missing check-ins do not prove missed actions. Report what passed and any checks that still need a physical device.
+> Build this branch and run the DailyHealthScore tests. Fix any compiler or test failures with focused changes. Walk through docs/smart-goal-coaching-review.md. Preserve dated activity as the source of truth, undated migrated check-ins, review-before-save, and the rule that missing check-ins and missing Health data are not failures. Report what passed and any checks that still need a physical device.
 
-## Interaction checks
+## Migration behavior
+
+SMART goal schema version is now `2` (`dhs.smartGoals.schemaVersion`).
+
+- The previous schema-change path deleted every stored goal. Version 2 **does not delete goals, chat, or Health records**.
+- Existing `filledMask` counts become undated `checkIn` events with source `migration`. Occurrence dates stay unknown until the user supplies them.
+- Display circles compact to the recorded count (`N` filled circles). Sparse high-index bits are not kept as identities.
+- Coach prompts must not treat migrated undated events as streaks, missed days, or a daily schedule.
+- Watch snapshots still send a compact bitmask derived from the ledger. Delayed Watch messages keep the Watch tap time as `occurredAt` and use a stable `eventId` so retries do not add extra check-ins.
+- Reducing a target stores a **revision** event. That is a plan change, not another completed action.
+- A smaller fallback is a separate event and does not count toward the accepted target unless the user reviews and saves a revised plan.
+- Coach profile notes become structured memories with provenance `legacyCoachNotes`. They are not labeled user-confirmed.
+
+## User workflows
 
 | Scenario | Expected behavior |
 | --- | --- |
-| Open an existing goal and tap Edit, or swipe its list row to Edit | One prefilled screen contains action, target, theme, exact deadline and reminder settings. |
-| Change the action, then Cancel | The original goal and check-ins stay intact. |
-| Edit a goal while logging a check-in on the Watch | Save keeps the latest check-in. The same goal ID is published back to the Watch. |
-| Reduce the target while high-index circles are filled | Recorded count survives. A target below recorded count is rejected. |
-| Change reminder days/time, disable reminders, or complete the goal | Pending reminders reflect the latest saved state; earlier scheduling work cannot restore old requests. |
-| Enable reminders when notification permission is denied | The editor explains the issue and asks for a second Save without reminders. No goal is silently saved on the first attempt. |
-| Choose Build a goal with Coach and ask for help with a vague goal | The coach asks one useful question, then uses the reply to help formulate a concrete plan. |
-| Ask for “Walk for ten minutes after lunch three times over the next seven days” | A draft shows a specific action, three total check-ins and a deadline. Review opens the editor; saving creates one goal with zero check-ins. |
-| From a saved goal choose Work on this with Coach; ask “Reduce the target from five to three” | The proposal targets this exact goal. The deadline, reminders and recorded progress stay intact unless explicitly edited. |
-| Ask the coach to help work through a barrier | It discusses constraints, a cue or a smaller step without assuming unrecorded actions were missed. Advice alone does not require a goal mutation. |
-| In goal coaching tap Log a check-in | One check-in is recorded explicitly. The banner, goal detail, daily card context and Watch receive updated state. |
-| Delete or edit a goal after a proposal was generated but before saving | The review screen blocks the stale save and explains how to refresh. |
-| Finish a goal, leave its detail screen, then reopen it | The completed goal remains available for celebration and reflection. Renewing an ended goal keeps the earlier attempt and starts a new identity with zero check-ins. |
-| Deny Health access or open the coach before any daily record exists | Goal context is still available to the coach. Manual creation and editing remain available when Apple Intelligence is unavailable. |
-| Edit a goal while a daily card is generating | The old result is discarded; a card with the updated goal context can be generated. |
-| Clear coach memory while a reply or summary is generating | Late model output does not restore cleared chat, proposals or summary. |
+| Open an existing goal and tap Edit | One prefilled screen includes action, target, theme, deadline, reminders, optional reason/cue/barriers/fallback, confidence, follow-through opt-in, and pause. |
+| Change the action, then Cancel | The original goal, check-ins, and activity history stay intact. |
+| Edit a goal while logging a check-in on the Watch | Save keeps the Watch check-in. The same goal ID is published back to the Watch. Duplicate Watch retries do not add a second check-in. |
+| Reduce the target while check-ins exist | Recorded count survives. A target below recorded count is rejected. The save writes a revision, not extra progress. |
+| Log a smaller fallback | The fallback is listed in Activity and does not fill an accepted check-in circle. |
+| Undo a circle or an activity row | History keeps the original event plus an undo. Counts decrease. |
+| Add a date to an undated migrated check-in | On the goal’s Activity list, tap **Add action date**. Correction stores the user-supplied occurrence time. Migration or Watch delivery time is not the action time. |
+| Enable follow-through reminders | Local notifications use the chosen time, skip quiet hours, and stay off for paused, complete, expired, or deleted goals. Notification copy does not treat a missing log as a missed action. Tapping a check-in reminder opens the goal; reflection and weekly review open Coach with that goal. |
+| Open Settings → What your coach remembers | Each memory shows content, provenance, and dates. Correct, delete, or confirm a temporary circumstance. Deletion tombstones the note so late model output cannot recreate it. |
+| Clear coach chat & memory | Conversations, memories, and summaries clear. Health records and SMART goals stay. |
+| 7/30/90-Day, a history day, Sleep diagnostic, or DHS + HRV → Ask Coach about this | Chat shows a removable context chip for that period or metric. The coach must not silently switch to today. |
+| Long-press Today’s Sleep/Fiber/Exercise card | Ask Coach about this metric using today’s saved record, including NO DATA when unlogged. |
+| Coach proposes a goal | Review still opens the editor. Saving is the first write. |
 
-## Scope and validation status
+## Interaction checks from the previous review
 
-- The new XCTest cases cover edit invariants and structured proposal validation. They were authored but could not be run in the implementation environment, which has neither Swift nor Xcode. Native build, XCTest execution and device checks are required before merging.
-- No SwiftData schema migration is introduced. Check-ins remain an aggregate bitmask without dates. The coach must not claim streaks, missed scheduled actions or causal outcomes from those counts.
-- Unsaved AI proposals are held for the current app session. Saved goals and chat text use the existing local persistence; proposals are not restored after relaunch.
-- PCC access is not required by this change. It keeps the existing model provider and on-device fallback.
+The PR #43 editor, Watch merge, reminder permission, Build a goal with Coach, Work on this with Coach, Log a check-in, stale-proposal blocking, completed-goal retention, and clear-memory-during-generation checks still apply. Missing Health access still leaves goal coaching available.
+
+## Remaining device checks
+
+- Apple Intelligence replies, Home card generation, and PCC entitlement behavior.
+- Paired Watch: delayed check-in delivery, complication bitmask, and notification Log check-in.
+- Notification permission, quiet hours on a physical clock, and tapping a follow-through banner to open the matching goal or coach sheet.
+- Dynamic Type and VoiceOver on the memory list, activity history, and Ask Coach buttons.
+
+Native XCTest, iPhone, and Watch builds could not be run in this Cloud Agent environment: it is Linux and `xcodebuild` is not installed. Treat the new XCTest cases as authored but unexecuted until a Mac with the SDK in `ios/project.yml` is available.
