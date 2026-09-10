@@ -73,7 +73,8 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
               let event = WatchBridge.decode(WatchCheckInEvent.self, from: json) else {
             return
         }
-        applyCheckIn(goalId: event.goalId)
+        _ = smartGoalStore.applyWatchEvent(event)
+        publish(kind: .foreground)
     }
 
     private func refreshPaceNudges(with snapshot: WatchSnapshot) {

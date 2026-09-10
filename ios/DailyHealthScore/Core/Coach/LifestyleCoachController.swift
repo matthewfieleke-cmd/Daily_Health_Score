@@ -44,6 +44,14 @@ final class LifestyleCoachController: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+        memory.$memoryRevision
+            .dropFirst()
+            .sink { [weak self] _ in
+                guard let self, self.isChatBusy else { return }
+                self.chatGenerationID = UUID()
+                self.isChatBusy = false
+            }
+            .store(in: &cancellables)
         refreshAvailability()
         dailyCard = memory.cachedDailyCard
     }
@@ -104,7 +112,8 @@ final class LifestyleCoachController: ObservableObject {
             let card = try await model.generateDailyCard(
                 snapshot: snapshot,
                 profile: memory.profile,
-                summary: memory.runningSummary
+                summary: memory.runningSummary,
+                memoryBlock: memory.promptMemoryBlock
             )
             guard dailyGenerationID == generationID else { return }
             memory.saveDailyCard(card, dateKey: cacheKey)
@@ -123,7 +132,9 @@ final class LifestyleCoachController: ObservableObject {
         goals: [SMARTGoal] = [],
         hrvSensitivity: HRVSensitivity = .balanced,
         focusedGoalID: UUID? = nil,
-        planningGoal: Bool = false
+        planningGoal: Bool = false,
+        focus: CoachFocusContext? = nil,
+        activities: [SMARTGoalActivity] = []
     ) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isChatBusy else { return }
@@ -146,6 +157,7 @@ final class LifestyleCoachController: ObservableObject {
         isChatBusy = true
         let generationID = UUID()
         chatGenerationID = generationID
+        let memoryRevisionAtStart = memory.memoryRevision
         chatError = nil
         defer { if chatGenerationID == generationID { isChatBusy = false } }
 
@@ -162,11 +174,11 @@ final class LifestyleCoachController: ObservableObject {
             }
             // Past-day questions are resolved and compared in Swift, so the model
             // never does date arithmetic.
-            let historyBlock = CoachHistoryResolver.block(
+            let historyBlock = focusHistoryBlock(
                 message: trimmed,
                 records: records,
                 todayKey: todayRecord?.date ?? DateHelpers.localDateKey(),
-                characterBudget: CoachContextBudget.maxHistoryCharacters
+                focus: focus
             )
             // Both blocks are built at their ceiling and trimmed by the coach once
             // it knows which model is answering.
@@ -184,7 +196,10 @@ final class LifestyleCoachController: ObservableObject {
                 goals: goals,
                 focusedGoalID: focusedGoalID,
                 previousProposal: goalProposal,
-                planningGoal: planningGoal
+                planningGoal: planningGoal,
+                focus: focus,
+                memoryBlock: memory.promptMemoryBlock,
+                activitiesByGoal: Dictionary(grouping: activities, by: \.goalId)
             )
             guard chatGenerationID == generationID else { return }
             memory.append(CoachChatTurn(role: .coach, text: result.message))
@@ -192,10 +207,12 @@ final class LifestyleCoachController: ObservableObject {
             if result.proposalRejected {
                 chatError = "The draft needs clarification before it can be saved. Ask the coach to clarify the action, target, or deadline, or create the goal manually."
             }
-            if let profileUpdate = result.profileUpdate {
-                memory.mergeProfile(profileUpdate)
+            if memory.memoryRevision == memoryRevisionAtStart, let profileUpdate = result.profileUpdate {
+                _ = memory.ingestModelProfileUpdate(profileUpdate, generationRevision: memoryRevisionAtStart)
             }
-            await refreshSummaryQuietly(generationID: generationID)
+            if memory.memoryRevision == memoryRevisionAtStart {
+                await refreshSummaryQuietly(generationID: generationID, memoryRevision: memoryRevisionAtStart)
+            }
         } catch {
             guard chatGenerationID == generationID else { return }
             chatError = error.localizedDescription
@@ -213,15 +230,58 @@ final class LifestyleCoachController: ObservableObject {
         chatError = nil
     }
 
-    private func refreshSummaryQuietly(generationID: UUID) async {
+    func recordLocalFeedback(target: String, useful: Bool, goalId: UUID? = nil) {
+        memory.recordFeedback(target: target, useful: useful, goalId: goalId)
+    }
+
+    private func focusHistoryBlock(
+        message: String,
+        records: [DailyRecord],
+        todayKey: String,
+        focus: CoachFocusContext?
+    ) -> String? {
+        if let focus, focus.isHistorical {
+            var parts = [focus.promptBlock]
+            if let start = focus.startDateKey, let end = focus.endDateKey, start != end {
+                let keys = records.map(\.date).filter { $0 >= start && $0 <= end }
+                if let range = CoachHistoryResolver.blockForDateKeys(
+                    keys,
+                    records: records,
+                    characterBudget: CoachContextBudget.maxHistoryCharacters
+                ) {
+                    parts.append(range)
+                }
+            } else if let start = focus.startDateKey {
+                if let day = CoachHistoryResolver.blockForDateKeys(
+                    [start],
+                    records: records,
+                    characterBudget: CoachContextBudget.maxHistoryCharacters
+                ) {
+                    parts.append(day)
+                }
+            }
+            return parts.joined(separator: "\n")
+        }
+        return CoachHistoryResolver.block(
+            message: message,
+            records: records,
+            todayKey: todayKey,
+            characterBudget: CoachContextBudget.maxHistoryCharacters
+        )
+    }
+
+    private func refreshSummaryQuietly(generationID: UUID, memoryRevision: Int) async {
         let turns = memory.recentTurnsForPrompt(limit: 12)
         guard turns.count >= 2 else { return }
         do {
             let summary = try await model.refreshRunningSummary(
                 previousSummary: memory.runningSummary,
-                recentTurns: turns
+                recentTurns: turns,
+                currentMemory: memory.promptMemoryBlock
             )
-            if chatGenerationID == generationID, !summary.isEmpty {
+            if chatGenerationID == generationID,
+               self.memory.memoryRevision == memoryRevision,
+               !summary.isEmpty {
                 memory.replaceSummary(summary)
             }
         } catch {

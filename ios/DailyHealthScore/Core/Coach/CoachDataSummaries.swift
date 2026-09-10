@@ -44,6 +44,9 @@ enum CoachGoalSummarizer {
         if goal.isComplete {
             return "SMART goal \"\(name)\" (\(theme)): COMPLETE — \(progress). Celebrate it; do not assign more."
         }
+        if goal.isPaused {
+            return "SMART goal \"\(name)\" (\(theme)): PAUSED at \(progress). Do not prompt for check-ins until the user resumes."
+        }
         if goal.endDate <= today || goal.status == .ended {
             return "SMART goal \"\(name)\" (\(theme)): ENDED at \(progress). A missed goal is information, not a verdict."
         }

@@ -13,6 +13,8 @@ struct SMARTGoalEdit: Identifiable, Equatable {
     var reminderHour: Int
     var reminderMinute: Int
     var reminderWeekdaysMask: Int
+    var plan: SMARTGoalPlan
+    var status: SMARTGoalStatus
 
     init(goal: SMARTGoal? = nil, id: UUID = UUID(), now: Date = Date()) {
         self.id = goal?.id ?? id
@@ -26,6 +28,8 @@ struct SMARTGoalEdit: Identifiable, Equatable {
         reminderMinute = goal?.reminderMinute ?? 0
         let mask = goal?.reminderWeekdaysMask ?? 127
         reminderWeekdaysMask = mask == 0 ? 127 : mask
+        plan = goal?.plan ?? .empty
+        status = goal?.status ?? .active
     }
 
     var summary: String {
@@ -64,6 +68,9 @@ struct SMARTGoalEdit: Identifiable, Equatable {
         if remindersEnabled && !(1...127).contains(reminderWeekdaysMask) {
             return "Choose at least one reminder day."
         }
+        if let confidence = plan.confidence, !(1...10).contains(confidence) {
+            return "Choose a confidence from 1 to 10, or leave it unset."
+        }
         return nil
     }
 
@@ -92,12 +99,30 @@ struct SMARTGoalEdit: Identifiable, Equatable {
             createdAt: latest?.createdAt ?? now,
             generatedSummary: summary,
             filledMask: mask,
-            status: endDate > now ? .active : .ended,
+            status: resolvedStatus(now: now),
             remindersEnabled: remindersEnabled,
             reminderHour: reminderHour,
             reminderMinute: reminderMinute,
-            reminderWeekdaysMask: reminderWeekdaysMask
+            reminderWeekdaysMask: reminderWeekdaysMask,
+            plan: sanitizedPlan
         )
+    }
+
+    private var sanitizedPlan: SMARTGoalPlan {
+        var plan = plan
+        plan.personalReason = plan.personalReason.trimmingCharacters(in: .whitespacesAndNewlines)
+        plan.cue = plan.cue.trimmingCharacters(in: .whitespacesAndNewlines)
+        plan.expectedBarriers = plan.expectedBarriers.trimmingCharacters(in: .whitespacesAndNewlines)
+        plan.fallbackAction = plan.fallbackAction.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !(0...23).contains(plan.reflectionHour) { plan.reflectionHour = 20 }
+        if !(0...59).contains(plan.reflectionMinute) { plan.reflectionMinute = 0 }
+        return plan
+    }
+
+    private func resolvedStatus(now: Date) -> SMARTGoalStatus {
+        if endDate <= now { return .ended }
+        if status == .paused { return .paused }
+        return .active
     }
 
     /// Check-ins and automatic expiry may change while an editor is open.
@@ -109,6 +134,7 @@ struct SMARTGoalEdit: Identifiable, Equatable {
             && lhs.remindersEnabled == rhs.remindersEnabled
             && lhs.reminderHour == rhs.reminderHour && lhs.reminderMinute == rhs.reminderMinute
             && lhs.reminderWeekdaysMask == rhs.reminderWeekdaysMask
+            && lhs.plan == rhs.plan
     }
 }
 

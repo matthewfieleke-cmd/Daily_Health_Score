@@ -71,7 +71,10 @@ enum PaceNudgeScheduler {
 enum NotificationCategoryID {
     static let smartGoal = "SMART_GOAL_REMINDER"
     static let paceNudge = "DHS_PACE_NUDGE"
+    static let followThrough = "DHS_FOLLOW_THROUGH"
     static let logCheckInAction = "LOG_CHECK_IN"
+    static let snoozeAction = "SNOOZE_FOLLOW_THROUGH"
+    static let dismissAction = "DISMISS_FOLLOW_THROUGH"
 }
 
 enum NotificationCategories {
@@ -80,6 +83,16 @@ enum NotificationCategories {
             identifier: NotificationCategoryID.logCheckInAction,
             title: "Log check-in",
             options: []
+        )
+        let snooze = UNNotificationAction(
+            identifier: NotificationCategoryID.snoozeAction,
+            title: "Snooze",
+            options: []
+        )
+        let dismiss = UNNotificationAction(
+            identifier: NotificationCategoryID.dismissAction,
+            title: "Dismiss today",
+            options: .destructive
         )
         let smart = UNNotificationCategory(
             identifier: NotificationCategoryID.smartGoal,
@@ -93,6 +106,12 @@ enum NotificationCategories {
             intentIdentifiers: [],
             options: []
         )
-        center.setNotificationCategories([smart, pace])
+        let follow = UNNotificationCategory(
+            identifier: NotificationCategoryID.followThrough,
+            actions: [log, snooze, dismiss],
+            intentIdentifiers: [],
+            options: []
+        )
+        center.setNotificationCategories([smart, pace, follow])
     }
 }

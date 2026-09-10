@@ -11,6 +11,7 @@ final class SettingsStore: ObservableObject {
         static let usedMotivation = "dhs.usedMotivation"
         static let hrvSensitivity = "dhs.hrvSensitivity"
         static let paceNudgesEnabled = "dhs.paceNudgesEnabled"
+        static let followThrough = "dhs.followThroughSettings"
     }
 
     @Published var settings: UserSettings {
@@ -32,6 +33,14 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published var followThroughSettings: SMARTFollowThroughSettings {
+        didSet {
+            if let data = try? JSONEncoder().encode(followThroughSettings) {
+                UserDefaults.standard.set(data, forKey: Keys.followThrough)
+            }
+        }
+    }
+
     private var usedSuggestions: [String: [String]] = [:]
     private var usedDiscouragement: [String] = []
     private var usedMotivation: [String] = []
@@ -48,6 +57,12 @@ final class SettingsStore: ObservableObject {
             paceNudgesEnabled = true
         } else {
             paceNudgesEnabled = UserDefaults.standard.bool(forKey: Keys.paceNudgesEnabled)
+        }
+        if let data = UserDefaults.standard.data(forKey: Keys.followThrough),
+           let decoded = try? JSONDecoder().decode(SMARTFollowThroughSettings.self, from: data) {
+            followThroughSettings = decoded
+        } else {
+            followThroughSettings = .default
         }
         loadRotationState()
     }
