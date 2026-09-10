@@ -10,8 +10,11 @@ struct SMARTGoalsListView: View {
 }
 
 private struct SMARTGoalsListContent: View {
+    @EnvironmentObject private var appState: AppState
     @ObservedObject var store: SMARTGoalStore
     @State private var showWizard = false
+    @State private var edit: SMARTGoalEdit?
+    @State private var showCoach = false
 
     private var goals: [SMARTGoal] {
         store.goals
@@ -23,11 +26,20 @@ private struct SMARTGoalsListContent: View {
                 emptyState
             } else {
                 List {
+                    Button {
+                        showCoach = true
+                    } label: {
+                        Label("Build a goal with Coach", systemImage: "bubble.left.and.text.bubble.right")
+                    }
                     ForEach(goals) { goal in
                         NavigationLink {
                             SMARTGoalDetailView(goalId: goal.id)
                         } label: {
                             SMARTGoalRowView(goal: goal)
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            Button("Edit") { edit = SMARTGoalEdit(goal: goal) }
+                                .tint(AppTheme.primary)
                         }
                     }
                     .onDelete(perform: deleteGoals)
@@ -51,6 +63,15 @@ private struct SMARTGoalsListContent: View {
         .sheet(isPresented: $showWizard) {
             NavigationStack {
                 SMARTGoalWizardView()
+            }
+        }
+        .sheet(item: $edit) { draft in
+            NavigationStack { SMARTGoalEditorView(edit: draft) }
+        }
+        .sheet(isPresented: $showCoach) {
+            NavigationStack {
+                LifestyleCoachChatView(initialMessage: "Help me formulate a SMART goal")
+                    .environmentObject(appState.coach)
             }
         }
         .onAppear {
@@ -83,6 +104,8 @@ private struct SMARTGoalsListContent: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
+            Button("Build a goal with Coach") { showCoach = true }
+                .buttonStyle(.bordered)
             Spacer()
         }
         .padding()
@@ -108,7 +131,11 @@ private struct SMARTGoalRowView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(tint)
                 Spacer(minLength: 0)
-                if goal.status == .ended {
+                if goal.isComplete {
+                    Text("Complete")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppTheme.primary)
+                } else if goal.status == .ended {
                     Text("Ended")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.orange)

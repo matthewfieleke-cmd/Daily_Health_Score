@@ -15,7 +15,7 @@ struct TodayLifestyleCoachCard: View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let window = CoachTimeOfDay.current(from: context.date)
             cardStack
-                .task(id: "\(record?.date ?? "")#\(window.rawValue)") {
+                .task(id: "\(record?.date ?? "")#\(window.rawValue)#\(appState.smartGoalsRevision)") {
                     guard let record else { return }
                     await coach.ensureDailyCard(
                         for: record,

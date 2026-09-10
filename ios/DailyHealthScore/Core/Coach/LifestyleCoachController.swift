@@ -15,6 +15,24 @@ final class LifestyleCoachController: ObservableObject {
     @Published private(set) var dailyCardError: String?
     @Published var isChatBusy = false
     @Published var chatError: String?
+    @Published private(set) var goalProposal: CoachGoalProposal?
+    private var dailyGenerationID = UUID()
+    private var chatGenerationID = UUID()
+
+    func invalidateDailyCard() {
+        dailyGenerationID = UUID()
+        dailyCard = nil
+        isGeneratingDailyCard = false
+    }
+
+    func dismissGoalProposal() { goalProposal = nil }
+
+    func recordGoalSaved(_ goal: SMARTGoal) {
+        goalProposal = nil
+        memory.append(CoachChatTurn(role: .coach, text:
+            "Saved your SMART goal: \(goal.generatedSummary) Your \(goal.filledCount) recorded check-ins are preserved."
+        ))
+    }
 
     init(modelContext: ModelContext, model: FoundationModelsCoach? = nil) {
         self.memory = CoachMemoryStore(modelContext: modelContext)
@@ -47,7 +65,7 @@ final class LifestyleCoachController: ObservableObject {
         let timeOfDay = CoachTimeOfDay.current(from: now, calendar: calendar)
         // Keyed by clock window as well as day: a morning card must not still
         // sit on Home at 6pm suggesting lunch.
-        let cacheKey = "\(record.date)#\(timeOfDay.rawValue)"
+        let cacheKey = "\(record.date)#\(timeOfDay.rawValue)#\(CoachGoalPlanning.cacheKey(goals: goals))"
         if !force,
            memory.cachedDailyCardDateKey == cacheKey,
            let cached = memory.cachedDailyCard {
@@ -63,13 +81,15 @@ final class LifestyleCoachController: ObservableObject {
         }
 
         isGeneratingDailyCard = true
+        let generationID = UUID()
+        dailyGenerationID = generationID
         dailyCardError = nil
         if memory.cachedDailyCardDateKey != cacheKey {
             // Drop a morning card before the evening rewrite, so Home never
             // keeps showing "after lunch" while the new note generates.
             dailyCard = nil
         }
-        defer { isGeneratingDailyCard = false }
+        defer { if dailyGenerationID == generationID { isGeneratingDailyCard = false } }
 
         do {
             let snapshot = CoachSnapshotBuilder.build(
@@ -86,9 +106,11 @@ final class LifestyleCoachController: ObservableObject {
                 profile: memory.profile,
                 summary: memory.runningSummary
             )
+            guard dailyGenerationID == generationID else { return }
             memory.saveDailyCard(card, dateKey: cacheKey)
             dailyCard = card
         } catch {
+            guard dailyGenerationID == generationID else { return }
             dailyCard = HomeCoachCardCopy.fallbackCard(for: record, now: now, calendar: calendar)
             dailyCardError = error.localizedDescription
         }
@@ -99,13 +121,16 @@ final class LifestyleCoachController: ObservableObject {
         todayRecord: DailyRecord?,
         records: [DailyRecord],
         goals: [SMARTGoal] = [],
-        hrvSensitivity: HRVSensitivity = .balanced
+        hrvSensitivity: HRVSensitivity = .balanced,
+        focusedGoalID: UUID? = nil,
+        planningGoal: Bool = false
     ) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !isChatBusy else { return }
 
         // Acute risk is answered deterministically, before availability or the model.
         if case .escalate(let message) = CoachSafetyGate.evaluate(trimmed) {
+            goalProposal = nil
             memory.append(CoachChatTurn(role: .user, text: trimmed))
             memory.append(CoachChatTurn(role: .coach, text: message))
             chatError = nil
@@ -119,8 +144,10 @@ final class LifestyleCoachController: ObservableObject {
         }
 
         isChatBusy = true
+        let generationID = UUID()
+        chatGenerationID = generationID
         chatError = nil
-        defer { isChatBusy = false }
+        defer { if chatGenerationID == generationID { isChatBusy = false } }
 
         memory.append(CoachChatTurn(role: .user, text: trimmed))
 
@@ -153,26 +180,40 @@ final class LifestyleCoachController: ObservableObject {
                 historyBlock: historyBlock,
                 profile: memory.profile,
                 summary: memory.runningSummary,
-                recentTurns: memory.recentTurnsForPrompt(limit: CoachContextBudget.maxTranscriptTurns)
+                recentTurns: memory.recentTurnsForPrompt(limit: CoachContextBudget.maxTranscriptTurns),
+                goals: goals,
+                focusedGoalID: focusedGoalID,
+                previousProposal: goalProposal,
+                planningGoal: planningGoal
             )
+            guard chatGenerationID == generationID else { return }
             memory.append(CoachChatTurn(role: .coach, text: result.message))
+            goalProposal = result.goalProposal
+            if result.proposalRejected {
+                chatError = "The draft needs clarification before it can be saved. Ask the coach to clarify the action, target, or deadline, or create the goal manually."
+            }
             if let profileUpdate = result.profileUpdate {
                 memory.mergeProfile(profileUpdate)
             }
-            await refreshSummaryQuietly()
+            await refreshSummaryQuietly(generationID: generationID)
         } catch {
+            guard chatGenerationID == generationID else { return }
             chatError = error.localizedDescription
         }
     }
 
     func clearMemory() {
+        chatGenerationID = UUID()
+        isChatBusy = false
+        goalProposal = nil
+        invalidateDailyCard()
         memory.clearAllMemory()
         dailyCard = nil
         dailyCardError = nil
         chatError = nil
     }
 
-    private func refreshSummaryQuietly() async {
+    private func refreshSummaryQuietly(generationID: UUID) async {
         let turns = memory.recentTurnsForPrompt(limit: 12)
         guard turns.count >= 2 else { return }
         do {
@@ -180,7 +221,7 @@ final class LifestyleCoachController: ObservableObject {
                 previousSummary: memory.runningSummary,
                 recentTurns: turns
             )
-            if !summary.isEmpty {
+            if chatGenerationID == generationID, !summary.isEmpty {
                 memory.replaceSummary(summary)
             }
         } catch {

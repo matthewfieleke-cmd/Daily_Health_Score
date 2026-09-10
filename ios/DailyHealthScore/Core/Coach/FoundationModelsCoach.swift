@@ -102,15 +102,26 @@ final class FoundationModelsCoach {
         historyBlock: String?,
         profile: CoachUserProfile,
         summary: String,
-        recentTurns: [CoachChatTurn]
-    ) async throws -> (message: String, profileUpdate: CoachUserProfile?) {
+        recentTurns: [CoachChatTurn],
+        goals: [SMARTGoal] = [],
+        focusedGoalID: UUID? = nil,
+        previousProposal: CoachGoalProposal? = nil,
+        planningGoal: Bool = false
+    ) async throws -> (message: String, profileUpdate: CoachUserProfile?, goalProposal: CoachGoalProposal?, proposalRejected: Bool) {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             try ensureAvailable()
             let tier = CoachModelProvider.tier(for: intent)
-            let budget = await CoachModelProvider.contextBudget(for: tier)
+            let isGoalConversation = planningGoal || CoachGoalPlanning.isGoalConversation(
+                message: userMessage, focusedGoalID: focusedGoalID, hasProposal: previousProposal != nil
+            )
+            let instructions = isGoalConversation ? CoachCharter.goalPlanningInstructions : CoachCharter.instructions
+            let budget = CoachContextBudget.make(
+                totalTokens: await CoachModelProvider.contextTokens(for: tier),
+                instructionCharacters: instructions.count
+            )
             lastTierUsed = tier
-            let session = CoachModelProvider.makeSession(tier: tier, instructions: CoachCharter.instructions)
+            let session = CoachModelProvider.makeSession(tier: tier, instructions: instructions)
             let healthBlock: String
             if let snapshot {
                 healthBlock = intent.usesFullMetrics ? snapshot.promptBlock : snapshot.minimalBlock
@@ -137,6 +148,29 @@ final class FoundationModelsCoach {
             // Every block is sized against whichever model is answering, so the
             // on-device retry re-trims rather than reusing server-sized text.
             func makePrompt(compact: Bool, budget: CoachContextBudget, answeringTier: CoachModelTier) -> String {
+                if isGoalConversation {
+                    let goalContext = CoachGoalPlanning.context(
+                        goals: goals, focusedGoalID: focusedGoalID, previousProposal: previousProposal
+                    ).limitedToCoachBudget(1800)
+                    let dialogue = Self.transcriptBlock(
+                        recentTurns, maxTurns: compact ? 3 : 6,
+                        maxCharactersPerTurn: compact ? 200 : 300
+                    )
+                    return """
+                    USER MESSAGE: \(userMessage.limitedToCoachBudget(1200))
+                    \(CoachGoalPlanning.contract)
+                    \(goalContext)
+                    AVAILABLE HEALTH FACTS (only use when relevant):
+                    \(snapshot?.metrics.map(\.sentence).joined(separator: "\n").limitedToCoachBudget(650) ?? "No Health record; goal planning is still available.")
+                    USER PREFERENCES:
+                    \(profile.promptBlock.limitedToCoachBudget(400))
+                    RECENT CONVERSATION (drafts are unsaved until a save confirmation):
+                    \(dialogue)
+                    Reply in message and supply a goalProposal only for a concrete plan.
+                    Set shouldUpdateProfile false unless the user shared a durable preference;
+                    otherwise leave the profile fields empty. Never invent past behavior.
+                    """
+                }
                 let transcript = Self.transcriptBlock(
                     recentTurns,
                     maxTurns: budget.transcriptTurns,
@@ -197,6 +231,8 @@ final class FoundationModelsCoach {
                 appears in the recent transcript. If the user stated a durable preference,
                 constraint, or value, set shouldUpdateProfile true and fill only the relevant
                 profile fields. Otherwise set shouldUpdateProfile false and leave them empty.
+                Set goalProposal to nil. For editable SMART goal planning, invite the user
+                to choose "Build a goal with Coach" or ask to formulate a SMART goal.
                 """
             }
 
@@ -211,10 +247,13 @@ final class FoundationModelsCoach {
                 // exhausted server quota, or context pressure. Retry on-device with
                 // memory and reference material dropped. If that also fails the
                 // cause is not size or reachability, so say something human.
-                let retryBudget = await CoachModelProvider.contextBudget(for: .onDevice)
+                let retryBudget = CoachContextBudget.make(
+                    totalTokens: await CoachModelProvider.contextTokens(for: .onDevice),
+                    instructionCharacters: instructions.count
+                )
                 let retrySession = CoachModelProvider.makeSession(
                     tier: .onDevice,
-                    instructions: CoachCharter.instructions
+                    instructions: instructions
                 )
                 lastTierUsed = .onDevice
                 do {
@@ -246,7 +285,15 @@ final class FoundationModelsCoach {
                     profileUpdate = draft
                 }
             }
-            return (message, profileUpdate)
+            let proposal = isGoalConversation ? content.goalProposal.flatMap { draft in
+                CoachGoalProposal.make(
+                    operation: draft.operation, goalID: draft.goalID,
+                    specificText: draft.specificText, targetCount: draft.targetCount,
+                    theme: draft.theme, daysFromToday: draft.daysFromToday, goals: goals,
+                    focusedGoalID: focusedGoalID
+                )
+            } : nil
+            return (message, profileUpdate, proposal, isGoalConversation && content.goalProposal != nil && proposal == nil)
         }
         #endif
         throw CoachError.unavailable(.unavailable)
@@ -361,6 +408,8 @@ struct GenerableDailyCoachCard {
 @available(iOS 26.0, *)
 @Generable
 struct GenerableCoachChatReply {
+    @Guide(description: "An unsaved SMART goal draft to review. Nil for advice, questions, progress reports or unsafe requests.")
+    var goalProposal: GenerableSMARTGoalProposal?
     @Guide(description: "Coach reply that answers the user's question in its first sentence, written in second person, with conviction and warmth. Usually 3-6 sentences; a substantive question supported by reference material may run longer. Plain prose, no lists, headers, or emoji.")
     var message: String
 
@@ -375,6 +424,23 @@ struct GenerableCoachChatReply {
     var values: String
     var whatHelps: String
     var whatToAvoid: String
+}
+
+@available(iOS 26.0, *)
+@Generable
+struct GenerableSMARTGoalProposal {
+    @Guide(description: "Exactly create or update.")
+    var operation: String
+    @Guide(description: "Exact goalID from CURRENT GOALS for update; nil for create. Never invent an ID.")
+    var goalID: String?
+    @Guide(description: "One specific action per check-in, at most 500 characters. Required for create; nil to preserve the action on update.")
+    var specificText: String?
+    @Guide(description: "Total target check-ins, 1 through 30, at least the recorded count. Required for create; nil to preserve on update.")
+    var targetCount: Int?
+    @Guide(description: "marriage, parenting, health, relationships, finances, career, or choresMisc. Required for create; nil to preserve on update.")
+    var theme: String?
+    @Guide(description: "Days from today until the deadline, 1 through 30. Required for create; nil for update unless a deadline change was requested.")
+    var daysFromToday: Int?
 }
 
 @available(iOS 26.0, *)
