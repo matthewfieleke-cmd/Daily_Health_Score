@@ -13,6 +13,7 @@ final class SMARTGoalStore: ObservableObject {
     private let modelContext: ModelContext
     @Published private(set) var goals: [SMARTGoal] = []
     var onChange: (() -> Void)?
+    private var reminderTasks: [UUID: Task<Void, Never>] = [:]
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -31,34 +32,66 @@ final class SMARTGoalStore: ObservableObject {
     }
 
     func save(_ goal: SMARTGoal) {
-        persist(goal)
-        Task { await SMARTNotificationService.scheduleReminder(for: goal) }
+        guard (try? persist(goal)) != nil else { return }
+        updateReminder(for: goal)
+    }
+
+    @discardableResult
+    func saveReviewed(_ edit: SMARTGoalEdit) throws -> SMARTGoal {
+        let latest = goals.first { $0.id == edit.id }
+        let goal = try edit.build(latest: latest)
+        try persist(goal)
+        updateReminder(for: goal)
+        return goal
+    }
+
+    private func updateReminder(for goal: SMARTGoal) {
+        let previous = reminderTasks[goal.id]
+        previous?.cancel()
+        reminderTasks[goal.id] = Task {
+            // Serialize changes for this goal so an old in-flight request cannot
+            // restore an outdated reminder after an edit or a completion.
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await SMARTNotificationService.scheduleReminder(for: goal)
+        }
+    }
+
+    private func cancelReminder(for id: UUID) {
+        let previous = reminderTasks[id]
+        previous?.cancel()
+        reminderTasks[id] = Task {
+            await previous?.value
+            SMARTNotificationService.cancelReminders(for: id)
+        }
     }
 
     /// Watch check-in: fill the next empty circle on the live goal, then persist.
     /// A missing, ended, or already-complete goal is a no-op.
     func fillNextEmpty(on goalId: UUID) {
         guard var goal = goals.first(where: { $0.id == goalId }) else { return }
+        guard !goal.isExpired else { return }
         guard goal.fillNextEmpty() else { return }
-        persist(goal)
-        if goal.isComplete {
-            SMARTNotificationService.cancelReminders(for: goalId)
-        } else {
-            Task { await SMARTNotificationService.scheduleReminder(for: goal) }
-        }
+        guard (try? persist(goal)) != nil else { return }
+        updateReminder(for: goal)
     }
 
-    private func persist(_ goal: SMARTGoal) {
+    private func persist(_ goal: SMARTGoal) throws {
         let id = goal.id
         let descriptor = FetchDescriptor<SMARTGoalEntity>(
             predicate: #Predicate { $0.id == id }
         )
-        if let existing = try? modelContext.fetch(descriptor).first {
+        if let existing = try modelContext.fetch(descriptor).first {
             existing.apply(goal)
         } else {
             modelContext.insert(SMARTGoalEntity(goal: goal))
         }
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
         reload()
     }
 
@@ -70,7 +103,7 @@ final class SMARTGoalStore: ObservableObject {
             modelContext.delete(entity)
             try? modelContext.save()
         }
-        SMARTNotificationService.cancelReminders(for: id)
+        cancelReminder(for: id)
         reload()
     }
 
@@ -85,7 +118,7 @@ final class SMARTGoalStore: ObservableObject {
                entity.filledMask < fullMask(for: entity.targetCount) {
                 entity.statusRaw = SMARTGoalStatus.ended.rawValue
                 changed = true
-                SMARTNotificationService.cancelReminders(for: entity.id)
+                cancelReminder(for: entity.id)
             }
         }
         if changed {
@@ -95,6 +128,7 @@ final class SMARTGoalStore: ObservableObject {
     }
 
     func renew(cloning goal: SMARTGoal) {
+        guard let goal = goals.first(where: { $0.id == goal.id }) else { return }
         let created = Date()
         let endDate = SMARTGoalLogic.endDate(createdAt: created, days: goal.timeWindowDays)
         let clone = SMARTGoal(
@@ -119,7 +153,11 @@ final class SMARTGoalStore: ObservableObject {
             reminderMinute: goal.reminderMinute,
             reminderWeekdaysMask: goal.reminderWeekdaysMask
         )
-        delete(id: goal.id)
+        // Keep the previous attempt so the coach can reflect on its recorded
+        // outcome. A renewal starts a separate goal with a new identity.
+        var previous = goal
+        previous.status = .ended
+        save(previous)
         save(clone)
     }
 

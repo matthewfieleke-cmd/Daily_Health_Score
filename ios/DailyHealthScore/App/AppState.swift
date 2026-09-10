@@ -26,6 +26,7 @@ final class AppState: ObservableObject {
     let smartGoalStore: SMARTGoalStore
     let coach: LifestyleCoachController
     let watchSync: WatchSyncCoordinator
+    @Published private(set) var smartGoalsRevision = 0
 
     @Published var healthSyncBannerPhase: HealthSyncBannerPhase = .hidden
     /// True while sync work runs and through the minimum syncing-banner display window.
@@ -55,7 +56,10 @@ final class AppState: ObservableObject {
             self?.watchSync.applyCheckIn(goalId: goalId)
         }
         smartGoalStore.onChange = { [weak self] in
-            self?.watchSync.publish(kind: .foreground)
+            guard let self else { return }
+            self.smartGoalsRevision &+= 1
+            self.coach.invalidateDailyCard()
+            self.watchSync.publish(kind: .foreground)
         }
     }
 

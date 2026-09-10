@@ -6,7 +6,20 @@ struct LifestyleCoachChatView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft = ""
+    @State private var focusedGoalID: UUID?
+    @State private var planningGoal = false
+    @State private var goalEdit: SMARTGoalEdit?
     @FocusState private var isInputFocused: Bool
+
+    init(initialMessage: String = "", focusedGoalID: UUID? = nil) {
+        _draft = State(initialValue: initialMessage)
+        _focusedGoalID = State(initialValue: focusedGoalID)
+        _planningGoal = State(initialValue: focusedGoalID != nil || initialMessage.lowercased().contains("smart goal"))
+    }
+
+    private var selectedGoal: SMARTGoal? {
+        appState.smartGoalStore.goals.first { $0.id == focusedGoalID }
+    }
 
     private var todayKey: String { DateHelpers.localDateKey() }
     private var todayRecord: DailyRecord? {
@@ -18,6 +31,7 @@ struct LifestyleCoachChatView: View {
             if coach.availability != .available {
                 availabilityBanner
             }
+            if planningGoal { goalFocusBanner }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -37,6 +51,10 @@ struct LifestyleCoachChatView: View {
                             .padding(.horizontal, 4)
                             .id("pending")
                         }
+                        if let proposal = coach.goalProposal, !coach.isChatBusy {
+                            goalProposalCard(proposal)
+                                .id("goal-proposal")
+                        }
                     }
                     .padding(16)
                 }
@@ -44,7 +62,10 @@ struct LifestyleCoachChatView: View {
                     scrollToEnd(proxy)
                 }
                 .onChange(of: coach.isChatBusy) { _, busy in
-                    if busy { scrollToEnd(proxy) }
+                    scrollToEnd(proxy)
+                }
+                .onChange(of: coach.goalProposal?.id) { _, _ in
+                    scrollToEnd(proxy)
                 }
             }
 
@@ -66,6 +87,27 @@ struct LifestyleCoachChatView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close") { dismiss() }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Create goal manually") { goalEdit = SMARTGoalEdit() }
+                    if let selectedGoal {
+                        Button("Edit this goal") { goalEdit = SMARTGoalEdit(goal: selectedGoal) }
+                    }
+                } label: {
+                    Image(systemName: "target")
+                }
+                .accessibilityLabel("SMART goal actions")
+                .disabled(coach.isChatBusy)
+            }
+        }
+        .sheet(item: $goalEdit) { edit in
+            NavigationStack {
+                SMARTGoalEditorView(edit: edit) { saved in
+                    coach.recordGoalSaved(saved)
+                    focusedGoalID = saved.id
+                    planningGoal = true
+                }
+            }
         }
         .onAppear {
             coach.refreshAvailability()
@@ -76,7 +118,7 @@ struct LifestyleCoachChatView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(CoachCharter.philosophy)
                 .font(.subheadline.weight(.medium))
-            Text("This conversation is the heart of coaching — the Home card is just today’s snapshot. Ask about sleep, nutrition, movement, stress, or building habits. Your coach can see today’s score, your goals, your SMART goals, and your HRV trend, and remembers prior chats on this device.")
+            Text("Talk through what matters to you, formulate a SMART goal, or work through a barrier. Your coach can use your saved goals and recorded progress, help revise a plan, and prepare a draft for you to review and save. Conversations stay in this app's local memory.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -84,6 +126,70 @@ struct LifestyleCoachChatView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var goalFocusBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(selectedGoal?.specificText ?? (focusedGoalID == nil ? "Plan a SMART goal" : "This goal is no longer saved"))
+                    .font(.subheadline.weight(.semibold))
+                if let selectedGoal {
+                    Text("\(selectedGoal.filledCount) of \(selectedGoal.targetCount) check-ins · ends \(selectedGoal.endDate.formatted(date: .abbreviated, time: .omitted))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        if selectedGoal.status == .active && !selectedGoal.isComplete && !selectedGoal.isExpired {
+                            Button("Log a check-in") {
+                                appState.smartGoalStore.fillNextEmpty(on: selectedGoal.id)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(coach.isChatBusy)
+                        }
+                        NavigationLink("View goal") {
+                            SMARTGoalDetailView(goalId: selectedGoal.id)
+                        }
+                        .font(.caption.weight(.semibold))
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+            Button {
+                planningGoal = false
+                focusedGoalID = nil
+                coach.dismissGoalProposal()
+            } label: { Image(systemName: "xmark.circle") }
+                .accessibilityLabel("Leave goal planning")
+                .disabled(coach.isChatBusy)
+        }
+        .padding(12)
+        .background(AppTheme.primary.opacity(0.08))
+    }
+
+    private func goalProposalCard(_ proposal: CoachGoalProposal) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(proposal.isUpdate ? "Suggested goal changes" : "Draft SMART goal")
+                .font(.headline)
+            if let original = proposal.edit.original {
+                Text("Currently: \(original.generatedSummary)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(proposal.edit.summary)
+                .font(.subheadline)
+            Text("Review the details before saving. Existing check-ins are kept.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button("Review goal") { goalEdit = proposal.edit }
+                    .buttonStyle(.borderedProminent)
+                Button("Dismiss") { coach.dismissGoalProposal() }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.primary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     private var availabilityBanner: some View {
@@ -104,7 +210,7 @@ struct LifestyleCoachChatView: View {
     /// from today's real numbers, and they get out of the way once typing starts.
     @ViewBuilder
     private var suggestionRow: some View {
-        let suggestions = CoachPromptSuggestions.build(
+        let suggestions = planningGoal ? CoachGoalPlanning.starterQuestions(for: selectedGoal) : CoachPromptSuggestions.build(
             record: todayRecord,
             goals: appState.smartGoalStore.goals
         )
@@ -138,6 +244,9 @@ struct LifestyleCoachChatView: View {
     private func send(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        planningGoal = planningGoal || CoachGoalPlanning.isGoalConversation(
+            message: trimmed, focusedGoalID: focusedGoalID, hasProposal: coach.goalProposal != nil
+        )
         draft = ""
         Task {
             await coach.sendChatMessage(
@@ -145,7 +254,9 @@ struct LifestyleCoachChatView: View {
                 todayRecord: todayRecord,
                 records: appState.recordStore.records,
                 goals: appState.smartGoalStore.goals,
-                hrvSensitivity: appState.settingsStore.hrvSensitivity
+                hrvSensitivity: appState.settingsStore.hrvSensitivity,
+                focusedGoalID: focusedGoalID,
+                planningGoal: planningGoal
             )
         }
     }
@@ -202,6 +313,8 @@ struct LifestyleCoachChatView: View {
         DispatchQueue.main.async {
             if coach.isChatBusy {
                 withAnimation { proxy.scrollTo("pending", anchor: .bottom) }
+            } else if coach.goalProposal != nil {
+                withAnimation { proxy.scrollTo("goal-proposal", anchor: .bottom) }
             } else if let last = coach.memory.turns.last {
                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
             }

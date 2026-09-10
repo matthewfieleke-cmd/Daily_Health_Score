@@ -38,15 +38,16 @@ final class CoachDataSummariesTests: XCTestCase {
 
         XCTAssertTrue(line.contains("3 of 5 check-ins"))
         XCTAssertTrue(line.contains("4 days left"))
-        XCTAssertTrue(line.contains("ON TRACK"))
+        XCTAssertFalse(line.contains("ON TRACK"))
         XCTAssertTrue(line.contains("2 to go"))
     }
 
-    func test_behindPaceIsJudgedInSwift() {
-        // Five check-ins left with only two days to do them in.
+    func test_remainingCheckInsDoNotImplyAnUnspecifiedDailySchedule() {
+        // Several check-ins can be completed in a day; no daily schedule exists.
         let line = CoachGoalSummarizer.line(for: goal(target: 6, filled: 1, endsInDays: 2))
 
-        XCTAssertTrue(line.contains("BEHIND PACE"))
+        XCTAssertTrue(line.contains("5 to go"))
+        XCTAssertFalse(line.contains("BEHIND PACE"))
         XCTAssertFalse(line.contains("ON TRACK"))
     }
 
@@ -65,7 +66,8 @@ final class CoachDataSummariesTests: XCTestCase {
     }
 
     func test_goalEndingTodayReadsAsToday() {
-        let line = CoachGoalSummarizer.line(for: goal(target: 4, filled: 3, endsInDays: 0))
+        let ending = goal(target: 4, filled: 3, endsInDays: 0)
+        let line = CoachGoalSummarizer.line(for: ending, today: ending.endDate.addingTimeInterval(-1))
 
         XCTAssertTrue(line.contains("ends today"))
     }

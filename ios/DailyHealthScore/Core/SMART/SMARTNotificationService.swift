@@ -23,17 +23,19 @@ enum SMARTNotificationService {
     }
 
     static func scheduleReminder(for goal: SMARTGoal) async {
-        guard goal.remindersEnabled, goal.status == .active, !goal.isComplete else { return }
+        cancelReminders(for: goal.id)
+        guard goal.remindersEnabled, goal.status == .active, !goal.isComplete, !goal.isExpired else { return }
         guard await isAuthorizedForReminders() else { return }
+        guard !Task.isCancelled else { return }
 
         let center = UNUserNotificationCenter.current()
-        center.removePendingNotificationRequests(withIdentifiers: [notificationId(goal.id)])
 
         var date = DateComponents()
         date.hour = goal.reminderHour
         date.minute = goal.reminderMinute
 
         for weekday in weekdays(from: goal.reminderWeekdaysMask) {
+            guard !Task.isCancelled else { return }
             date.weekday = weekday
             let content = UNMutableNotificationContent()
             content.title = "SMART goal reminder"
@@ -54,10 +56,10 @@ enum SMARTNotificationService {
 
     static func cancelReminders(for goalId: UUID) {
         let prefix = notificationId(goalId)
-        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
-            let ids = requests.map(\.identifier).filter { $0.hasPrefix(prefix) }
-            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
-        }
+        // Include the legacy unsuffixed ID and all seven repeating requests.
+        // A synchronous removal avoids deleting newly scheduled replacements.
+        let ids = [prefix] + (1...7).map { "\(prefix)-\($0)" }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
 
     private static func notificationId(_ id: UUID) -> String {

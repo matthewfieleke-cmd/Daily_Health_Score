@@ -3,8 +3,8 @@ import Foundation
 /// Turns the parts of DHS the coach could not previously see — SMART goals and
 /// HRV — into finished sentences.
 ///
-/// Same rule as the daily metrics: every count, date difference, and pace
-/// judgement is computed here so the model only has to phrase it.
+/// Same rule as the daily metrics: every count and date difference is computed
+/// here so the model only has to phrase it. Counts do not imply a daily schedule.
 enum CoachGoalSummarizer {
     /// Goals ride along in every prompt, so only the most relevant few appear.
     static let maxGoalsInPrompt = 4
@@ -19,16 +19,16 @@ enum CoachGoalSummarizer {
     ) -> [String] {
         // Active goals first, then by nearest deadline: what needs attention leads.
         let ordered = goals.sorted { lhs, rhs in
-            let lhsActive = isActive(lhs)
-            let rhsActive = isActive(rhs)
+            let lhsActive = isActive(lhs, at: today)
+            let rhsActive = isActive(rhs, at: today)
             if lhsActive != rhsActive { return lhsActive }
-            return lhs.endDate < rhs.endDate
+            return lhsActive ? lhs.endDate < rhs.endDate : lhs.endDate > rhs.endDate
         }
         return ordered.prefix(maxGoalsInPrompt).map { line(for: $0, today: today, calendar: calendar) }
     }
 
-    private static func isActive(_ goal: SMARTGoal) -> Bool {
-        goal.status == .active && !goal.isComplete && !goal.isExpired
+    private static func isActive(_ goal: SMARTGoal, at date: Date) -> Bool {
+        goal.status == .active && !goal.isComplete && goal.endDate > date
     }
 
     static func line(
@@ -44,7 +44,7 @@ enum CoachGoalSummarizer {
         if goal.isComplete {
             return "SMART goal \"\(name)\" (\(theme)): COMPLETE — \(progress). Celebrate it; do not assign more."
         }
-        if goal.isExpired || goal.status == .ended {
+        if goal.endDate <= today || goal.status == .ended {
             return "SMART goal \"\(name)\" (\(theme)): ENDED at \(progress). A missed goal is information, not a verdict."
         }
 
@@ -56,9 +56,9 @@ enum CoachGoalSummarizer {
         case 1: window = "1 day left"
         default: window = "\(days) days left"
         }
-        // Behind pace means more check-ins remain than days to do them in.
-        let pace = remaining > days ? "BEHIND PACE" : "ON TRACK"
-        return "SMART goal \"\(name)\" (\(theme)): \(progress), \(window) — \(pace) (\(remaining) to go)."
+        // A count does not specify a daily schedule: several actions may fit in
+        // one day. Report facts instead of inventing an on-track judgement.
+        return "SMART goal \"\(name)\" (\(theme)): \(progress), \(window) (\(remaining) to go)."
     }
 
     /// Whole days between today and the deadline, never negative.
