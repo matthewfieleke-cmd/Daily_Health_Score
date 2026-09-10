@@ -7,6 +7,9 @@ import UserNotifications
 @MainActor
 enum NotificationActionRouter {
     static var handleSMARTCheckIn: ((UUID) -> Void)?
+    static var handleFollowThroughSnooze: ((UUID) -> Void)?
+    static var handleFollowThroughDismiss: ((UUID) -> Void)?
+    static var handleNotificationOpen: ((UUID, String) -> Void)?
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -34,13 +37,24 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse
     ) async {
         let info = response.notification.request.content.userInfo
-        guard response.actionIdentifier == NotificationCategoryID.logCheckInAction,
-              let raw = info["goalId"] as? String,
+        let kind = info["followThroughKind"] as? String ?? ""
+        guard let raw = info["goalId"] as? String,
               let goalId = UUID(uuidString: raw) else {
             return
         }
         await MainActor.run {
-            NotificationActionRouter.handleSMARTCheckIn?(goalId)
+            switch response.actionIdentifier {
+            case NotificationCategoryID.logCheckInAction:
+                NotificationActionRouter.handleSMARTCheckIn?(goalId)
+            case NotificationCategoryID.snoozeAction:
+                NotificationActionRouter.handleFollowThroughSnooze?(goalId)
+            case NotificationCategoryID.dismissAction:
+                NotificationActionRouter.handleFollowThroughDismiss?(goalId)
+            case UNNotificationDefaultActionIdentifier:
+                NotificationActionRouter.handleNotificationOpen?(goalId, kind)
+            default:
+                break
+            }
         }
     }
 }

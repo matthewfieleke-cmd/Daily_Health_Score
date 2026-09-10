@@ -14,6 +14,7 @@ struct SleepDiagnosticView: View {
     @State private var diagnostic: SleepDiagnostic?
     @State private var loading = false
     @State private var errorMessage: String?
+    @State private var coachFocus: CoachFocusContext?
 
     var body: some View {
         NavigationStack {
@@ -29,6 +30,13 @@ struct SleepDiagnosticView: View {
                             .padding()
                     } else if let diagnostic {
                         summary(for: diagnostic)
+                        AskCoachButton {
+                            coachFocus = CoachFocusContextBuilder.sleepDiagnostic(
+                                dateKey: diagnostic.dateKey,
+                                attributedHours: diagnostic.attributedHours,
+                                sampleCount: diagnostic.allSamples.count
+                            )
+                        }
                         if diagnostic.allSamples.isEmpty {
                             Text("No sleep samples in [\(formatted(diagnostic.windowStart)), \(formatted(diagnostic.windowEnd))).")
                                 .font(.footnote)
@@ -55,6 +63,13 @@ struct SleepDiagnosticView: View {
                 }
             }
             .task { await load() }
+        }
+        .sheet(item: $coachFocus) { focus in
+            NavigationStack {
+                LifestyleCoachChatView(focus: focus)
+                    .environmentObject(appState)
+                    .environmentObject(appState.coach)
+            }
         }
     }
 

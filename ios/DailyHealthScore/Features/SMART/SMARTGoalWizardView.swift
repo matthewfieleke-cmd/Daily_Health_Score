@@ -242,6 +242,18 @@ struct SMARTGoalWizardView: View {
                     .foregroundStyle(.secondary)
                     .padding(.top, 4)
 
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Why this matters (optional)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    TextField("Your reason", text: $draft.personalReason, axis: .vertical)
+                        .lineLimit(2...4)
+                        .textFieldStyle(.roundedBorder)
+                    Text("The coach can ask about a cue or fallback later. You can add those after saving.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Button {
                     saveGoal()
                 } label: {

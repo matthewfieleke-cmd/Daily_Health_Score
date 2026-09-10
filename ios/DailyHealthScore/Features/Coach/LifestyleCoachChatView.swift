@@ -9,12 +9,20 @@ struct LifestyleCoachChatView: View {
     @State private var focusedGoalID: UUID?
     @State private var planningGoal = false
     @State private var goalEdit: SMARTGoalEdit?
+    @State private var focus: CoachFocusContext?
+    @State private var showMemory = false
+    @State private var showFeedback = false
     @FocusState private var isInputFocused: Bool
 
-    init(initialMessage: String = "", focusedGoalID: UUID? = nil) {
+    init(
+        initialMessage: String = "",
+        focusedGoalID: UUID? = nil,
+        focus: CoachFocusContext? = nil
+    ) {
         _draft = State(initialValue: initialMessage)
-        _focusedGoalID = State(initialValue: focusedGoalID)
-        _planningGoal = State(initialValue: focusedGoalID != nil || initialMessage.lowercased().contains("smart goal"))
+        _focusedGoalID = State(initialValue: focusedGoalID ?? focus?.goalId)
+        _planningGoal = State(initialValue: focusedGoalID != nil || focus?.feature == .goal || initialMessage.lowercased().contains("smart goal"))
+        _focus = State(initialValue: focus)
     }
 
     private var selectedGoal: SMARTGoal? {
@@ -30,6 +38,9 @@ struct LifestyleCoachChatView: View {
         VStack(spacing: 0) {
             if coach.availability != .available {
                 availabilityBanner
+            }
+            if let focus {
+                focusBanner(focus)
             }
             if planningGoal { goalFocusBanner }
 
@@ -54,6 +65,12 @@ struct LifestyleCoachChatView: View {
                         if let proposal = coach.goalProposal, !coach.isChatBusy {
                             goalProposalCard(proposal)
                                 .id("goal-proposal")
+                        }
+                        if showFeedback {
+                            CoachLocalFeedbackBar(target: "suggestion", goalId: focusedGoalID) { useful in
+                                coach.recordLocalFeedback(target: "suggestion", useful: useful, goalId: focusedGoalID)
+                                showFeedback = false
+                            }
                         }
                     }
                     .padding(16)
@@ -93,10 +110,11 @@ struct LifestyleCoachChatView: View {
                     if let selectedGoal {
                         Button("Edit this goal") { goalEdit = SMARTGoalEdit(goal: selectedGoal) }
                     }
+                    Button("What your coach remembers") { showMemory = true }
                 } label: {
                     Image(systemName: "target")
                 }
-                .accessibilityLabel("SMART goal actions")
+                .accessibilityLabel("SMART goal and memory actions")
                 .disabled(coach.isChatBusy)
             }
         }
@@ -109,6 +127,12 @@ struct LifestyleCoachChatView: View {
                 }
             }
         }
+        .sheet(isPresented: $showMemory) {
+            NavigationStack {
+                CoachMemoryListView()
+                    .environmentObject(appState)
+            }
+        }
         .onAppear {
             coach.refreshAvailability()
         }
@@ -118,7 +142,7 @@ struct LifestyleCoachChatView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(CoachCharter.philosophy)
                 .font(.subheadline.weight(.medium))
-            Text("Talk through what matters to you, formulate a SMART goal, or work through a barrier. Your coach can use your saved goals and recorded progress, help revise a plan, and prepare a draft for you to review and save. Conversations stay in this app's local memory.")
+            Text("Talk through what matters to you, formulate a SMART goal, or work through a barrier. Your coach can use your saved goals, dated check-ins, and memories you can inspect. Conversations stay in this app's local memory.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -140,10 +164,17 @@ struct LifestyleCoachChatView: View {
                     HStack {
                         if selectedGoal.status == .active && !selectedGoal.isComplete && !selectedGoal.isExpired {
                             Button("Log a check-in") {
-                                appState.smartGoalStore.fillNextEmpty(on: selectedGoal.id)
+                                appState.smartGoalStore.fillNextEmpty(on: selectedGoal.id, source: .iPhone)
                             }
                             .buttonStyle(.bordered)
                             .disabled(coach.isChatBusy)
+                            if !selectedGoal.plan.fallbackAction.isEmpty {
+                                Button("Log smaller step") {
+                                    _ = appState.smartGoalStore.recordFallback(goalId: selectedGoal.id)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(coach.isChatBusy)
+                            }
                         }
                         NavigationLink("View goal") {
                             SMARTGoalDetailView(goalId: selectedGoal.id)
@@ -165,6 +196,34 @@ struct LifestyleCoachChatView: View {
         .background(AppTheme.primary.opacity(0.08))
     }
 
+    private func focusBanner(_ focus: CoachFocusContext) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Talking about \(focus.title)")
+                    .font(.subheadline.weight(.semibold))
+                if let start = focus.startDateKey, let end = focus.endDateKey {
+                    Text(start == end ? DateHelpers.formatDisplayDate(start) : "\(DateHelpers.formatDisplayDate(start)) – \(DateHelpers.formatDisplayDate(end))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if !focus.valueSummary.isEmpty {
+                    Text(focus.valueSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+            }
+            Spacer(minLength: 0)
+            Button {
+                self.focus = nil
+            } label: { Image(systemName: "xmark.circle") }
+            .accessibilityLabel("Remove this coaching context")
+            .disabled(coach.isChatBusy)
+        }
+        .padding(12)
+        .background(AppTheme.leaf.opacity(0.10))
+    }
+
     private func goalProposalCard(_ proposal: CoachGoalProposal) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(proposal.isUpdate ? "Suggested goal changes" : "Draft SMART goal")
@@ -176,7 +235,7 @@ struct LifestyleCoachChatView: View {
             }
             Text(proposal.edit.summary)
                 .font(.subheadline)
-            Text("Review the details before saving. Existing check-ins are kept.")
+            Text("Review the details before saving. This is a proposal, not a saved goal. Existing check-ins are kept.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack {
@@ -256,8 +315,11 @@ struct LifestyleCoachChatView: View {
                 goals: appState.smartGoalStore.goals,
                 hrvSensitivity: appState.settingsStore.hrvSensitivity,
                 focusedGoalID: focusedGoalID,
-                planningGoal: planningGoal
+                planningGoal: planningGoal,
+                focus: focus,
+                activities: appState.smartGoalStore.activities
             )
+            showFeedback = true
         }
     }
 

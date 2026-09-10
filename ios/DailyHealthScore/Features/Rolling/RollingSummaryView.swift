@@ -4,6 +4,7 @@ struct RollingSummaryView: View {
     @EnvironmentObject private var appState: AppState
     let days: Int
     let title: String
+    @State private var coachFocus: CoachFocusContext?
 
     private var stats: RollingStats? {
         let keys = DateHelpers.rollingDateKeys(days: days)
@@ -21,6 +22,14 @@ struct RollingSummaryView: View {
                     if let stats {
                         VStack(spacing: AppTheme.Layout.sectionSpacing) {
                             header(for: stats)
+                            AskCoachButton {
+                                let keys = DateHelpers.rollingDateKeys(days: days)
+                                coachFocus = CoachFocusContextBuilder.history(
+                                    stats: stats,
+                                    days: days,
+                                    windowKeys: keys
+                                )
+                            }
                             statsGrid(stats)
                             dailyList(stats)
                         }
@@ -33,6 +42,13 @@ struct RollingSummaryView: View {
                 }
             }
             .enlargedAppNavigationBar(title: title)
+        }
+        .sheet(item: $coachFocus) { focus in
+            NavigationStack {
+                LifestyleCoachChatView(focus: focus)
+                    .environmentObject(appState)
+                    .environmentObject(appState.coach)
+            }
         }
     }
 
@@ -158,6 +174,12 @@ struct RollingSummaryView: View {
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        coachFocus = CoachFocusContextBuilder.day(record, dateKey: record.date)
+                    }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Ask Coach about this day")
                     if record.id != stats.recordsInWindow.last?.id {
                         Divider().padding(.leading, 14)
                     }

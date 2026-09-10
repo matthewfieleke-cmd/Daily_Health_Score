@@ -64,6 +64,40 @@ private struct SMARTGoalEditorContent: View {
                     reminderDays
                 }
             }
+            Section("How you'll follow through") {
+                TextField("Why this matters (optional)", text: $edit.plan.personalReason, axis: .vertical)
+                    .lineLimit(2...4)
+                TextField("Cue or opportunity, such as after lunch", text: $edit.plan.cue, axis: .vertical)
+                    .lineLimit(1...3)
+                TextField("What might get in the way", text: $edit.plan.expectedBarriers, axis: .vertical)
+                    .lineLimit(2...4)
+                TextField("Smaller fallback if the full action is too much", text: $edit.plan.fallbackAction, axis: .vertical)
+                    .lineLimit(1...3)
+                Text("A smaller fallback is recorded separately. It does not count as the accepted action unless you review and save a revised plan.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("Confidence (optional)", selection: confidenceBinding) {
+                    Text("Not set").tag(0)
+                    ForEach(1...10, id: \.self) { value in
+                        Text("\(value) of 10").tag(value)
+                    }
+                }
+                Toggle("Opt in to check-in and reflection reminders", isOn: $edit.plan.followThroughEnabled)
+                if edit.plan.followThroughEnabled {
+                    DatePicker("Reflection time", selection: reflectionTime, displayedComponents: .hourAndMinute)
+                    Text("Reminders stay quiet during the hours you set in Settings. A missing check-in is not treated as a missed action.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if edit.original != nil {
+                Section {
+                    Toggle("Pause this goal", isOn: pauseBinding)
+                    Text("Paused goals keep their progress and skip reminders until you resume.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Section("Review your goal") {
                 Text(edit.summary)
                 Text("Does this feel realistic? You can adjust the action, target, or deadline before saving.")
@@ -105,6 +139,38 @@ private struct SMARTGoalEditorContent: View {
         )
     }
 
+    private var reflectionTime: Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(
+                    bySettingHour: edit.plan.reflectionHour,
+                    minute: edit.plan.reflectionMinute,
+                    second: 0,
+                    of: Date()
+                ) ?? Date()
+            },
+            set: {
+                let parts = Calendar.current.dateComponents([.hour, .minute], from: $0)
+                edit.plan.reflectionHour = parts.hour ?? 20
+                edit.plan.reflectionMinute = parts.minute ?? 0
+            }
+        )
+    }
+
+    private var confidenceBinding: Binding<Int> {
+        Binding(
+            get: { edit.plan.confidence ?? 0 },
+            set: { edit.plan.confidence = $0 == 0 ? nil : $0 }
+        )
+    }
+
+    private var pauseBinding: Binding<Bool> {
+        Binding(
+            get: { edit.status == .paused },
+            set: { edit.status = $0 ? .paused : .active }
+        )
+    }
+
     private var reminderDays: some View {
         HStack(spacing: 4) {
             ForEach(1...7, id: \.self) { day in
@@ -132,9 +198,9 @@ private struct SMARTGoalEditorContent: View {
         let reviewed = edit
         Task { @MainActor in
             defer { isSaving = false }
-            if reviewed.remindersEnabled {
+            if reviewed.remindersEnabled || reviewed.plan.followThroughEnabled {
                 let permitted = await SMARTNotificationService.requestAuthorization()
-                if !permitted {
+                if !permitted && reviewed.remindersEnabled {
                     edit.remindersEnabled = false
                     saveError = "Notifications are off. Enable them in iPhone Settings, or tap Save again to save without reminders."
                     return

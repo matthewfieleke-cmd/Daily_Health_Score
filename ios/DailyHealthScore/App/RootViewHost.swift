@@ -35,6 +35,31 @@ private struct AppRootContent: View {
         .environmentObject(appState)
         .environmentObject(appState.coach)
         .tint(AppTheme.primary)
+        .sheet(item: Binding(
+            get: { appState.pendingCoachFocus },
+            set: { appState.pendingCoachFocus = $0 }
+        )) { focus in
+            NavigationStack {
+                LifestyleCoachChatView(focus: focus, focusedGoalID: focus.goalId)
+                    .environmentObject(appState)
+                    .environmentObject(appState.coach)
+            }
+        }
+        .sheet(isPresented: $appState.showCoachMemory) {
+            NavigationStack {
+                CoachMemoryListView()
+                    .environmentObject(appState)
+            }
+        }
+        .sheet(item: Binding(
+            get: { appState.pendingGoalId.map { IdentifiedUUID(id: $0) } },
+            set: { appState.pendingGoalId = $0?.id }
+        )) { item in
+            NavigationStack {
+                SMARTGoalDetailView(goalId: item.id)
+                    .environmentObject(appState)
+            }
+        }
         .overlay {
             HealthSyncBannerOverlay()
                 .environmentObject(appState)
@@ -49,7 +74,14 @@ private struct AppRootContent: View {
             // Only sync when returning from background — not on the initial
             // `.active` at launch (`.task` already handles that).
             guard didFinishLaunchSync, newPhase == .active, oldPhase != .active else { return }
-            Task { await appState.syncTodayFromHealth() }
+            Task {
+                await appState.syncTodayFromHealth()
+                await appState.refreshFollowThrough()
+            }
         }
     }
+}
+
+private struct IdentifiedUUID: Identifiable {
+    let id: UUID
 }
