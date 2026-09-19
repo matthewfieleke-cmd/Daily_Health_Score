@@ -90,5 +90,5 @@ Tune `HealthKitService.swift` if your sleep totals differ from the Health app.
 
 ## Content
 
-- **DHS Lifestyle Coach** — on-device daily card and Ask-the-coach chat (Apple Intelligence).
+- **DHS Lifestyle Coach** — daily card and Ask-the-coach chat via Private Cloud Compute, with on-device fallback (Apple Intelligence).
 - Rotating suggestion libraries remain available to the record builder.

@@ -49,9 +49,9 @@ The app stores locally, on your iPhone:
 
 Local retention is limited to approximately **125 days** of daily records, after which older records may be removed by the app’s storage rules. Coach chat memory can be cleared separately in Settings.
 
-### On-device Lifestyle Coach
+### Lifestyle Coach
 
-When available, **DHS Lifestyle Coach** uses Apple’s on-device Foundation Models (Apple Intelligence). Coaching prompts and replies are processed on your device. The app does not send your Health metrics or coach chats to a developer-operated cloud backend.
+When available, **DHS Lifestyle Coach** uses Apple’s Foundation Models. It prefers Apple’s Private Cloud Compute server model and falls back to the on-device model if that server model is unavailable, offline, or out of quota. The app does not send your Health metrics or coach chats to a developer-operated cloud backend.
 
 ### Notifications (optional)
 
