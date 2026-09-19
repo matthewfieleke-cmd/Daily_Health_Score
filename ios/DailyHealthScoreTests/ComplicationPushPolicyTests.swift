@@ -145,6 +145,24 @@ final class ComplicationPushPolicyTests: XCTestCase {
         )
     }
 
+    func test_pairedWatchIdentityChangesUntilRemembered() {
+        let suite = "dhs.pairedWatch.tests"
+        UserDefaults().removePersistentDomain(forName: suite)
+        let defaults = UserDefaults(suiteName: suite)!
+        XCTAssertTrue(PairedWatchIdentityStore.hasChanged(currentPath: "/watch/ultra4", defaults: defaults))
+        PairedWatchIdentityStore.remember(currentPath: "/watch/ultra4", defaults: defaults)
+        XCTAssertFalse(PairedWatchIdentityStore.hasChanged(currentPath: "/watch/ultra4", defaults: defaults))
+        XCTAssertTrue(PairedWatchIdentityStore.hasChanged(currentPath: "/watch/series10", defaults: defaults))
+        UserDefaults().removePersistentDomain(forName: suite)
+    }
+
+    func test_complicationJustBecameEnabled() {
+        XCTAssertFalse(ComplicationEnabledEdge.justBecameEnabled(previous: nil, current: true))
+        XCTAssertFalse(ComplicationEnabledEdge.justBecameEnabled(previous: true, current: true))
+        XCTAssertTrue(ComplicationEnabledEdge.justBecameEnabled(previous: false, current: true))
+        XCTAssertFalse(ComplicationEnabledEdge.justBecameEnabled(previous: true, current: false))
+    }
+
     func test_firstSnapshotPushes() {
         let today = face(sleep: 7.2, score: 3.8)
         XCTAssertTrue(
@@ -225,6 +243,15 @@ final class WatchPendingSendMergeTests: XCTestCase {
         XCTAssertEqual(WatchPendingSendMerge.preferredKind(.fiber, .sleep), .sleep)
     }
 
+    func test_pendingMergeKeepsAForcedFacePush() {
+        let first = pending(sleep: 0, kind: .sleep)
+        var second = pending(sleep: 7.2, kind: .foreground)
+        second.forceComplication = true
+        let merged = WatchPendingSendMerge.replacing(first, with: second)
+        XCTAssertTrue(merged.forceComplication)
+        XCTAssertEqual(merged.snapshot.sleep.value, 7.2)
+    }
+
     private func pending(
         sleep: Double,
         exercise: Double = 0,
@@ -251,7 +278,8 @@ final class WatchPendingSendMergeTests: XCTestCase {
             ),
             kind: kind,
             endedWorkoutSinceLastPush: endedWorkout,
-            latestWorkoutEnd: workoutEnd.map { Date(timeIntervalSince1970: $0) }
+            latestWorkoutEnd: workoutEnd.map { Date(timeIntervalSince1970: $0) },
+            forceComplication: false
         )
     }
 }

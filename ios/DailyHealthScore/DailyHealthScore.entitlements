@@ -12,5 +12,7 @@
 	<array>
 		<string>group.com.dailyhealthscore.app.mf</string>
 	</array>
+	<key>com.apple.developer.private-cloud-compute</key>
+	<true/>
 </dict>
 </plist>

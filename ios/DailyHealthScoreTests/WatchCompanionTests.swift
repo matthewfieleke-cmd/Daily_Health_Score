@@ -421,6 +421,12 @@ final class WatchSnapshotTests: XCTestCase {
         XCTAssertEqual(shown?.formattedScore, "9.3")
     }
 
+    func test_refreshFaceKeyIsDistinctFromSnapshotAndCheckIn() {
+        XCTAssertEqual(WatchBridge.userInfoRefreshFaceKey, "refreshFace")
+        XCTAssertNotEqual(WatchBridge.userInfoRefreshFaceKey, WatchBridge.userInfoCheckInKey)
+        XCTAssertNotEqual(WatchBridge.userInfoRefreshFaceKey, WatchBridge.applicationContextSnapshotKey)
+    }
+
     func test_watchBridgeDateKeyMatchesDateHelpers() {
         let date = Date(timeIntervalSince1970: 1_787_000_000)
         XCTAssertEqual(WatchBridge.localDateKey(from: date), DateHelpers.localDateKey(from: date))

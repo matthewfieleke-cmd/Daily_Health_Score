@@ -22,6 +22,7 @@ final class WatchSnapshotController: NSObject, ObservableObject {
     private var pendingFills: [UUID: Int] = [:]
     private var pendingOutgoing: [WatchCheckInEvent] = []
     private var didActivate = false
+    private var lastRequestedFaceDateKey: String?
 
     private override init() {
         super.init()
@@ -65,6 +66,20 @@ final class WatchSnapshotController: NSObject, ObservableObject {
         persistSnapshotForComplication()
         refreshNudges()
         reloadWidgets()
+        requestPhoneFaceRefresh()
+    }
+
+    /// The Watch app can have today's snapshot while the face is still the
+    /// placeholder. Opening the app asks the iPhone to spend a complication
+    /// transfer — the only reliable way watchOS refreshes WidgetKit faces.
+    private func requestPhoneFaceRefresh() {
+        guard let snapshot else { return }
+        guard lastRequestedFaceDateKey != snapshot.dateKey else { return }
+        #if canImport(WatchConnectivity)
+        guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
+        WCSession.default.transferUserInfo([WatchBridge.userInfoRefreshFaceKey: "1"])
+        lastRequestedFaceDateKey = snapshot.dateKey
+        #endif
     }
 
     private func persistSnapshotForComplication() {
@@ -144,6 +159,10 @@ final class WatchSnapshotController: NSObject, ObservableObject {
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadTimelines(ofKind: WatchBridge.scoreComplicationKind)
         WidgetCenter.shared.reloadAllTimelines()
+        Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            WidgetCenter.shared.reloadTimelines(ofKind: WatchBridge.scoreComplicationKind)
+        }
         #endif
     }
 }
@@ -183,6 +202,7 @@ extension WatchSnapshotController: WCSessionDelegate {
                 self.applyIncoming(incoming)
             }
             self.flushOutgoingCheckIns()
+            self.requestPhoneFaceRefresh()
         }
     }
 

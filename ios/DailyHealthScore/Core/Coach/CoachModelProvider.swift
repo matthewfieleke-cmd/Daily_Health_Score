@@ -26,11 +26,9 @@ enum CoachModelTier: String, Equatable, Sendable {
 ///
 /// PCC routing is fully wired: intents still prefer the server model, the daily
 /// card still asks for it, and a server failure still falls back on-device.
-/// The `PrivateCloudComputeLanguageModel` *type* is the only thing gated. It is
-/// not in the current Xcode SDK, and `#available(iOS 27)` cannot hide a missing
-/// type. Set `DHS_HAS_PRIVATE_CLOUD_COMPUTE` in `project.yml` once the SDK has
-/// it and the managed entitlement is on the App ID. That turns the existing
-/// routing on; it does not require rewriting the coach.
+/// `DHS_HAS_PRIVATE_CLOUD_COMPUTE` is on. The managed Private Cloud Compute
+/// entitlement must also be on the App ID. Routing still checks availability
+/// and falls back on-device when the server model is missing or out of quota.
 @MainActor
 enum CoachModelProvider {
     private static var cachedContextTokens: [CoachModelTier: Int] = [:]

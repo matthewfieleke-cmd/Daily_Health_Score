@@ -15,6 +15,8 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
 
     /// Last face that actually received a complication transfer.
     private var lastComplicationFace: ComplicationPushPolicy.Face?
+    /// Last `isComplicationEnabled` we observed, so adding the face later still pushes.
+    private var lastComplicationEnabled: Bool?
     /// Newest workout end we already spent a face update on.
     private(set) var lastPushedWorkoutEndDate: Date = .distantPast
     /// Held while `WCSession` is still activating so a Health wake is not dropped.
@@ -41,7 +43,8 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
     func publish(
         kind: HealthChangeKind = .foreground,
         endedWorkoutSinceLastPush: Bool = false,
-        latestWorkoutEnd: Date? = nil
+        latestWorkoutEnd: Date? = nil,
+        forceComplication: Bool = false
     ) {
         let todayKey = DateHelpers.localDateKey()
         let today = recordStore.records.first { $0.date == todayKey }
@@ -56,7 +59,8 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
             snapshot,
             kind: kind,
             endedWorkoutSinceLastPush: endedWorkoutSinceLastPush,
-            latestWorkoutEnd: latestWorkoutEnd
+            latestWorkoutEnd: latestWorkoutEnd,
+            forceComplication: forceComplication
         )
         if transferred, endedWorkoutSinceLastPush, let latestWorkoutEnd {
             lastPushedWorkoutEndDate = latestWorkoutEnd
@@ -68,7 +72,11 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         publish(kind: .foreground)
     }
 
-    fileprivate func handleIncomingCheckIn(_ userInfo: [String: Any]) {
+    fileprivate func handleIncomingUserInfo(_ userInfo: [String: Any]) {
+        if userInfo[WatchBridge.userInfoRefreshFaceKey] != nil {
+            publish(kind: .foreground, forceComplication: true)
+            return
+        }
         guard let json = userInfo[WatchBridge.userInfoCheckInKey] as? String,
               let event = WatchBridge.decode(WatchCheckInEvent.self, from: json) else {
             return
@@ -105,7 +113,8 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         kind: HealthChangeKind,
         endedWorkoutSinceLastPush: Bool,
         latestWorkoutEnd: Date?,
-        queueIfUnready: Bool = true
+        queueIfUnready: Bool = true,
+        forceComplication: Bool = false
     ) -> Bool {
         #if canImport(WatchConnectivity)
         guard WCSession.isSupported() else { return false }
@@ -118,7 +127,8 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
                         snapshot: snapshot,
                         kind: kind,
                         endedWorkoutSinceLastPush: endedWorkoutSinceLastPush,
-                        latestWorkoutEnd: latestWorkoutEnd
+                        latestWorkoutEnd: latestWorkoutEnd,
+                        forceComplication: forceComplication
                     )
                 )
             }
@@ -128,20 +138,36 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         try? session.updateApplicationContext([WatchBridge.applicationContextSnapshotKey: json])
 
         let nextFace = ComplicationPushPolicy.Face(snapshot)
-        let remaining = session.isComplicationEnabled
+        let watchPath = session.watchDirectoryURL?.path
+        let watchReplaced = PairedWatchIdentityStore.hasChanged(currentPath: watchPath)
+        let complicationEnabled = session.isComplicationEnabled
+        let justEnabled = ComplicationEnabledEdge.justBecameEnabled(
+            previous: lastComplicationEnabled,
+            current: complicationEnabled
+        )
+        lastComplicationEnabled = complicationEnabled
+        let remaining = complicationEnabled
             ? session.remainingComplicationUserInfoTransfers
             : 0
-        let shouldPush = ComplicationPushPolicy.shouldPushComplication(
-            from: lastComplicationFace,
-            to: nextFace,
-            kind: kind,
-            endedWorkoutSinceLastPush: endedWorkoutSinceLastPush,
-            remainingTransfers: remaining
+        let previousFace = watchReplaced ? nil : lastComplicationFace
+        let alreadyOnThisWatch = !watchReplaced && lastComplicationFace == nextFace
+        let shouldPush = remaining > 0 && complicationEnabled && (
+            justEnabled
+                || watchReplaced
+                || (forceComplication && !alreadyOnThisWatch)
+                || ComplicationPushPolicy.shouldPushComplication(
+                    from: previousFace,
+                    to: nextFace,
+                    kind: kind,
+                    endedWorkoutSinceLastPush: endedWorkoutSinceLastPush,
+                    remainingTransfers: remaining
+                )
         )
-        guard shouldPush, session.isComplicationEnabled else { return false }
+        guard shouldPush else { return false }
         session.transferCurrentComplicationUserInfo([WatchBridge.applicationContextSnapshotKey: json])
         lastComplicationFace = nextFace
         LastComplicationFaceStore.save(nextFace)
+        PairedWatchIdentityStore.remember(currentPath: watchPath)
         return true
         #else
         return false
@@ -159,7 +185,8 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
             kind: pending.kind,
             endedWorkoutSinceLastPush: pending.endedWorkoutSinceLastPush,
             latestWorkoutEnd: pending.latestWorkoutEnd,
-            queueIfUnready: false
+            queueIfUnready: false,
+            forceComplication: pending.forceComplication
         )
         if transferred, pending.endedWorkoutSinceLastPush, let end = pending.latestWorkoutEnd {
             lastPushedWorkoutEndDate = end
@@ -189,7 +216,7 @@ extension WatchSyncCoordinator: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
         Task { @MainActor in
-            self.handleIncomingCheckIn(userInfo)
+            self.handleIncomingUserInfo(userInfo)
         }
     }
 

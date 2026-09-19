@@ -84,7 +84,8 @@ class BundleIDAlignmentTests(unittest.TestCase):
         self.assertNotIn("outputFiles:", yml)
         self.assertIn("executable: DailyHealthScoreWatch", yml)
         self.assertIn("OTHER_CODE_SIGN_FLAGS: --generate-entitlement-der", yml)
-        self.assertIn('CURRENT_PROJECT_VERSION: "14"', yml)
+        self.assertIn('CURRENT_PROJECT_VERSION: "15"', yml)
+        self.assertIn("DHS_HAS_PRIVATE_CLOUD_COMPUTE", yml)
 
 
 class DebugWatchMirrorTests(unittest.TestCase):

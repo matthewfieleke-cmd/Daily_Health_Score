@@ -129,15 +129,23 @@ final class CoachIntentTests: XCTestCase {
         )
     }
 
-    /// The PCC type is compiled out until Xcode's SDK actually contains it.
-    /// Until then, even an education question that *prefers* the server model
-    /// must stay on-device or the app cannot build — or run — without PCC.
+    /// Intents that do not need depth stay on-device even when PCC is compiled in.
     @MainActor
-    func test_withoutPCCSDKFlag_everyIntentStaysOnDevice() {
-        XCTAssertFalse(CoachModelProvider.isServerModelAvailable)
-        XCTAssertEqual(CoachModelProvider.tier(for: .education), .onDevice)
-        XCTAssertEqual(CoachModelProvider.tier(for: .planning), .onDevice)
-        XCTAssertEqual(CoachModelProvider.tier(for: .support), .onDevice)
+    func test_intentsThatDoNotPreferServerStayOnDevice() {
+        XCTAssertEqual(CoachModelProvider.tier(for: .dataLookup), .onDevice)
+        XCTAssertEqual(CoachModelProvider.tier(for: .smallTalk), .onDevice)
+    }
+
+    /// Education prefers PCC, but only when the server model is actually available.
+    @MainActor
+    func test_serverPreferringIntentsFollowAvailability() {
+        if CoachModelProvider.isServerModelAvailable {
+            XCTAssertEqual(CoachModelProvider.tier(for: .education), .privateCloud)
+            XCTAssertEqual(CoachModelProvider.tier(for: .planning), .privateCloud)
+        } else {
+            XCTAssertEqual(CoachModelProvider.tier(for: .education), .onDevice)
+            XCTAssertEqual(CoachModelProvider.tier(for: .planning), .onDevice)
+        }
     }
 
     func test_contractsEncodeCriticalRules() {

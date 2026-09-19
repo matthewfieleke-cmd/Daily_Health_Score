@@ -5,7 +5,7 @@ Native SwiftUI app with **HealthKit** — sleep, fiber, and exercise scoring wit
 ## Requirements
 
 - macOS with **Xcode 15+**
-- iPhone on **iOS 26+** with **Apple Intelligence** (DHS Lifestyle Coach uses on-device Foundation Models)
+- iPhone on **iOS 26+** with **Apple Intelligence**. The Lifestyle Coach uses on-device Foundation Models and, when the managed entitlement is present, Private Cloud Compute.
 - Apple Developer account (for device testing and App Store)
 
 ## Open the project
@@ -48,7 +48,7 @@ Debug installs from Xcode 27 also copy that companion into `PlugIns/` so the on-
 
 After `xcodegen generate`, confirm **DailyHealthScore → Build Phases → Embed Watch Content**: Destination **Products Directory**, Subpath contains `Watch` — not “Plugins and Foundation…”. You should also see **Mirror Watch companion into PlugIns for Debug device install**.
 
-`xcodegen generate` clears **Team**. Set Team again on **DailyHealthScore**, **DailyHealthScoreWatch**, and **DailyHealthScoreWatchWidgets** (not Tests). Enable App Group `group.com.dailyhealthscore.app.mf` on those three. Do not add Background Modes.
+`xcodegen generate` clears **Team**. Set Team again on **DailyHealthScore**, **DailyHealthScoreWatch**, and **DailyHealthScoreWatchWidgets** (not Tests). Enable App Group `group.com.dailyhealthscore.app.mf` on those three. On **DailyHealthScore** also add **Access to models on Private Cloud Compute** if Signing complains. Do not add Background Modes.
 
 Then, on a **newly paired Ultra 4** (or any Watch that will not take the app):
 
@@ -62,6 +62,8 @@ Then, on a **newly paired Ultra 4** (or any Watch that will not take the app):
 8. Open the **Watch** app on the iPhone. Check the **My Watch** home list **and** **Available Apps** (alphabetically between CVS Health and ESPN).
 
 If the Ultra 4 shows **Unable to Install “Daily Health Score”** / **integrity could not be verified**, the new watch is not in the signing profile or Developer Mode is still off. Do steps 2–6 again, then on each of **DailyHealthScore**, **DailyHealthScoreWatch**, and **DailyHealthScoreWatchWidgets** toggle **Automatically manage signing** off and on.
+
+If the Watch **app** shows today’s score but the **complication** still says **Today / Open iPhone**, the iPhone has the snapshot and has not spent a face transfer on this watch. Open Daily Health Score on the iPhone, then open the Watch app once more so it can request a face refresh. Remove and re-add the complication if it is still the placeholder.
 
 The iPhone app can still run if the Watch companion is waiting. A missing Watch app is a packaging/install issue, not a coach or SMART-goal issue.
 
