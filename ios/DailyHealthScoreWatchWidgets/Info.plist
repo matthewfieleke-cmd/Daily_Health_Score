@@ -20,6 +20,15 @@
 	<dict>
 		<key>NSExtensionPointIdentifier</key>
 		<string>com.apple.widgetkit-extension</string>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<key>WKAppBundleIdentifier</key>
+			<string>com.dailyhealthscore.app.mf.watchkitapp</string>
+		</dict>
 	</dict>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Daily Health Score reads your sleep, dietary fiber, and exercise minutes from Apple Health so the Watch face can show today’s score.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Daily Health Score does not write data to Apple Health. This description is required because HealthKit may reference write APIs; the app only reads authorized health types.</string>
 </dict>
 </plist>

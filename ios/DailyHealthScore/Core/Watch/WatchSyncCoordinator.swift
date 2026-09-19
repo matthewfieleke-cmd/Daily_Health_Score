@@ -23,6 +23,12 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
     private var lastComplicationTransferAt: Date?
     /// Held while `WCSession` is still activating so a Health wake is not dropped.
     private var pendingSend: WatchPendingSend?
+    /// Settings shows this after Refresh Watch face so the button is never a no-op.
+    @Published private(set) var facePushMessage: String = ""
+    @Published private(set) var facePushSucceeded: Bool = false
+    @Published private(set) var isRefreshingFace: Bool = false
+    /// A Refresh tap queued because `WCSession` was still activating.
+    private var refreshAwaitingFlush = false
 
     init(recordStore: RecordStore, smartGoalStore: SMARTGoalStore, settingsStore: SettingsStore) {
         self.recordStore = recordStore
@@ -57,16 +63,51 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         )
         WatchSnapshotStore.save(snapshot)
         refreshPaceNudges(with: snapshot)
-        let transferred = sendToWatch(
+        let outcome = sendToWatch(
             snapshot,
             kind: kind,
             endedWorkoutSinceLastPush: endedWorkoutSinceLastPush,
             latestWorkoutEnd: latestWorkoutEnd,
             forceComplication: forceComplication
         )
-        if transferred, endedWorkoutSinceLastPush, let latestWorkoutEnd {
+        if case .transferred = outcome, endedWorkoutSinceLastPush, let latestWorkoutEnd {
             lastPushedWorkoutEndDate = latestWorkoutEnd
         }
+        if refreshAwaitingFlush || forceComplication {
+            presentFacePush(outcome)
+        }
+    }
+
+    /// Settings → Refresh Watch face. Always leaves a visible status so the
+    /// control cannot look dead, and always force-activates the session first.
+    func refreshWatchFace() {
+        activate()
+        isRefreshingFace = true
+        facePushSucceeded = false
+        facePushMessage = WatchFacePushReport.sending
+        refreshAwaitingFlush = true
+        publish(kind: .foreground, forceComplication: true)
+    }
+
+    private func presentFacePush(_ outcome: WatchFacePushOutcome) {
+        if outcome.isQueued {
+            refreshAwaitingFlush = true
+            isRefreshingFace = true
+            facePushSucceeded = false
+            facePushMessage = WatchFacePushReport.message(outcome)
+            if !WatchSnapshotStore.canShareGroup {
+                facePushMessage += " Enable the App Group on the iPhone target in Xcode."
+            }
+            return
+        }
+        refreshAwaitingFlush = false
+        isRefreshingFace = false
+        facePushSucceeded = outcome.isSuccess
+        var text = WatchFacePushReport.message(outcome)
+        if !WatchSnapshotStore.canShareGroup {
+            text += " Enable the App Group on iPhone, Watch, and the widget."
+        }
+        facePushMessage = text
     }
 
     func applyCheckIn(goalId: UUID) {
@@ -117,10 +158,16 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         latestWorkoutEnd: Date?,
         queueIfUnready: Bool = true,
         forceComplication: Bool = false
-    ) -> Bool {
+    ) -> WatchFacePushOutcome {
         #if canImport(WatchConnectivity)
-        guard WCSession.isSupported() else { return false }
+        guard WCSession.isSupported() else { return .unsupported }
         let session = WCSession.default
+        if session.activationState == .activated, !session.isPaired {
+            return .notPaired
+        }
+        if session.activationState == .activated, session.isPaired, !session.isWatchAppInstalled {
+            return .appNotInstalled
+        }
         guard session.activationState == .activated else {
             if queueIfUnready {
                 pendingSend = WatchPendingSendMerge.replacing(
@@ -134,14 +181,30 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
                     )
                 )
             }
-            return false
+            return .queued(score: snapshot.formattedScore)
         }
-        guard let json = WatchBridge.encode(snapshot) else { return false }
+        guard let json = WatchBridge.encode(snapshot) else { return .encodeFailed }
         try? session.updateApplicationContext([WatchBridge.applicationContextSnapshotKey: json])
         // Application context plus a userInfo copy: the Watch app can persist
         // and reload even when the complication transfer is degraded.
         if forceComplication || kind == .foreground {
             session.transferUserInfo([WatchBridge.applicationContextSnapshotKey: json])
+        }
+        if session.isReachable {
+            session.sendMessage(
+                [WatchBridge.applicationContextSnapshotKey: json],
+                replyHandler: { [weak self] reply in
+                    Task { @MainActor in
+                        if let score = reply[WatchBridge.userInfoConfirmedScoreKey] as? String {
+                            self?.facePushMessage = WatchFacePushReport.watchConfirmed(score)
+                            self?.facePushSucceeded = true
+                            self?.isRefreshingFace = false
+                            self?.refreshAwaitingFlush = false
+                        }
+                    }
+                },
+                errorHandler: { _ in }
+            )
         }
 
         let nextFace = ComplicationPushPolicy.Face(snapshot)
@@ -175,15 +238,20 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         )
         let faceIsStale = lastComplicationTransferAt.map { Date().timeIntervalSince($0) > 300 } ?? true
         let pushNow = shouldPush || (kind == .foreground && faceIsStale)
-        guard pushNow else { return false }
-        session.transferCurrentComplicationUserInfo([WatchBridge.applicationContextSnapshotKey: json])
-        lastComplicationTransferAt = Date()
-        lastComplicationFace = nextFace
-        LastComplicationFaceStore.save(nextFace)
-        PairedWatchIdentityStore.remember(currentPath: watchPath)
-        return true
+        if pushNow {
+            session.transferCurrentComplicationUserInfo([WatchBridge.applicationContextSnapshotKey: json])
+            lastComplicationTransferAt = Date()
+            lastComplicationFace = nextFace
+            LastComplicationFaceStore.save(nextFace)
+            PairedWatchIdentityStore.remember(currentPath: watchPath)
+        }
+        return .transferred(
+            score: snapshot.formattedScore,
+            remaining: remaining,
+            complicationEnabled: complicationEnabled
+        )
         #else
-        return false
+        return .unsupported
         #endif
     }
 
@@ -193,7 +261,7 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
     private func flushPendingSend() {
         guard let pending = pendingSend else { return }
         pendingSend = nil
-        let transferred = sendToWatch(
+        let outcome = sendToWatch(
             pending.snapshot,
             kind: pending.kind,
             endedWorkoutSinceLastPush: pending.endedWorkoutSinceLastPush,
@@ -201,8 +269,11 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
             queueIfUnready: false,
             forceComplication: pending.forceComplication
         )
-        if transferred, pending.endedWorkoutSinceLastPush, let end = pending.latestWorkoutEnd {
+        if case .transferred = outcome, pending.endedWorkoutSinceLastPush, let end = pending.latestWorkoutEnd {
             lastPushedWorkoutEndDate = end
+        }
+        if refreshAwaitingFlush || pending.forceComplication {
+            presentFacePush(outcome)
         }
     }
 }

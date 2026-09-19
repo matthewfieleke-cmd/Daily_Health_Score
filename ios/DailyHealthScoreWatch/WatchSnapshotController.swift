@@ -1,5 +1,8 @@
 import Combine
 import Foundation
+#if canImport(HealthKit)
+import HealthKit
+#endif
 #if canImport(WatchConnectivity)
 import WatchConnectivity
 #endif
@@ -47,6 +50,7 @@ final class WatchSnapshotController: NSObject, ObservableObject {
         persistSnapshotForComplication()
         refreshNudges()
         reloadWidgets()
+        requestHealthIfNeeded()
     }
 
     /// Prompt only when the UI is on screen. A background first launch must not
@@ -91,6 +95,23 @@ final class WatchSnapshotController: NSObject, ObservableObject {
     private func persistSnapshotForComplication() {
         guard let snapshot else { return }
         WatchSnapshotStore.save(snapshot)
+    }
+
+    /// Companion HealthKit authorization is shared with iPhone. Asking here
+    /// lets the widget read sleep / fiber / exercise if the App Group is empty.
+    private func requestHealthIfNeeded() {
+        #if canImport(HealthKit)
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        guard let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis),
+              let fiber = HKObjectType.quantityType(forIdentifier: .dietaryFiber),
+              let exercise = HKObjectType.quantityType(forIdentifier: .appleExerciseTime) else { return }
+        HKHealthStore().requestAuthorization(toShare: [], read: [sleep, fiber, exercise]) { _, _ in }
+        #endif
+    }
+
+    private func applyPayload(_ payload: [String: Any]) {
+        guard let incoming = WatchBridge.snapshot(from: payload) else { return }
+        applyIncoming(incoming)
     }
 
     func logCheckIn(goalId: UUID) {
@@ -206,10 +227,7 @@ extension WatchSnapshotController: WCSessionDelegate {
         error: Error?
     ) {
         Task { @MainActor in
-            if let json = session.receivedApplicationContext[WatchBridge.applicationContextSnapshotKey] as? String,
-               let incoming = WatchBridge.decode(WatchSnapshot.self, from: json) {
-                self.applyIncoming(incoming)
-            }
+            self.applyPayload(session.receivedApplicationContext)
             self.flushOutgoingCheckIns()
             self.requestPhoneFaceRefresh()
         }
@@ -217,17 +235,32 @@ extension WatchSnapshotController: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
         Task { @MainActor in
-            guard let json = applicationContext[WatchBridge.applicationContextSnapshotKey] as? String,
-                  let incoming = WatchBridge.decode(WatchSnapshot.self, from: json) else { return }
-            self.applyIncoming(incoming)
+            self.applyPayload(applicationContext)
         }
     }
 
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
         Task { @MainActor in
-            guard let json = userInfo[WatchBridge.applicationContextSnapshotKey] as? String,
-                  let incoming = WatchBridge.decode(WatchSnapshot.self, from: json) else { return }
-            self.applyIncoming(incoming)
+            self.applyPayload(userInfo)
+        }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        Task { @MainActor in
+            self.applyPayload(message)
+        }
+    }
+
+    nonisolated func session(
+        _ session: WCSession,
+        didReceiveMessage message: [String: Any],
+        replyHandler: @escaping ([String: Any]) -> Void
+    ) {
+        Task { @MainActor in
+            self.applyPayload(message)
+            replyHandler([
+                WatchBridge.userInfoConfirmedScoreKey: self.snapshot?.formattedScore ?? "--"
+            ])
         }
     }
 }

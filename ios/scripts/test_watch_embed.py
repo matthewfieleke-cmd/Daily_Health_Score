@@ -74,6 +74,18 @@ class BundleIDAlignmentTests(unittest.TestCase):
         self.assertTrue(watch["WKApplication"])
         self.assertFalse(watch["WKRunsIndependentlyOfCompanionApp"])
 
+    def test_widget_declares_watch_app_bundle_and_healthkit(self) -> None:
+        widget = _plist(IOS / "DailyHealthScoreWatchWidgets" / "Info.plist")
+        attributes = widget["NSExtension"]["NSExtensionAttributes"]
+        self.assertEqual(attributes["WKAppBundleIdentifier"], "com.dailyhealthscore.app.mf.watchkitapp")
+        self.assertIn("NSHealthShareUsageDescription", widget)
+        watch_ent = _plist(IOS / "DailyHealthScoreWatch" / "DailyHealthScoreWatch.entitlements")
+        widget_ent = _plist(
+            IOS / "DailyHealthScoreWatchWidgets" / "DailyHealthScoreWatchWidgets.entitlements"
+        )
+        self.assertTrue(watch_ent["com.apple.developer.healthkit"])
+        self.assertTrue(widget_ent["com.apple.developer.healthkit"])
+
     def test_project_yml_pins_watch_folder_and_debug_plugins_mirror(self) -> None:
         yml = (IOS / "project.yml").read_text()
         self.assertIn("postGenCommand: python3 scripts/patch_watch_embed.py", yml)
@@ -89,6 +101,8 @@ class BundleIDAlignmentTests(unittest.TestCase):
         self.assertGreaterEqual(len(versions), 4)
         self.assertTrue(all(version == versions[0] for version in versions))
         self.assertIn("DHS_HAS_PRIVATE_CLOUD_COMPUTE", yml)
+        self.assertIn("HealthKit.framework", yml)
+        self.assertIn("WatchConnectivity.framework", yml)
 
 
 class DebugWatchMirrorTests(unittest.TestCase):

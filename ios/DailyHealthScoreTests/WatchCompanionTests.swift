@@ -496,6 +496,94 @@ final class WatchSnapshotTests: XCTestCase {
         XCTAssertEqual(compact.sleep.value, 5.4, accuracy: 0.01)
     }
 
+    func test_snapshotStoreDoesNotClaimSuccessWithoutAContainer() {
+        let snapshot = WatchSnapshot(
+            dateKey: "2026-08-16",
+            totalScore: 2.9,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 5.4, goal: 7.5, unit: "hr", points: 2.9, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Fiber", value: 0, goal: 40, unit: "g", points: 0, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Exercise", value: 0, goal: 30, unit: "min", points: 0, maxPoints: 2),
+            goals: [],
+            updatedAt: Date(timeIntervalSince1970: 1_787_000_000),
+            paceNudgesEnabled: true
+        )
+        XCTAssertFalse(WatchSnapshotStore.save(snapshot, defaults: nil, containerURL: nil))
+    }
+
+    func test_preferredForFaceFallsBackToARecentSnapshotWhenDateKeyDisagrees() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 19, hour: 15, minute: 45))!
+        let snapshot = WatchSnapshot(
+            dateKey: "1999-01-01",
+            totalScore: 3.3,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 6, goal: 7.5, unit: "hr", points: 3.2, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Fiber", value: 0, goal: 40, unit: "g", points: 0, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Exercise", value: 2, goal: 30, unit: "min", points: 0.1, maxPoints: 2),
+            goals: [],
+            updatedAt: now.addingTimeInterval(-120),
+            paceNudgesEnabled: true
+        )
+        let nextMorning = now.addingTimeInterval(20 * 3600)
+        XCTAssertNil(WatchSnapshot.newestCurrent(snapshot, nil, at: nextMorning, calendar: calendar))
+        XCTAssertEqual(
+            WatchSnapshot.preferredForFace(snapshot, at: now, calendar: calendar)?.formattedScore,
+            "3.3"
+        )
+        XCTAssertNil(
+            WatchSnapshot.preferredForFace(snapshot, at: nextMorning, calendar: calendar)
+        )
+    }
+
+    func test_watchBridgeDecodesSnapshotFromConnectivityPayload() {
+        let snapshot = WatchSnapshot(
+            dateKey: "2026-09-19",
+            totalScore: 3.3,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 6.2, goal: 7.5, unit: "hr", points: 3.3, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Fiber", value: 0, goal: 40, unit: "g", points: 0, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Exercise", value: 0, goal: 30, unit: "min", points: 0, maxPoints: 2),
+            goals: [],
+            updatedAt: Date(timeIntervalSince1970: 1_787_000_000),
+            paceNudgesEnabled: true
+        )
+        let json = try XCTUnwrap(WatchBridge.encode(snapshot))
+        let decoded = try XCTUnwrap(
+            WatchBridge.snapshot(from: [WatchBridge.applicationContextSnapshotKey: json])
+        )
+        XCTAssertEqual(decoded.formattedScore, "3.3")
+        XCTAssertNil(WatchBridge.snapshot(from: [WatchBridge.userInfoRefreshFaceKey: "1"]))
+    }
+
+    func test_watchFaceScoreUsesFourFourTwoMath() {
+        let snapshot = WatchFaceScore.snapshot(
+            dateKey: "2026-09-19",
+            sleepHours: 7.5,
+            fiberGrams: 20,
+            exerciseMinutes: 15,
+            now: Date(timeIntervalSince1970: 1_787_000_000)
+        )
+        XCTAssertEqual(snapshot.sleep.points, 4, accuracy: 0.01)
+        XCTAssertEqual(snapshot.fiber.points, 2, accuracy: 0.01)
+        XCTAssertEqual(snapshot.exercise.points, 1, accuracy: 0.01)
+        XCTAssertEqual(snapshot.totalScore, 7, accuracy: 0.01)
+        XCTAssertEqual(snapshot.formattedScore, "7.0")
+    }
+
+    func test_watchFacePushReportNeverLooksEmpty() {
+        XCTAssertFalse(WatchFacePushReport.sending.isEmpty)
+        XCTAssertEqual(
+            WatchFacePushReport.message(.transferred(score: "3.3", remaining: 12, complicationEnabled: true)),
+            "Sent 3.3. Raise your wrist. Face updates left today: 12."
+        )
+        XCTAssertTrue(
+            WatchFacePushReport.message(.queued(score: "3.3")).contains("connecting")
+        )
+        XCTAssertTrue(WatchFacePushReport.watchConfirmed("3.3").contains("3.3"))
+        XCTAssertTrue(WatchFacePushOutcome.queued(score: "3.3").isQueued)
+        XCTAssertTrue(WatchFacePushOutcome.transferred(score: "3.3", remaining: 1, complicationEnabled: false).isSuccess)
+        XCTAssertFalse(WatchFacePushOutcome.notPaired.isSuccess)
+    }
+
     func test_displayableAcceptsSameDayUpdatedAtWhenDateKeyDisagrees() {
         let calendar = Calendar(identifier: .gregorian)
         let now = Date()
