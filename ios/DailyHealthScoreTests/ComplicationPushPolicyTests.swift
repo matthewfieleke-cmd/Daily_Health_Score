@@ -163,6 +163,26 @@ final class ComplicationPushPolicyTests: XCTestCase {
         XCTAssertFalse(ComplicationEnabledEdge.justBecameEnabled(previous: true, current: false))
     }
 
+    func test_nilWatchDirectoryWithLeftoverPathCountsAsChanged() {
+        let suite = "dhs.pairedWatch.nilURL.tests"
+        UserDefaults().removePersistentDomain(forName: suite)
+        let defaults = UserDefaults(suiteName: suite)!
+        PairedWatchIdentityStore.remember(currentPath: "/watch/series10", defaults: defaults)
+        XCTAssertTrue(PairedWatchIdentityStore.hasChanged(currentPath: nil, defaults: defaults))
+        UserDefaults().removePersistentDomain(forName: suite)
+    }
+
+    func test_nilWatchDirectoryAfterUnknownRememberIsNotChanged() {
+        let suite = "dhs.pairedWatch.unknown.tests"
+        UserDefaults().removePersistentDomain(forName: suite)
+        let defaults = UserDefaults(suiteName: suite)!
+        XCTAssertTrue(PairedWatchIdentityStore.hasChanged(currentPath: nil, defaults: defaults))
+        PairedWatchIdentityStore.remember(currentPath: nil, defaults: defaults)
+        XCTAssertFalse(PairedWatchIdentityStore.hasChanged(currentPath: nil, defaults: defaults))
+        XCTAssertTrue(PairedWatchIdentityStore.hasChanged(currentPath: "/watch/ultra4", defaults: defaults))
+        UserDefaults().removePersistentDomain(forName: suite)
+    }
+
     func test_firstSnapshotPushes() {
         let today = face(sleep: 7.2, score: 3.8)
         XCTAssertTrue(
@@ -175,6 +195,127 @@ final class ComplicationPushPolicyTests: XCTestCase {
             )
         )
         XCTAssertEqual(ComplicationPushPolicy.reserveTransfers, 4)
+    }
+
+    func test_forceTransferIgnoresEnabledFlagAndAlreadyPaintedFace() {
+        let today = face(sleep: 7.2, score: 3.8)
+        XCTAssertTrue(
+            ComplicationTransferDecision.shouldTransfer(
+                decision(
+                    remaining: 0,
+                    enabled: false,
+                    alreadyOnThisWatch: true,
+                    force: true,
+                    kind: .foreground,
+                    previous: today,
+                    next: today
+                )
+            )
+        )
+    }
+
+    func test_disabledComplicationTransfersFirstForegroundPaint() {
+        let today = face(sleep: 7.2, score: 3.8)
+        XCTAssertTrue(
+            ComplicationTransferDecision.shouldTransfer(
+                decision(
+                    remaining: 0,
+                    enabled: false,
+                    alreadyOnThisWatch: false,
+                    force: false,
+                    kind: .foreground,
+                    previous: nil,
+                    next: today
+                )
+            )
+        )
+        XCTAssertFalse(
+            ComplicationTransferDecision.shouldTransfer(
+                decision(
+                    remaining: 0,
+                    enabled: false,
+                    alreadyOnThisWatch: true,
+                    force: false,
+                    kind: .foreground,
+                    previous: today,
+                    next: today
+                )
+            )
+        )
+    }
+
+    func test_enabledZeroRemainingSkipsUnlessForced() {
+        let empty = face(sleep: 0, score: 0)
+        let slept = face(sleep: 7.2, score: 3.8)
+        XCTAssertFalse(
+            ComplicationTransferDecision.shouldTransfer(
+                decision(
+                    remaining: 0,
+                    enabled: true,
+                    alreadyOnThisWatch: false,
+                    force: false,
+                    kind: .sleep,
+                    previous: empty,
+                    next: slept
+                )
+            )
+        )
+        XCTAssertTrue(
+            ComplicationTransferDecision.shouldTransfer(
+                decision(
+                    remaining: 0,
+                    enabled: true,
+                    alreadyOnThisWatch: true,
+                    force: true,
+                    kind: .sleep,
+                    previous: empty,
+                    next: slept
+                )
+            )
+        )
+    }
+
+    func test_watchReplacedTransfersWhenEnabledFlagIsFalse() {
+        let today = face(sleep: 7.2, score: 3.8)
+        XCTAssertTrue(
+            ComplicationTransferDecision.shouldTransfer(
+                decision(
+                    remaining: 0,
+                    enabled: false,
+                    watchReplaced: true,
+                    alreadyOnThisWatch: false,
+                    force: false,
+                    kind: .foreground,
+                    previous: nil,
+                    next: today
+                )
+            )
+        )
+    }
+
+    private func decision(
+        remaining: Int,
+        enabled: Bool,
+        justEnabled: Bool = false,
+        watchReplaced: Bool = false,
+        alreadyOnThisWatch: Bool,
+        force: Bool,
+        kind: HealthChangeKind,
+        previous: ComplicationPushPolicy.Face?,
+        next: ComplicationPushPolicy.Face
+    ) -> ComplicationTransferDecision.Input {
+        ComplicationTransferDecision.Input(
+            remainingTransfers: remaining,
+            complicationEnabled: enabled,
+            justEnabled: justEnabled,
+            watchReplaced: watchReplaced,
+            alreadyOnThisWatch: alreadyOnThisWatch,
+            forceComplication: force,
+            kind: kind,
+            endedWorkoutSinceLastPush: false,
+            previousFace: previous,
+            nextFace: next
+        )
     }
 
     private func face(

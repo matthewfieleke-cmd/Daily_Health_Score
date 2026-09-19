@@ -146,22 +146,25 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
             current: complicationEnabled
         )
         lastComplicationEnabled = complicationEnabled
-        let remaining = complicationEnabled
-            ? session.remainingComplicationUserInfoTransfers
-            : 0
+        // Do not coerce remaining to 0 when `isComplicationEnabled` is false.
+        // That flag is a false-negative on Modular Ultra / watchOS 27; zeroing
+        // it here is why the Ultra 4 face stayed on "Open iPhone".
+        let remaining = session.remainingComplicationUserInfoTransfers
         let previousFace = watchReplaced ? nil : lastComplicationFace
         let alreadyOnThisWatch = !watchReplaced && lastComplicationFace == nextFace
-        let shouldPush = remaining > 0 && complicationEnabled && (
-            justEnabled
-                || watchReplaced
-                || (forceComplication && !alreadyOnThisWatch)
-                || ComplicationPushPolicy.shouldPushComplication(
-                    from: previousFace,
-                    to: nextFace,
-                    kind: kind,
-                    endedWorkoutSinceLastPush: endedWorkoutSinceLastPush,
-                    remainingTransfers: remaining
-                )
+        let shouldPush = ComplicationTransferDecision.shouldTransfer(
+            ComplicationTransferDecision.Input(
+                remainingTransfers: remaining,
+                complicationEnabled: complicationEnabled,
+                justEnabled: justEnabled,
+                watchReplaced: watchReplaced,
+                alreadyOnThisWatch: alreadyOnThisWatch,
+                forceComplication: forceComplication,
+                kind: kind,
+                endedWorkoutSinceLastPush: endedWorkoutSinceLastPush,
+                previousFace: previousFace,
+                nextFace: nextFace
+            )
         )
         guard shouldPush else { return false }
         session.transferCurrentComplicationUserInfo([WatchBridge.applicationContextSnapshotKey: json])

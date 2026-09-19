@@ -23,14 +23,14 @@ struct ScoreProvider: TimelineProvider {
         completion(
             ScoreEntry(
                 date: now,
-                snapshot: WatchSnapshot.currentIfToday(WatchSnapshotStore.load(), at: now)
+                snapshot: Self.loadLiveSnapshot(at: now)
             )
         )
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ScoreEntry>) -> Void) {
         let now = Date()
-        let snapshot = WatchSnapshot.currentIfToday(WatchSnapshotStore.load(), at: now)
+        let snapshot = Self.loadLiveSnapshot(at: now)
         var entries = [ScoreEntry(date: now, snapshot: snapshot)]
         let calendar = Calendar.current
         let midnight = calendar.nextDate(
@@ -43,6 +43,13 @@ struct ScoreProvider: TimelineProvider {
         }
         let reloadAfter = WatchComplicationTimeline.reloadDate(now: now, midnight: midnight)
         completion(Timeline(entries: entries, policy: .after(reloadAfter)))
+    }
+
+    /// WidgetKit is a separate process from the Watch app. Re-read the App
+    /// Group file here so a stale timeline entry cannot keep "Open iPhone"
+    /// on the face after the Watch app already saved today.
+    static func loadLiveSnapshot(at now: Date) -> WatchSnapshot? {
+        WatchSnapshot.newestCurrent(nil, WatchSnapshotStore.load(), at: now)
     }
 }
 

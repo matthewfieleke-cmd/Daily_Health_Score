@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import plistlib
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -84,7 +85,9 @@ class BundleIDAlignmentTests(unittest.TestCase):
         self.assertNotIn("outputFiles:", yml)
         self.assertIn("executable: DailyHealthScoreWatch", yml)
         self.assertIn("OTHER_CODE_SIGN_FLAGS: --generate-entitlement-der", yml)
-        self.assertIn('CURRENT_PROJECT_VERSION: "15"', yml)
+        versions = re.findall(r'CURRENT_PROJECT_VERSION:\s*"(\d+)"', yml)
+        self.assertGreaterEqual(len(versions), 4)
+        self.assertTrue(all(version == versions[0] for version in versions))
         self.assertIn("DHS_HAS_PRIVATE_CLOUD_COMPUTE", yml)
 
 

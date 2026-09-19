@@ -12,7 +12,7 @@ enum WatchSnapshotStore {
         containerURL: URL? = WatchSnapshotStore.groupContainer
     ) -> WatchSnapshot? {
         if let file = snapshotFileURL(containerURL: containerURL),
-           let data = try? Data(contentsOf: file),
+           let data = try? Data(contentsOf: file, options: [.uncached]),
            let decoded = try? WatchBridge.decoder.decode(WatchSnapshot.self, from: data) {
             return decoded
         }
@@ -30,21 +30,34 @@ enum WatchSnapshotStore {
         var wrote = false
         if let json = String(data: data, encoding: .utf8) {
             defaults?.set(json, forKey: WatchBridge.snapshotDefaultsKey)
+            defaults?.synchronize()
             wrote = true
         }
         if let file = snapshotFileURL(containerURL: containerURL) {
             do {
+                let folder = file.deletingLastPathComponent()
                 try FileManager.default.createDirectory(
-                    at: file.deletingLastPathComponent(),
+                    at: folder,
                     withIntermediateDirectories: true
                 )
-                try data.write(to: file, options: .atomic)
+                try? Self.protect(folder)
+                try data.write(to: file, options: [.atomic, .noFileProtection])
+                try? Self.protect(file)
                 wrote = true
             } catch {
                 // UserDefaults copy may still be enough for the Watch app itself.
             }
         }
         return wrote
+    }
+
+    /// WidgetKit reads this file on a locked wrist. Complete protection makes
+    /// `getTimeline` return nil and the face stays "-- / Open iPhone".
+    static func protect(_ url: URL) throws {
+        try FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.none],
+            ofItemAtPath: url.path
+        )
     }
 
     static func clear(
