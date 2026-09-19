@@ -53,11 +53,15 @@ After `xcodegen generate`, confirm **DailyHealthScore → Build Phases → Embed
 Then, on a **newly paired Ultra 4** (or any Watch that will not take the app):
 
 1. On the iPhone, delete **Daily Health Score** completely (long-press → Remove App → Delete App). Overwriting an old Series 10 install can leave iOS thinking there is no Watch companion.
-2. On the Watch: **Settings → Privacy & Security → Developer Mode** On, then restart if Xcode still cannot see the Ultra 4.
-3. In Xcode: **Product → Clean Build Folder**.
-4. Scheme **DailyHealthScore**, destination **Matt’s iPhone**, Run. Unlock the Watch and leave it on the charger while Xcode copies the companion.
-5. Open the **Watch** app on the iPhone. Check the **My Watch** home list **and** **Available Apps** (alphabetically between CVS Health and ESPN).
-6. If it is still missing, switch the scheme to **DailyHealthScoreWatch**, destination **Matt’s Ultra 4** (not Series 10), and Run.
+2. On the Ultra 4: **Settings → Privacy & Security → Developer Mode** On. Restart the watch. Developer Mode is per-watch; the Series 10 setting does not carry over.
+3. On the iPhone: **Settings → General → VPN & Device Management** and trust **Apple Development: Matthew Curtis Fieleke**.
+4. Xcode → **Window → Devices and Simulators**. Select the Ultra 4 (under the iPhone). Click **Use for Development** so Xcode registers this watch’s UDID. The Series 10 profile does not include the Ultra 4.
+5. In Xcode: **Product → Clean Build Folder**.
+6. Scheme **DailyHealthScoreWatch**, destination **Matt’s Ultra 4** (not Series 10), Run. This is what actually adds the new watch to the development profile. Unlock the watch and leave it on the charger.
+7. Then scheme **DailyHealthScore**, destination **Matt’s iPhone**, Run.
+8. Open the **Watch** app on the iPhone. Check the **My Watch** home list **and** **Available Apps** (alphabetically between CVS Health and ESPN).
+
+If the Ultra 4 shows **Unable to Install “Daily Health Score”** / **integrity could not be verified**, the new watch is not in the signing profile or Developer Mode is still off. Do steps 2–6 again, then on each of **DailyHealthScore**, **DailyHealthScoreWatch**, and **DailyHealthScoreWatchWidgets** toggle **Automatically manage signing** off and on.
 
 The iPhone app can still run if the Watch companion is waiting. A missing Watch app is a packaging/install issue, not a coach or SMART-goal issue.
 
