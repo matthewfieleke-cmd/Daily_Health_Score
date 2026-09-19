@@ -24,21 +24,20 @@ enum CoachModelTier: String, Equatable, Sendable {
 
 /// Chooses and builds the session for each request.
 ///
-/// PCC routing is fully wired: intents still prefer the server model, the daily
-/// card still asks for it, and a server failure still falls back on-device.
-/// `DHS_HAS_PRIVATE_CLOUD_COMPUTE` is on. The managed Private Cloud Compute
-/// entitlement must also be on the App ID. Routing still checks availability
-/// and falls back on-device when the server model is missing or out of quota.
+/// Chat, the daily card, and the running summary all use Private Cloud Compute
+/// when that model is available. On-device is only the fallback for missing
+/// entitlement, no network, quota, or a failed server request.
 @MainActor
 enum CoachModelProvider {
     private static var cachedContextTokens: [CoachModelTier: Int] = [:]
 
-    /// The tier that should answer this message. Trivial and precomputed
-    /// questions stay on-device so the daily allowance is spent where depth
-    /// actually changes the answer.
+    /// Cloud first. `intent` is kept so call sites stay stable.
     static func tier(for intent: CoachIntent) -> CoachModelTier {
-        guard intent.prefersServerModel, isServerModelAvailable else { return .onDevice }
-        return .privateCloud
+        preferredTier()
+    }
+
+    static func preferredTier() -> CoachModelTier {
+        isServerModelAvailable ? .privateCloud : .onDevice
     }
 
     static func contextBudget(for tier: CoachModelTier) async -> CoachContextBudget {

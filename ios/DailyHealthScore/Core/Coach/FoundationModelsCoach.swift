@@ -42,9 +42,7 @@ final class FoundationModelsCoach {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             try ensureAvailable()
-            // The daily card is generated once per day, so it is worth the
-            // server model when that is available.
-            let tier = CoachModelProvider.isServerModelAvailable ? CoachModelTier.privateCloud : .onDevice
+            let tier = CoachModelProvider.preferredTier()
             let budget = await CoachModelProvider.contextBudget(for: tier)
             let session = CoachModelProvider.makeSession(tier: tier, instructions: CoachCharter.instructions)
             let knowledge = LifestyleMedicineKnowledge.promptBlock(
@@ -330,7 +328,7 @@ final class FoundationModelsCoach {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             try ensureAvailable()
-            let session = LanguageModelSession(instructions: """
+            let instructions = """
             You maintain a short running summary for DHS Lifestyle Coach.
             Write neutral, accepting, non-judgmental notes.
             Include themes, what helped, open threads, and emotional stance if relevant.
@@ -338,10 +336,9 @@ final class FoundationModelsCoach {
             Exclude raw daily metric tables and diagnostic labels.
             Do not restore facts that are absent from CURRENT MEMORY. Deleted notes stay gone.
             Keep under 900 characters.
-            """)
-            // Summary refresh runs after every chat turn, so it stays on-device
-            // rather than spending the daily server allowance on bookkeeping.
-            let budget = await CoachModelProvider.contextBudget(for: .onDevice)
+            """
+            let tier = CoachModelProvider.preferredTier()
+            let budget = await CoachModelProvider.contextBudget(for: tier)
             let transcript = Self.transcriptBlock(
                 recentTurns,
                 maxTurns: budget.transcriptTurns,
@@ -359,11 +356,19 @@ final class FoundationModelsCoach {
 
             Write the updated running summary only.
             """
-            let response = try await session.respond(
-                to: prompt,
-                generating: GenerableCoachSummary.self
-            )
-            return response.content.summary.trimmedForCoach()
+            let summary: String
+            do {
+                summary = try await CoachModelProvider
+                    .makeSession(tier: tier, instructions: instructions)
+                    .respond(to: prompt, generating: GenerableCoachSummary.self)
+                    .content.summary.trimmedForCoach()
+            } catch where tier == .privateCloud {
+                summary = try await CoachModelProvider
+                    .makeSession(tier: .onDevice, instructions: instructions)
+                    .respond(to: prompt, generating: GenerableCoachSummary.self)
+                    .content.summary.trimmedForCoach()
+            }
+            return summary
         }
         #endif
         throw CoachError.unavailable(.unavailable)

@@ -112,14 +112,12 @@ final class CoachIntentTests: XCTestCase {
         )
     }
 
-    /// The Private Cloud Compute allowance is per person per day, so it is spent
-    /// only where a larger model changes the answer.
-    func test_serverModelIsReservedForAnswersThatBenefit() {
-        XCTAssertTrue(CoachIntent.education.prefersServerModel)
-        XCTAssertTrue(CoachIntent.support.prefersServerModel)
-        XCTAssertTrue(CoachIntent.planning.prefersServerModel)
-        XCTAssertFalse(CoachIntent.dataLookup.prefersServerModel)
-        XCTAssertFalse(CoachIntent.smallTalk.prefersServerModel)
+    func test_everyIntentPrefersTheCloudModel() {
+        for intent in [
+            CoachIntent.education, .support, .planning, .general, .dataLookup, .smallTalk
+        ] {
+            XCTAssertTrue(intent.prefersServerModel, "\(intent)")
+        }
     }
 
     func test_serverTierAssumesTheLargerWindow() {
@@ -129,23 +127,14 @@ final class CoachIntentTests: XCTestCase {
         )
     }
 
-    /// Intents that do not need depth stay on-device even when PCC is compiled in.
     @MainActor
-    func test_intentsThatDoNotPreferServerStayOnDevice() {
-        XCTAssertEqual(CoachModelProvider.tier(for: .dataLookup), .onDevice)
-        XCTAssertEqual(CoachModelProvider.tier(for: .smallTalk), .onDevice)
-    }
-
-    /// Education prefers PCC, but only when the server model is actually available.
-    @MainActor
-    func test_serverPreferringIntentsFollowAvailability() {
-        if CoachModelProvider.isServerModelAvailable {
-            XCTAssertEqual(CoachModelProvider.tier(for: .education), .privateCloud)
-            XCTAssertEqual(CoachModelProvider.tier(for: .planning), .privateCloud)
-        } else {
-            XCTAssertEqual(CoachModelProvider.tier(for: .education), .onDevice)
-            XCTAssertEqual(CoachModelProvider.tier(for: .planning), .onDevice)
-        }
+    func test_everyIntentUsesCloudWhenTheServerModelIsAvailable() {
+        let expected: CoachModelTier = CoachModelProvider.isServerModelAvailable ? .privateCloud : .onDevice
+        XCTAssertEqual(CoachModelProvider.preferredTier(), expected)
+        XCTAssertEqual(CoachModelProvider.tier(for: .dataLookup), expected)
+        XCTAssertEqual(CoachModelProvider.tier(for: .smallTalk), expected)
+        XCTAssertEqual(CoachModelProvider.tier(for: .education), expected)
+        XCTAssertEqual(CoachModelProvider.tier(for: .planning), expected)
     }
 
     func test_contractsEncodeCriticalRules() {
