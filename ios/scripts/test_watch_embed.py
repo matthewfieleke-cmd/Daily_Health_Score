@@ -83,7 +83,8 @@ class BundleIDAlignmentTests(unittest.TestCase):
         self.assertNotIn("mirror_watch_embed.sh", yml)
         self.assertNotIn("outputFiles:", yml)
         self.assertIn("executable: DailyHealthScoreWatch", yml)
-        self.assertIn('CURRENT_PROJECT_VERSION: "13"', yml)
+        self.assertIn("OTHER_CODE_SIGN_FLAGS: --generate-entitlement-der", yml)
+        self.assertIn('CURRENT_PROJECT_VERSION: "14"', yml)
 
 
 class DebugWatchMirrorTests(unittest.TestCase):
@@ -166,6 +167,42 @@ class DebugWatchMirrorTests(unittest.TestCase):
             self._run(env)
             self.assertTrue(watch_app.is_dir())
             self.assertFalse((contents / "PlugIns").exists())
+
+    def test_debug_reseals_iphone_wrapper_only(self) -> None:
+        import os
+        import stat
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            products = Path(tmp)
+            contents = products / "DailyHealthScore.app"
+            watch_app = contents / "Watch" / "DailyHealthScoreWatch.app"
+            watch_app.mkdir(parents=True)
+            (watch_app / "Info.plist").write_text("placeholder", encoding="utf-8")
+            log = Path(tmp) / "codesign.log"
+            stub = Path(tmp) / "codesign"
+            stub.write_text(
+                f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{log}'\n",
+                encoding="utf-8",
+            )
+            stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+            env = os.environ.copy()
+            env.update(
+                {
+                    "CONFIGURATION": "Debug",
+                    "PLATFORM_NAME": "iphoneos",
+                    "TARGET_BUILD_DIR": str(products),
+                    "FULL_PRODUCT_NAME": "DailyHealthScore.app",
+                    "EXPANDED_CODE_SIGN_IDENTITY": "TESTIDENTITY",
+                    "CODESIGN": str(stub),
+                }
+            )
+            self._run(env)
+            recorded = log.read_text(encoding="utf-8")
+            self.assertIn("TESTIDENTITY", recorded)
+            self.assertIn("--generate-entitlement-der", recorded)
+            self.assertIn(str(contents), recorded)
+            self.assertNotIn("DailyHealthScoreWatch.app", recorded)
 
 
 if __name__ == "__main__":

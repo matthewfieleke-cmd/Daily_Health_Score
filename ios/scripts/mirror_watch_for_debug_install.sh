@@ -8,6 +8,11 @@
 #
 # Release and Archive keep Watch/ only. A PlugIns copy in the App Store IPA
 # fails validation with "should be under Watch."
+#
+# Adding PlugIns/ after Xcode signs the iPhone wrapper invalidates that
+# signature. watchOS then shows "Unable to Install / integrity could not be
+# verified." Re-seal only the iPhone wrapper (the Watch .app keeps its own
+# watchOS identity).
 set -eu
 
 WATCH_APP_NAME="DailyHealthScoreWatch.app"
@@ -42,6 +47,26 @@ copy_tree() {
   fi
 }
 
+reseal_iphone_wrapper() {
+  identity="${EXPANDED_CODE_SIGN_IDENTITY:-}"
+  if [ -z "${identity}" ] || [ "${identity}" = "-" ]; then
+    echo "mirror-watch-debug: skip re-sign (no identity)"
+    return 0
+  fi
+  codesign_bin="${CODESIGN:-/usr/bin/codesign}"
+  if [ ! -x "${codesign_bin}" ]; then
+    echo "mirror-watch-debug: skip re-sign (no codesign)"
+    return 0
+  fi
+  # Inside-out is Xcode's rule, but the Watch .app must keep the watchOS
+  # identity. Only re-seal the iPhone wrapper so CodeResources includes PlugIns/.
+  "${codesign_bin}" --force --sign "${identity}" \
+    --preserve-metadata=identifier,entitlements,flags \
+    --generate-entitlement-der \
+    "${APP_BUNDLE}"
+  echo "mirror-watch-debug: re-signed iPhone wrapper after companion layout"
+}
+
 if [ ! -d "${APP_BUNDLE}" ]; then
   echo "mirror-watch-debug: missing iPhone app bundle: ${APP_BUNDLE}" >&2
   exit 1
@@ -49,18 +74,21 @@ fi
 
 if [ -d "${SRC_WATCH}" ] && [ -d "${SRC_PLUGINS}" ]; then
   echo "mirror-watch-debug: Watch app already in Watch/ and PlugIns/"
+  reseal_iphone_wrapper
   exit 0
 fi
 
 if [ -d "${SRC_WATCH}" ]; then
   copy_tree "${SRC_WATCH}" "${SRC_PLUGINS}"
   echo "mirror-watch-debug: copied Watch/ -> PlugIns/ for device install"
+  reseal_iphone_wrapper
   exit 0
 fi
 
 if [ -d "${SRC_PLUGINS}" ]; then
   copy_tree "${SRC_PLUGINS}" "${SRC_WATCH}"
   echo "mirror-watch-debug: copied PlugIns/ -> Watch/ for Available Apps"
+  reseal_iphone_wrapper
   exit 0
 fi
 
