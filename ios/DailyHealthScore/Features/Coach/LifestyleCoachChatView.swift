@@ -66,6 +66,13 @@ struct LifestyleCoachChatView: View {
                             goalProposalCard(proposal)
                                 .id("goal-proposal")
                         }
+                        if let error = coach.chatError, !coach.isChatBusy,
+                           coach.memory.turns.last?.role != .coach {
+                            Text(error)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                                .id("chat-error")
+                        }
                         if showFeedback {
                             CoachLocalFeedbackBar(target: "suggestion", goalId: focusedGoalID) { useful in
                                 coach.recordLocalFeedback(target: "suggestion", useful: useful, goalId: focusedGoalID)
@@ -302,11 +309,12 @@ struct LifestyleCoachChatView: View {
 
     private func send(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !coach.isChatBusy else { return }
         planningGoal = planningGoal || CoachGoalPlanning.isGoalConversation(
             message: trimmed, focusedGoalID: focusedGoalID, hasProposal: coach.goalProposal != nil
         )
         draft = ""
+        coach.beginChatSend()
         Task {
             await coach.sendChatMessage(
                 trimmed,
