@@ -16,8 +16,8 @@ struct LifestyleCoachChatView: View {
 
     init(
         initialMessage: String = "",
-        focusedGoalID: UUID? = nil,
-        focus: CoachFocusContext? = nil
+        focus: CoachFocusContext? = nil,
+        focusedGoalID: UUID? = nil
     ) {
         _draft = State(initialValue: initialMessage)
         _focusedGoalID = State(initialValue: focusedGoalID ?? focus?.goalId)
