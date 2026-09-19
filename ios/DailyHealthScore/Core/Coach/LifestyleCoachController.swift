@@ -44,18 +44,6 @@ final class LifestyleCoachController: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
-        // Only a real revision bump (delete / clear / contradict) cancels an
-        // in-flight reply. Saving the user bubble calls reload(), which used
-        // to republish the same revision and drop the coach answer.
-        memory.$memoryRevision
-            .removeDuplicates()
-            .dropFirst()
-            .sink { [weak self] _ in
-                guard let self, self.isChatBusy else { return }
-                self.chatGenerationID = UUID()
-                self.isChatBusy = false
-            }
-            .store(in: &cancellables)
         refreshAvailability()
         dailyCard = memory.cachedDailyCard
     }
@@ -141,7 +129,11 @@ final class LifestyleCoachController: ObservableObject {
         activities: [SMARTGoalActivity] = []
     ) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isChatBusy else { return }
+        guard !trimmed.isEmpty else { return }
+        if !isChatBusy {
+            beginChatSend()
+        }
+        let generationID = chatGenerationID
 
         // Acute risk is answered deterministically, before availability or the model.
         if case .escalate(let message) = CoachSafetyGate.evaluate(trimmed) {
@@ -149,18 +141,17 @@ final class LifestyleCoachController: ObservableObject {
             memory.append(CoachChatTurn(role: .user, text: trimmed))
             memory.append(CoachChatTurn(role: .coach, text: message))
             chatError = nil
+            if chatGenerationID == generationID { isChatBusy = false }
             return
         }
 
         refreshAvailability()
         guard availability == .available else {
             chatError = availability.guidance
+            if chatGenerationID == generationID { isChatBusy = false }
             return
         }
 
-        isChatBusy = true
-        let generationID = UUID()
-        chatGenerationID = generationID
         let memoryRevisionAtStart = memory.memoryRevision
         chatError = nil
         defer { if chatGenerationID == generationID { isChatBusy = false } }
@@ -219,8 +210,19 @@ final class LifestyleCoachController: ObservableObject {
             }
         } catch {
             guard chatGenerationID == generationID else { return }
-            chatError = error.localizedDescription
+            let message = error.localizedDescription.isEmpty
+                ? FoundationModelsCoach.friendlyFailureMessage
+                : error.localizedDescription
+            chatError = message
+            memory.append(CoachChatTurn(role: .coach, text: message))
         }
+    }
+
+    /// Call from the UI before the async send so a second chip tap cannot start
+    /// another generation and invalidate this one.
+    func beginChatSend() {
+        isChatBusy = true
+        chatGenerationID = UUID()
     }
 
     func clearMemory() {
