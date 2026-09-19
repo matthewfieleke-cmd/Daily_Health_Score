@@ -12,11 +12,7 @@ options:
 settings:
   SWIFT_VERSION: "5.9"
   MARKETING_VERSION: "1.7.0"
-  CURRENT_PROJECT_VERSION: "14"
-  # PCC's PrivateCloudComputeLanguageModel is not in every iOS 27 SDK. Leave this
-  # unset so the coach compiles and runs on-device. When Xcode's FoundationModels
-  # module contains that type AND the managed entitlement is on the App ID, add:
-  # SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) DHS_HAS_PRIVATE_CLOUD_COMPUTE
+  CURRENT_PROJECT_VERSION: "15"
 targets:
   DailyHealthScore:
     type: application
@@ -39,8 +35,11 @@ targets:
       # interface orientations in Info.plist or setting UIRequiresFullScreen.
       TARGETED_DEVICE_FAMILY: "1"
       MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "14"
+      CURRENT_PROJECT_VERSION: "15"
       OTHER_CODE_SIGN_FLAGS: --generate-entitlement-der
+      # Turns on PrivateCloudComputeLanguageModel routing. Requires the managed
+      # Private Cloud Compute entitlement on the App ID.
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) DHS_HAS_PRIVATE_CLOUD_COMPUTE
       # Allow the Debug Watch/PlugIns mirror to write into the .app after embed.
       ENABLE_USER_SCRIPT_SANDBOXING: NO
     entitlements:
@@ -85,7 +84,7 @@ targets:
       "EXCLUDED_ARCHS[sdk=watchos*]": "arm64_32 armv7k"
       OTHER_CODE_SIGN_FLAGS: --generate-entitlement-der
       MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "14"
+      CURRENT_PROJECT_VERSION: "15"
     entitlements:
       path: DailyHealthScoreWatch/DailyHealthScoreWatch.entitlements
     dependencies:
@@ -118,7 +117,7 @@ targets:
       OTHER_CODE_SIGN_FLAGS: --generate-entitlement-der
       LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/Frameworks @executable_path/../../Frameworks
       MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "14"
+      CURRENT_PROJECT_VERSION: "15"
     entitlements:
       path: DailyHealthScoreWatchWidgets/DailyHealthScoreWatchWidgets.entitlements
 

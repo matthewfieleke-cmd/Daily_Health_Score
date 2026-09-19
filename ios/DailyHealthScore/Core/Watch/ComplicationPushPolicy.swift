@@ -103,6 +103,32 @@ enum LastComplicationFaceStore {
     }
 }
 
+/// `WCSession.watchDirectoryURL` is unique per paired watch. A leftover Series 10
+/// face in `LastComplicationFaceStore` must not skip the Ultra 4 transfer.
+enum PairedWatchIdentityStore {
+    static let defaultsKey = "dhs.pairedWatchDirectory"
+
+    static func hasChanged(currentPath: String?, defaults: UserDefaults = .standard) -> Bool {
+        defaults.string(forKey: defaultsKey) != currentPath
+    }
+
+    /// Call only after a complication transfer actually went to this watch.
+    static func remember(currentPath: String?, defaults: UserDefaults = .standard) {
+        if let currentPath, !currentPath.isEmpty {
+            defaults.set(currentPath, forKey: defaultsKey)
+        } else {
+            defaults.removeObject(forKey: defaultsKey)
+        }
+    }
+}
+
+enum ComplicationEnabledEdge {
+    /// True only when the session reports the complication just appeared on a face.
+    static func justBecameEnabled(previous: Bool?, current: Bool) -> Bool {
+        current && previous == false
+    }
+}
+
 /// A snapshot that could not be sent because Watch Connectivity was still
 /// activating. Always keep the newest snapshot; remember a workout if either
 /// attempt had one.
@@ -111,6 +137,7 @@ struct WatchPendingSend: Equatable {
     var kind: HealthChangeKind
     var endedWorkoutSinceLastPush: Bool
     var latestWorkoutEnd: Date?
+    var forceComplication: Bool
 }
 
 enum WatchPendingSendMerge {
@@ -121,6 +148,7 @@ enum WatchPendingSendMerge {
         guard let current else { return incoming }
         var merged = incoming
         merged.kind = preferredKind(current.kind, incoming.kind)
+        merged.forceComplication = current.forceComplication || incoming.forceComplication
         merged.endedWorkoutSinceLastPush =
             current.endedWorkoutSinceLastPush || incoming.endedWorkoutSinceLastPush
         switch (current.latestWorkoutEnd, incoming.latestWorkoutEnd) {

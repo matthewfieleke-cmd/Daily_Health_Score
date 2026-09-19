@@ -13,6 +13,7 @@ enum WatchBridge {
     static let pendingCheckInsDefaultsKey = "dhs.watch.pendingCheckInsJSON"
     static let applicationContextSnapshotKey = "snapshotJSON"
     static let userInfoCheckInKey = "checkInJSON"
+    static let userInfoRefreshFaceKey = "refreshFace"
     static let scoreComplicationKind = "DHSScoreComplication"
 
     /// Same `yyyy-MM-dd` local key as iPhone `DateHelpers.localDateKey`.
