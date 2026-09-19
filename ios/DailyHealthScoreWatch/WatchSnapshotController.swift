@@ -79,7 +79,11 @@ final class WatchSnapshotController: NSObject, ObservableObject {
         guard WatchFaceRefreshCooldown.shouldRequest(lastRequestedAt: lastRequestedFaceAt) else { return }
         #if canImport(WatchConnectivity)
         guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
-        WCSession.default.transferUserInfo([WatchBridge.userInfoRefreshFaceKey: "1"])
+        var payload: [String: Any] = [WatchBridge.userInfoRefreshFaceKey: "1"]
+        if let snapshot, let json = WatchBridge.encode(snapshot) {
+            payload[WatchBridge.applicationContextSnapshotKey] = json
+        }
+        WCSession.default.transferUserInfo(payload)
         lastRequestedFaceAt = Date()
         #endif
     }
@@ -161,9 +165,12 @@ final class WatchSnapshotController: NSObject, ObservableObject {
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadTimelines(ofKind: WatchBridge.scoreComplicationKind)
         WidgetCenter.shared.reloadAllTimelines()
-        Task {
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            WidgetCenter.shared.reloadTimelines(ofKind: WatchBridge.scoreComplicationKind)
+        for delay in [UInt64(200_000_000), 1_000_000_000, 3_000_000_000] {
+            Task {
+                try? await Task.sleep(nanoseconds: delay)
+                WidgetCenter.shared.reloadTimelines(ofKind: WatchBridge.scoreComplicationKind)
+                WidgetCenter.shared.reloadAllTimelines()
+            }
         }
         #endif
     }

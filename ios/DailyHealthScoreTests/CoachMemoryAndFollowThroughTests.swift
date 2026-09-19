@@ -72,6 +72,16 @@ final class CoachMemoryLogicTests: XCTestCase {
         XCTAssertNotEqual(items.first?.provenance, .userConfirmed)
     }
 
+    func test_phdExtractorKeepsEmotionalEatingAndConflict() {
+        let items = CoachPhDMemoryExtractor.items(
+            from: "I overeat when my wife and I have disagreements."
+        )
+        XCTAssertTrue(items.contains { $0.category == .trigger })
+        XCTAssertTrue(items.contains { $0.category == .relationship })
+        XCTAssertTrue(items.allSatisfy { $0.provenance == .userStated })
+        XCTAssertTrue(CoachPhDMemoryExtractor.items(from: "I ate a salad").isEmpty)
+    }
+
     func test_modelInterpretationsStayUnconfirmed() {
         var profile = CoachUserProfile()
         profile.movementNotes = "Seems to dislike running"

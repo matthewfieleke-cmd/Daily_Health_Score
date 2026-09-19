@@ -64,8 +64,8 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
         at date: Date = Date(),
         calendar: Calendar = .current
     ) -> WatchSnapshot? {
-        let a = currentIfToday(first, at: date, calendar: calendar)
-        let b = currentIfToday(second, at: date, calendar: calendar)
+        let a = displayable(first, at: date, calendar: calendar)
+        let b = displayable(second, at: date, calendar: calendar)
         switch (a, b) {
         case let (a?, b?):
             return a.updatedAt >= b.updatedAt ? a : b
@@ -76,6 +76,61 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
         default:
             return nil
         }
+    }
+
+    /// Prefer a matching dateKey. If the widget calendar disagrees with the
+    /// iPhone dateKey, still show a snapshot written the same local day so the
+    /// face does not stay on Open iPhone.
+    static func displayable(
+        _ snapshot: WatchSnapshot?,
+        at date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> WatchSnapshot? {
+        guard let snapshot else { return nil }
+        if snapshot.isForDay(date, calendar: calendar) { return snapshot }
+        if calendar.isDate(snapshot.updatedAt, inSameDayAs: date) { return snapshot }
+        return nil
+    }
+
+    /// Pipe-delimited face line the widget can parse even if JSON decode fails.
+    var compactFaceRecord: String {
+        [
+            dateKey,
+            formattedScore,
+            String(sleep.value),
+            sleep.unit,
+            String(fiber.value),
+            fiber.unit,
+            String(exercise.value),
+            exercise.unit,
+            String(Int(updatedAt.timeIntervalSince1970))
+        ].joined(separator: "|")
+    }
+
+    static func fromCompactFaceRecord(_ line: String) -> WatchSnapshot? {
+        let parts = line.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 9 else { return nil }
+        guard let sleepValue = Double(parts[2]),
+              let fiberValue = Double(parts[4]),
+              let exerciseValue = Double(parts[6]),
+              let score = Double(parts[1]),
+              let updated = TimeInterval(parts[8]) else { return nil }
+        return WatchSnapshot(
+            dateKey: parts[0],
+            totalScore: score,
+            sleep: WatchPillarSnapshot(
+                name: "Sleep", value: sleepValue, goal: 7.5, unit: parts[3], points: 0, maxPoints: 4
+            ),
+            fiber: WatchPillarSnapshot(
+                name: "Fiber", value: fiberValue, goal: 40, unit: parts[5], points: 0, maxPoints: 4
+            ),
+            exercise: WatchPillarSnapshot(
+                name: "Exercise", value: exerciseValue, goal: 30, unit: parts[7], points: 0, maxPoints: 2
+            ),
+            goals: [],
+            updatedAt: Date(timeIntervalSince1970: updated),
+            paceNudgesEnabled: true
+        )
     }
 }
 

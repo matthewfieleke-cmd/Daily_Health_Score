@@ -99,6 +99,25 @@ final class CoachMemoryStore: ObservableObject {
         self.profile = profile
     }
 
+    /// Facts the person just said, in their own words. Does not bump revision,
+    /// so an in-flight reply is not cancelled.
+    func ingestUserStatedFacts(from message: String) {
+        let blocked = tombstones
+        var added = false
+        for item in CoachPhDMemoryExtractor.items(from: message) {
+            if CoachMemoryLogic.isTombstoned(content: item.content, tombstones: blocked) { continue }
+            if memories.contains(where: {
+                !$0.isDeleted && $0.contentFingerprint == item.contentFingerprint
+            }) { continue }
+            upsert(item)
+            added = true
+        }
+        if added {
+            persistDerivedProfile()
+            reload()
+        }
+    }
+
     /// Model-extracted notes stay unconfirmed interpretations. Tombstones win.
     func ingestModelProfileUpdate(_ incoming: CoachUserProfile, generationRevision: Int) -> Bool {
         guard generationRevision == memoryRevision else { return false }

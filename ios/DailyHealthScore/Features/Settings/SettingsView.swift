@@ -57,7 +57,12 @@ struct SettingsView: View {
                     Text("If fiber or movement is still low later in the day, your Watch (or iPhone, if no Watch is paired) will remind you. Fiber reminders ask you to log a meal on iPhone or eat a high-fiber food — they never log from the Watch.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Add the Daily Health Score complication from the Watch face editor after installing the Watch app. If the face still says Open iPhone while the Watch app has today’s score, open this iPhone app once, then open the Watch app.")
+                    Button {
+                        appState.watchSync.publish(kind: .foreground, forceComplication: true)
+                    } label: {
+                        Label("Refresh Watch face", systemImage: "applewatch.and.arrow.forward")
+                    }
+                    Text("Add the Daily Health Score complication from the Watch face editor. If a slot still says Open iPhone, tap Refresh Watch face, then remove and re-add that slot.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

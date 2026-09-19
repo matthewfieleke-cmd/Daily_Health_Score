@@ -123,7 +123,23 @@ final class FoundationModelsCoach {
                 instructionCharacters: instructions.count
             )
             lastTierUsed = tier
-            let session = CoachModelProvider.makeSession(tier: tier, instructions: instructions)
+            let tools: [any Tool]
+            if #available(iOS 26.0, *) {
+                tools = CoachSessionTools.make(
+                    snapshot: snapshot,
+                    goals: goals,
+                    memoryBlock: memoryBlock,
+                    summary: summary,
+                    activitiesByGoal: activitiesByGoal
+                )
+            } else {
+                tools = []
+            }
+            let session = CoachModelProvider.makeSession(
+                tier: tier,
+                instructions: instructions,
+                tools: tools
+            )
             let healthBlock: String
             if let focus, focus.isHistorical {
                 healthBlock = """
@@ -268,11 +284,17 @@ final class FoundationModelsCoach {
                 RECENT TRANSCRIPT:
                 \(compact || transcript.isEmpty ? "None yet." : transcript)
 
+                TOOLS: lookupTodayHealth, lookupSMARTGoals, lookupWhatWeRemember,
+                searchLifestyleMedicine. Call them when a number, a saved goal, a personal
+                note, or a Lifestyle Medicine fact would make the answer true. Do not call
+                lookupTodayHealth for a feeling, a relationship, or a confession.
+
                 Reply as the coach, following the response contract above. Your first sentence must
                 answer the user's message. Never repeat a sentence or a suggestion that already
                 appears in the recent transcript. If the user stated a durable preference,
-                constraint, or value, set shouldUpdateProfile true and fill only the relevant
-                profile fields. Otherwise set shouldUpdateProfile false and leave them empty.
+                constraint, trigger, relationship pattern, recovery limit, identity, or value,
+                set shouldUpdateProfile true and fill only the relevant profile fields.
+                Otherwise set shouldUpdateProfile false and leave them empty.
                 Set goalProposal to nil. For editable SMART goal planning, invite the user
                 to choose "Build a goal with Coach" or ask to formulate a SMART goal.
                 """
@@ -295,7 +317,8 @@ final class FoundationModelsCoach {
                 )
                 let retrySession = CoachModelProvider.makeSession(
                     tier: .onDevice,
-                    instructions: instructions
+                    instructions: instructions,
+                    tools: []
                 )
                 lastTierUsed = .onDevice
                 do {
@@ -321,7 +344,12 @@ final class FoundationModelsCoach {
                     sleepNotes: content.sleepNotes,
                     values: content.values,
                     whatHelps: content.whatHelps,
-                    whatToAvoid: content.whatToAvoid
+                    whatToAvoid: content.whatToAvoid,
+                    triggers: content.triggers,
+                    relationships: content.relationships,
+                    recoveryNotes: content.recoveryNotes,
+                    identityNotes: content.identityNotes,
+                    stressNotes: content.stressNotes
                 )
                 if !draft.isEmpty {
                     profileUpdate = draft
@@ -482,6 +510,16 @@ struct GenerableCoachChatReply {
     var values: String
     var whatHelps: String
     var whatToAvoid: String
+    @Guide(description: "Eating or behavior trigger the person named. Empty if none.")
+    var triggers: String
+    @Guide(description: "Relationship pattern that affects lifestyle. Empty if none.")
+    var relationships: String
+    @Guide(description: "Injury, soreness, or recovery limit they named. Empty if none.")
+    var recoveryNotes: String
+    @Guide(description: "Identity statement such as I'm not a runner. Empty if none.")
+    var identityNotes: String
+    @Guide(description: "Ongoing stress load they named. Empty if none.")
+    var stressNotes: String
 }
 
 @available(iOS 26.0, *)

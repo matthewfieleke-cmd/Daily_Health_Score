@@ -19,6 +19,8 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
     private var lastComplicationEnabled: Bool?
     /// Newest workout end we already spent a face update on.
     private(set) var lastPushedWorkoutEndDate: Date = .distantPast
+    /// Last time we called `transferCurrentComplicationUserInfo`.
+    private var lastComplicationTransferAt: Date?
     /// Held while `WCSession` is still activating so a Health wake is not dropped.
     private var pendingSend: WatchPendingSend?
 
@@ -136,6 +138,11 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         }
         guard let json = WatchBridge.encode(snapshot) else { return false }
         try? session.updateApplicationContext([WatchBridge.applicationContextSnapshotKey: json])
+        // Application context plus a userInfo copy: the Watch app can persist
+        // and reload even when the complication transfer is degraded.
+        if forceComplication || kind == .foreground {
+            session.transferUserInfo([WatchBridge.applicationContextSnapshotKey: json])
+        }
 
         let nextFace = ComplicationPushPolicy.Face(snapshot)
         let watchPath = session.watchDirectoryURL?.path
@@ -166,8 +173,11 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
                 nextFace: nextFace
             )
         )
-        guard shouldPush else { return false }
+        let faceIsStale = lastComplicationTransferAt.map { Date().timeIntervalSince($0) > 300 } ?? true
+        let pushNow = shouldPush || (kind == .foreground && faceIsStale)
+        guard pushNow else { return false }
         session.transferCurrentComplicationUserInfo([WatchBridge.applicationContextSnapshotKey: json])
+        lastComplicationTransferAt = Date()
         lastComplicationFace = nextFace
         LastComplicationFaceStore.save(nextFace)
         PairedWatchIdentityStore.remember(currentPath: watchPath)

@@ -70,11 +70,15 @@ extension CoachModelProvider {
     }
 
     @available(iOS 26.0, *)
-    static func makeSession(tier: CoachModelTier, instructions: String) -> LanguageModelSession {
+    static func makeSession(
+        tier: CoachModelTier,
+        instructions: String,
+        tools: [any Tool] = []
+    ) -> LanguageModelSession {
         if tier == .privateCloud, #available(iOS 27.0, *) {
             return LanguageModelSession(
                 model: PrivateCloudComputeLanguageModel(),
-                tools: [],
+                tools: tools,
                 instructions: instructions
             )
         }
@@ -106,8 +110,12 @@ extension CoachModelProvider {
 
     #if canImport(FoundationModels)
     @available(iOS 26.0, *)
-    static func makeSession(tier: CoachModelTier, instructions: String) -> LanguageModelSession {
-        LanguageModelSession(instructions: instructions)
+    static func makeSession(
+        tier: CoachModelTier,
+        instructions: String,
+        tools: [any Tool] = []
+    ) -> LanguageModelSession {
+        return LanguageModelSession(instructions: instructions)
     }
     #endif
 

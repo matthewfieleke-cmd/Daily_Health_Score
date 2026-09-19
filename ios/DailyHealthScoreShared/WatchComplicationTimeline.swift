@@ -6,7 +6,7 @@ import Foundation
 /// complication transfer is skipped. Reloading on a short interval lets the
 /// widget re-read the App Group file the Watch app already has.
 enum WatchComplicationTimeline {
-    static let refreshInterval: TimeInterval = 5 * 60
+    static let refreshInterval: TimeInterval = 60
 
     /// Next time to rebuild the timeline. Midnight still wins when it is closer
     /// than the refresh, so yesterday never sits on the face after 12:00.
