@@ -105,6 +105,7 @@ struct ScoreComplicationView: View {
         .containerBackground(for: .widget) {
             AccessoryWidgetBackground()
         }
+        .unredacted()
         .accessibilityLabel("Daily score")
         .accessibilityValue(accessibilityValue)
     }
@@ -156,7 +157,6 @@ struct ScoreComplicationView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .unredacted()
     }
 
     private var accessibilityValue: String {

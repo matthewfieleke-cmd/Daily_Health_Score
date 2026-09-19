@@ -79,7 +79,7 @@ Then, on a **newly paired Ultra 4** (or any Watch that will not take the app):
 
 If the Ultra 4 shows **Unable to Install “Daily Health Score”** / **integrity could not be verified**, the new watch is not in the signing profile or Developer Mode is still off. Do steps 2–6 again, then on each of **DailyHealthScore**, **DailyHealthScoreWatch**, and **DailyHealthScoreWatchWidgets** toggle **Automatically manage signing** off and on.
 
-If the Watch **app** shows today’s score but the **complication** still says **Today / Open iPhone**, pull this build, `xcodegen generate`, set Team, Clean, and Run **DailyHealthScore** to the iPhone (build 16). Opening the iPhone app now forces a face transfer; opening the Watch app asks again after 90 seconds if the face is still the placeholder. Remove and re-add the Daily Health Score complication if an old gallery tile is still pinned.
+If the Watch **app** shows today’s score but a face slot still says **Today / Open iPhone**, pull this build (17), `xcodegen generate`, set Team, Clean, and Run **DailyHealthScore** to the iPhone. In Settings tap **Refresh Watch face**, then raise the Ultra 4. If a slot is still empty, remove that complication and add it again. Enable the App Group on the Watch **and** the widget target.
 
 The iPhone app can still run if the Watch companion is waiting. A missing Watch app is a packaging/install issue, not a coach or SMART-goal issue.
 

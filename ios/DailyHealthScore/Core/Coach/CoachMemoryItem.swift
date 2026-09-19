@@ -11,6 +11,11 @@ enum CoachMemoryCategory: String, CaseIterable, Identifiable, Codable, Sendable 
     case whatToAvoid
     case circumstance
     case goalContext
+    case trigger
+    case relationship
+    case recovery
+    case identity
+    case stress
     case other
 
     var id: String { rawValue }
@@ -27,6 +32,11 @@ enum CoachMemoryCategory: String, CaseIterable, Identifiable, Codable, Sendable 
         case .whatToAvoid: return "What to avoid"
         case .circumstance: return "Temporary circumstance"
         case .goalContext: return "Goal context"
+        case .trigger: return "Trigger"
+        case .relationship: return "Relationship"
+        case .recovery: return "Recovery"
+        case .identity: return "Identity"
+        case .stress: return "Stress"
         case .other: return "Other"
         }
     }
@@ -230,6 +240,11 @@ enum CoachMemoryLogic {
         profile.values = join(.values)
         profile.whatHelps = join(.whatHelps)
         profile.whatToAvoid = join(.whatToAvoid)
+        profile.triggers = join(.trigger)
+        profile.relationships = join(.relationship)
+        profile.recoveryNotes = join(.recovery)
+        profile.identityNotes = join(.identity)
+        profile.stressNotes = join(.stress)
         return profile
     }
 
@@ -256,7 +271,12 @@ enum CoachMemoryLogic {
             item(.sleep, profile.sleepNotes),
             item(.values, profile.values),
             item(.whatHelps, profile.whatHelps),
-            item(.whatToAvoid, profile.whatToAvoid)
+            item(.whatToAvoid, profile.whatToAvoid),
+            item(.trigger, profile.triggers),
+            item(.relationship, profile.relationships),
+            item(.recovery, profile.recoveryNotes),
+            item(.identity, profile.identityNotes),
+            item(.stress, profile.stressNotes)
         ].compactMap { $0 }
     }
 
@@ -283,7 +303,12 @@ enum CoachMemoryLogic {
             item(.sleep, profile.sleepNotes),
             item(.values, profile.values),
             item(.whatHelps, profile.whatHelps),
-            item(.whatToAvoid, profile.whatToAvoid)
+            item(.whatToAvoid, profile.whatToAvoid),
+            item(.trigger, profile.triggers),
+            item(.relationship, profile.relationships),
+            item(.recovery, profile.recoveryNotes),
+            item(.identity, profile.identityNotes),
+            item(.stress, profile.stressNotes)
         ].compactMap { $0 }
     }
 

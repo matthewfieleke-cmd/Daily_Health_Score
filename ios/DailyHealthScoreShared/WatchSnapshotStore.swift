@@ -11,9 +11,20 @@ enum WatchSnapshotStore {
         defaults: UserDefaults? = WatchSnapshotStore.groupedDefaults,
         containerURL: URL? = WatchSnapshotStore.groupContainer
     ) -> WatchSnapshot? {
-        if let file = snapshotFileURL(containerURL: containerURL),
-           let data = try? Data(contentsOf: file, options: [.uncached]),
-           let decoded = try? WatchBridge.decoder.decode(WatchSnapshot.self, from: data) {
+        for file in snapshotReadURLs(containerURL: containerURL) {
+            let data = (try? Data(contentsOf: file, options: [.uncached]))
+                ?? (try? Data(contentsOf: file))
+            if let data,
+               let decoded = try? WatchBridge.decoder.decode(WatchSnapshot.self, from: data) {
+                return decoded
+            }
+        }
+        if let line = compactFaceLine(containerURL: containerURL),
+           let decoded = WatchSnapshot.fromCompactFaceRecord(line) {
+            return decoded
+        }
+        if let line = defaults?.string(forKey: WatchBridge.compactFaceFileName),
+           let decoded = WatchSnapshot.fromCompactFaceRecord(line) {
             return decoded
         }
         guard let json = defaults?.string(forKey: WatchBridge.snapshotDefaultsKey) else { return nil }
@@ -30,10 +41,11 @@ enum WatchSnapshotStore {
         var wrote = false
         if let json = String(data: data, encoding: .utf8) {
             defaults?.set(json, forKey: WatchBridge.snapshotDefaultsKey)
+            defaults?.set(snapshot.compactFaceRecord, forKey: WatchBridge.compactFaceFileName)
             defaults?.synchronize()
             wrote = true
         }
-        if let file = snapshotFileURL(containerURL: containerURL) {
+        for file in snapshotWriteURLs(containerURL: containerURL) {
             do {
                 let folder = file.deletingLastPathComponent()
                 try FileManager.default.createDirectory(
@@ -45,8 +57,18 @@ enum WatchSnapshotStore {
                 try? Self.protect(file)
                 wrote = true
             } catch {
-                // UserDefaults copy may still be enough for the Watch app itself.
+                continue
             }
+        }
+        if let compact = compactFaceURL(containerURL: containerURL),
+           let face = snapshot.compactFaceRecord.data(using: .utf8) {
+            try? FileManager.default.createDirectory(
+                at: compact.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try? face.write(to: compact, options: [.atomic, .noFileProtection])
+            try? Self.protect(compact)
+            wrote = true
         }
         return wrote
     }
@@ -65,13 +87,41 @@ enum WatchSnapshotStore {
         containerURL: URL? = WatchSnapshotStore.groupContainer
     ) {
         defaults?.removeObject(forKey: WatchBridge.snapshotDefaultsKey)
-        if let file = snapshotFileURL(containerURL: containerURL) {
+        defaults?.removeObject(forKey: WatchBridge.compactFaceFileName)
+        for file in snapshotWriteURLs(containerURL: containerURL) {
             try? FileManager.default.removeItem(at: file)
+        }
+        if let compact = compactFaceURL(containerURL: containerURL) {
+            try? FileManager.default.removeItem(at: compact)
         }
     }
 
     static func snapshotFileURL(containerURL: URL? = WatchSnapshotStore.groupContainer) -> URL? {
         containerURL?.appendingPathComponent(WatchBridge.snapshotFileName)
+    }
+
+    static func compactFaceURL(containerURL: URL? = WatchSnapshotStore.groupContainer) -> URL? {
+        containerURL?.appendingPathComponent(WatchBridge.compactFaceFileName)
+    }
+
+    static func snapshotWriteURLs(containerURL: URL? = WatchSnapshotStore.groupContainer) -> [URL] {
+        guard let containerURL else { return [] }
+        return [
+            containerURL.appendingPathComponent(WatchBridge.snapshotFileName),
+            containerURL.appendingPathComponent(WatchBridge.snapshotSupportFileName)
+        ]
+    }
+
+    static func snapshotReadURLs(containerURL: URL? = WatchSnapshotStore.groupContainer) -> [URL] {
+        snapshotWriteURLs(containerURL: containerURL)
+    }
+
+    static func compactFaceLine(containerURL: URL? = WatchSnapshotStore.groupContainer) -> String? {
+        guard let file = compactFaceURL(containerURL: containerURL) else { return nil }
+        let data = (try? Data(contentsOf: file, options: [.uncached]))
+            ?? (try? Data(contentsOf: file))
+        guard let data, let line = String(data: data, encoding: .utf8) else { return nil }
+        return line.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static var groupContainer: URL? {

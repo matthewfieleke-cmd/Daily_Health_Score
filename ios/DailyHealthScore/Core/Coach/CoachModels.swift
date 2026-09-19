@@ -47,11 +47,17 @@ struct CoachUserProfile: Equatable, Codable, Sendable {
     var values: String = ""
     var whatHelps: String = ""
     var whatToAvoid: String = ""
+    var triggers: String = ""
+    var relationships: String = ""
+    var recoveryNotes: String = ""
+    var identityNotes: String = ""
+    var stressNotes: String = ""
 
     var isEmpty: Bool {
         [
             preferredStyle, constraints, nutritionNotes, movementNotes,
-            sleepNotes, values, whatHelps, whatToAvoid
+            sleepNotes, values, whatHelps, whatToAvoid,
+            triggers, relationships, recoveryNotes, identityNotes, stressNotes
         ].allSatisfy { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
@@ -69,7 +75,12 @@ struct CoachUserProfile: Equatable, Codable, Sendable {
             line("Sleep", sleepNotes),
             line("Values", values),
             line("What helps", whatHelps),
-            line("What to avoid", whatToAvoid)
+            line("What to avoid", whatToAvoid),
+            line("Triggers", triggers),
+            line("Relationships", relationships),
+            line("Recovery", recoveryNotes),
+            line("Identity", identityNotes),
+            line("Stress", stressNotes)
         ].compactMap { $0 }.joined(separator: "\n")
     }
 
@@ -90,6 +101,11 @@ struct CoachUserProfile: Equatable, Codable, Sendable {
         values = prefer(other.values, over: values)
         whatHelps = prefer(other.whatHelps, over: whatHelps)
         whatToAvoid = prefer(other.whatToAvoid, over: whatToAvoid)
+        triggers = prefer(other.triggers, over: triggers)
+        relationships = prefer(other.relationships, over: relationships)
+        recoveryNotes = prefer(other.recoveryNotes, over: recoveryNotes)
+        identityNotes = prefer(other.identityNotes, over: identityNotes)
+        stressNotes = prefer(other.stressNotes, over: stressNotes)
     }
 }
 

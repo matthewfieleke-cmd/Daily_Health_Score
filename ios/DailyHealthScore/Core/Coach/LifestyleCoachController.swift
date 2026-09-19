@@ -157,6 +157,7 @@ final class LifestyleCoachController: ObservableObject {
         defer { if chatGenerationID == generationID { isChatBusy = false } }
 
         memory.append(CoachChatTurn(role: .user, text: trimmed))
+        memory.ingestUserStatedFacts(from: trimmed)
 
         do {
             let snapshot = todayRecord.map {

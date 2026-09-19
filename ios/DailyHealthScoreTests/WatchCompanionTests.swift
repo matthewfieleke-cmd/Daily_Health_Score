@@ -441,7 +441,7 @@ final class WatchSnapshotTests: XCTestCase {
 
     func test_complicationPrefersMidnightWhenItIsCloserThanTheRefresh() {
         let now = Date(timeIntervalSince1970: 1_787_000_000)
-        let midnight = now.addingTimeInterval(5 * 60)
+        let midnight = now.addingTimeInterval(30)
         let reload = WatchComplicationTimeline.reloadDate(now: now, midnight: midnight)
         XCTAssertEqual(reload.timeIntervalSince(midnight), 60, accuracy: 0.1)
     }
@@ -489,6 +489,28 @@ final class WatchSnapshotTests: XCTestCase {
         if let protection = attrs[.protectionKey] as? FileProtectionType {
             XCTAssertEqual(protection, .none)
         }
+        let compactURL = try XCTUnwrap(WatchSnapshotStore.compactFaceURL(containerURL: dir))
+        let faceLine = try String(contentsOf: compactURL, encoding: .utf8)
+        let compact = try XCTUnwrap(WatchSnapshot.fromCompactFaceRecord(faceLine))
+        XCTAssertEqual(compact.formattedScore, "2.9")
+        XCTAssertEqual(compact.sleep.value, 5.4, accuracy: 0.01)
+    }
+
+    func test_displayableAcceptsSameDayUpdatedAtWhenDateKeyDisagrees() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date()
+        let snapshot = WatchSnapshot(
+            dateKey: "1999-01-01",
+            totalScore: 4.2,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 7, goal: 7.5, unit: "hr", points: 3.5, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Fiber", value: 10, goal: 40, unit: "g", points: 1, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Exercise", value: 0, goal: 30, unit: "min", points: 0, maxPoints: 2),
+            goals: [],
+            updatedAt: now,
+            paceNudgesEnabled: true
+        )
+        XCTAssertNil(WatchSnapshot.currentIfToday(snapshot, at: now, calendar: calendar))
+        XCTAssertEqual(WatchSnapshot.displayable(snapshot, at: now, calendar: calendar)?.totalScore, 4.2)
     }
 
     func test_faceRefreshCooldownAllowsRetryAfterTheMinimumInterval() {
