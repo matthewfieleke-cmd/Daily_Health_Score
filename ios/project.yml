@@ -50,12 +50,11 @@ targets:
         codeSign: true
         link: false
     postBuildScripts:
+      # Do not list script outputs. Embed Watch Content already writes the
+      # companion bundle; a second claimed path fails as Multiple commands produce.
       - name: Mirror Watch companion into PlugIns for Debug device install
         basedOnDependencyAnalysis: false
         path: scripts/mirror_watch_for_debug_install.sh
-        outputFiles:
-          - $(TARGET_BUILD_DIR)/$(FULL_PRODUCT_NAME)/Watch/DailyHealthScoreWatch.app
-          - $(TARGET_BUILD_DIR)/$(FULL_PRODUCT_NAME)/PlugIns/DailyHealthScoreWatch.app
 
   DailyHealthScoreWatch:
     type: application
