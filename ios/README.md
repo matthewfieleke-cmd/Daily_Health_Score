@@ -29,6 +29,22 @@ open DailyHealthScore.xcodeproj
 6. Set **Code Signing Entitlements** to `DailyHealthScore/DailyHealthScore.entitlements`.
 7. Link Apple’s **FoundationModels** framework (DHS Lifestyle Coach).
 
+## Pull latest `main` on the Mac
+
+Xcode rewrites signing files locally. `git pull` aborts if those files differ from GitHub. Stash **all four**, then pull, then regenerate. Use `&&` so `xcodegen` does not run after a failed pull.
+
+```bash
+cd ~/Daily_Health_Score
+git stash push -u -- \
+  ios/DailyHealthScore/Info.plist \
+  ios/DailyHealthScore/DailyHealthScore.entitlements \
+  ios/DailyHealthScoreWatch/Info.plist \
+  ios/DailyHealthScoreWatch/DailyHealthScoreWatch.entitlements
+git pull origin main && cd ios && xcodegen generate
+```
+
+Do **not** `git stash pop` afterward. `main` already has the Private Cloud Compute entitlement; popping would put the old local copy back and block the next pull. Set **Team** again in Xcode after `xcodegen generate`.
+
 ## Run on device
 
 1. Select your iPhone as the run destination.
