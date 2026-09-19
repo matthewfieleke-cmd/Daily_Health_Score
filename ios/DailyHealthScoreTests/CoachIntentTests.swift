@@ -73,11 +73,22 @@ final class CoachIntentTests: XCTestCase {
         XCTAssertTrue(CoachIntent.support.allowsNextStep)
     }
 
-    func test_metricsAreWithheldFromEducationAndSmallTalk() {
+    func test_metricsAreWithheldUnlessTheUserAskedAboutDataOrAPlan() {
         XCTAssertFalse(CoachIntent.education.usesFullMetrics)
         XCTAssertFalse(CoachIntent.smallTalk.usesFullMetrics)
+        XCTAssertFalse(CoachIntent.support.usesFullMetrics)
+        XCTAssertFalse(CoachIntent.general.usesFullMetrics)
         XCTAssertTrue(CoachIntent.dataLookup.usesFullMetrics)
         XCTAssertTrue(CoachIntent.planning.usesFullMetrics)
+    }
+
+    func test_emotionalEatingDuringConflictIsSupport() {
+        XCTAssertEqual(
+            CoachIntentClassifier.classify("I overeat when my wife and I have disagreements."),
+            .support
+        )
+        XCTAssertEqual(CoachIntentClassifier.classify("I tend to overeat after we fought"), .support)
+        XCTAssertEqual(CoachIntentClassifier.classify("I ate a big salad today"), .general)
     }
 
     /// A question landing in `general` would let the reply attach metrics and an
@@ -144,6 +155,8 @@ final class CoachIntentTests: XCTestCase {
         XCTAssertTrue(CoachIntent.planning.contract.contains("permission"))
         XCTAssertTrue(CoachIntent.support.contract.contains("Validate the feeling first"))
         XCTAssertTrue(CoachIntent.support.contract.contains("urge surfing"))
+        XCTAssertTrue(CoachIntent.support.contract.contains("Do not mention"))
+        XCTAssertTrue(CoachIntent.planning.contract.contains("Never print BELOW GOAL"))
         XCTAssertTrue(CoachIntent.smallTalk.contract.contains("No metrics"))
         XCTAssertTrue(CoachIntent.education.contract.contains("Be concrete"))
         XCTAssertTrue(CoachIntent.education.contract.contains("consult your doctor"))

@@ -33,8 +33,8 @@ enum CoachIntent: String, Equatable, Sendable {
     /// only reliable way to stop the model from steering every answer back to them.
     var usesFullMetrics: Bool {
         switch self {
-        case .dataLookup, .planning, .support, .general: return true
-        case .education, .smallTalk: return false
+        case .dataLookup, .planning: return true
+        case .education, .smallTalk, .support, .general: return false
         }
     }
 
@@ -72,10 +72,12 @@ enum CoachIntent: String, Equatable, Sendable {
         case .planning:
             return """
             RESPONSE CONTRACT (planning request):
-            1. Briefly acknowledge where they are, using correct goal status if relevant.
+            1. Answer like a person in the room, not a dashboard. Never print BELOW GOAL,
+               GOAL MET, or similar tokens.
             2. Ask permission or offer a choice before advising if they have not already asked
                for a plan. Elicit what they already know, then offer options.
-            3. Offer two or three concrete options, then let them choose. Never issue commands.
+            3. Offer one or two concrete options a person would actually do tonight, then let
+               them choose. Never issue commands. Never list five foods.
             4. Phrase any implementation intention as THEIR plan and in second person, e.g.
                "You could try: after dinner, walk 10 minutes." Never write "I will ..." as yourself.
             5. Keep the plan smaller than feels necessary. If they sound unsure, shrink it
@@ -85,10 +87,12 @@ enum CoachIntent: String, Equatable, Sendable {
             return """
             RESPONSE CONTRACT (emotional support):
             1. Validate the feeling first, specifically and without rushing to fix it.
-            2. Normalize ambivalence or setback; a lapse is information, never a character verdict.
-            3. If a skill would help, offer one in plain language (paced breathing, urge surfing,
+            2. Stay with what they named — the fight, the overeating, the shame. Do not mention
+               today's fiber, sleep, exercise, or score unless they asked about those numbers.
+            3. Normalize ambivalence or setback; a lapse is information, never a character verdict.
+            4. If a skill would help, offer one in plain language (paced breathing, urge surfing,
                opposite action, STOP) as an invitation, not an assignment. Otherwise ask what would help.
-            4. No metrics dump. No cheerleading clichés.
+            5. No metrics dump. No cheerleading clichés. No closing with a food goal.
             """
         case .smallTalk:
             return """
@@ -101,7 +105,7 @@ enum CoachIntent: String, Equatable, Sendable {
             return """
             RESPONSE CONTRACT (general):
             1. Respond directly to what was actually said before adding anything else.
-            2. Bring in data only when it is relevant to their message.
+            2. Do not mention today's fiber, sleep, exercise, or score unless they asked.
             3. Offer a next step only if their message invites one, and never one you
                have already suggested in this conversation.
             """
@@ -182,7 +186,10 @@ enum CoachIntentClassifier {
         "can't keep up", "cant keep up", "struggling", "off track", "slipped",
         "no motivation", "unmotivated", "pointless", "why bother",
         "not good enough", "beating myself", "disappointed", "i suck",
-        "can't do this", "cant do this", "lonely", "depressed", "miserable"
+        "can't do this", "cant do this", "lonely", "depressed", "miserable",
+        "overeat", "overeating", "binge", "emotional eat",
+        "disagreement", "arguing", "we argued", "fight with",
+        "fighting with", "we fought", "conflict with"
     ]
 
     /// Question words that start a real question, used only as a fallback so a

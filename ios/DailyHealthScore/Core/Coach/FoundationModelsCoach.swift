@@ -132,17 +132,42 @@ final class FoundationModelsCoach {
                 \(snapshot?.minimalBlock ?? "No live daily record is available right now.")
                 """
             } else if let snapshot {
-                healthBlock = intent.usesFullMetrics ? snapshot.promptBlock : snapshot.minimalBlock
+                if intent.usesFullMetrics {
+                    healthBlock = snapshot.promptBlock + """
+
+
+                    CHAT PHRASING: Use these numbers as facts when the user asked about them.
+                    Never print the tokens BELOW GOAL, GOAL MET, GOAL EXCEEDED, or NO DATA.
+                    Speak like a person in the room.
+                    """
+                } else {
+                    healthBlock = snapshot.minimalBlock
+                }
             } else {
                 healthBlock = "No live daily record is available right now. Do not invent personal metrics; answer from general Lifestyle Medicine knowledge."
             }
             let nextStepPolicy: String
-            if intent.allowsNextStep {
+            switch intent {
+            case .support:
                 nextStepPolicy = """
-                COACHING DIRECTIVES (derived from goal status — follow these):
-                \(snapshot?.coachingDirective ?? "No metric directives available.")
+                LISTEN RULE: They shared a feeling, relationship, or pattern. Stay with that.
+                Do not mention today's fiber, sleep, exercise, or score. Do not follow
+                metric coaching directives. Validate first. One skill or one question —
+                not a food plan and not a dashboard recap.
                 """
-            } else {
+            case .general:
+                nextStepPolicy = """
+                LISTEN RULE: Answer what they actually said. Do not mention today's fiber,
+                sleep, exercise, or score unless they asked about those numbers. Do not
+                follow metric coaching directives.
+                """
+            case .planning:
+                nextStepPolicy = """
+                COACHING DIRECTIVES (use the numbers; never print status tokens):
+                \(snapshot?.coachingDirective ?? "No metric directives available.")
+                Speak like a person. At most two concrete options.
+                """
+            default:
                 nextStepPolicy = """
                 NEXT STEP POLICY: This message did not ask for a plan. Do not offer a
                 suggestion, a next step, or an activity idea. Answer only what was asked.
