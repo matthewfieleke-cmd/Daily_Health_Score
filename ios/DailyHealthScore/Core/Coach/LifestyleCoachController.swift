@@ -44,7 +44,11 @@ final class LifestyleCoachController: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+        // Only a real revision bump (delete / clear / contradict) cancels an
+        // in-flight reply. Saving the user bubble calls reload(), which used
+        // to republish the same revision and drop the coach answer.
         memory.$memoryRevision
+            .removeDuplicates()
             .dropFirst()
             .sink { [weak self] _ in
                 guard let self, self.isChatBusy else { return }

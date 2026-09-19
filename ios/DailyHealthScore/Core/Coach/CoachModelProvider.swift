@@ -59,6 +59,8 @@ enum CoachModelProvider {
 extension CoachModelProvider {
     static var isServerModelAvailable: Bool {
         guard #available(iOS 27.0, *) else { return false }
+        // Account assignment is not enough: the debug profile must include the
+        // managed capability. If the type is present but not usable, stay on-device.
         guard case .available = PrivateCloudComputeLanguageModel().availability else { return false }
         return !isServerQuotaExhausted
     }

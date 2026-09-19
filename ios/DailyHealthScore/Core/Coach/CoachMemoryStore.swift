@@ -35,7 +35,9 @@ final class CoachMemoryStore: ObservableObject {
         let state = fetchOrCreateState()
         runningSummary = state.runningSummary
         cachedDailyCardDateKey = state.dailyCardDateKey
-        memoryRevision = state.memoryRevision
+        if state.memoryRevision != memoryRevision {
+            memoryRevision = state.memoryRevision
+        }
         var storedProfile = CoachUserProfile()
         if let data = state.profileJSON.data(using: .utf8),
            let decoded = try? JSONDecoder().decode(CoachUserProfile.self, from: data) {
