@@ -11,7 +11,6 @@ struct LifestyleCoachChatView: View {
     @State private var goalEdit: SMARTGoalEdit?
     @State private var focus: CoachFocusContext?
     @State private var showMemory = false
-    @State private var showFeedback = false
     @FocusState private var isInputFocused: Bool
 
     init(
@@ -72,12 +71,6 @@ struct LifestyleCoachChatView: View {
                                 .font(.footnote)
                                 .foregroundStyle(.red)
                                 .id("chat-error")
-                        }
-                        if showFeedback {
-                            CoachLocalFeedbackBar(target: "suggestion", goalId: focusedGoalID) { useful in
-                                coach.recordLocalFeedback(target: "suggestion", useful: useful, goalId: focusedGoalID)
-                                showFeedback = false
-                            }
                         }
                     }
                     .padding(16)
@@ -327,7 +320,6 @@ struct LifestyleCoachChatView: View {
                 focus: focus,
                 activities: appState.smartGoalStore.activities
             )
-            showFeedback = coach.memory.turns.last?.role == .coach && coach.chatError == nil
         }
     }
 
