@@ -103,6 +103,14 @@ final class CoachMemoryStoreTests: XCTestCase {
         XCTAssertFalse(store.promptMemoryBlock.contains("Knee injury this week"))
     }
 
+    func test_appendingAChatTurnDoesNotBumpMemoryRevision() {
+        let store = CoachMemoryStore(modelContext: ModelContext(AppDataSchema.makeContainer(inMemory: true)))
+        let before = store.memoryRevision
+        store.append(CoachChatTurn(role: .user, text: "What are easy ways to hit my fiber goal?"))
+        XCTAssertEqual(store.memoryRevision, before)
+        XCTAssertEqual(store.turns.last?.text, "What are easy ways to hit my fiber goal?")
+    }
+
     func test_clearAllMemoryLeavesHealthAndGoalsUntouched() {
         let container = AppDataSchema.makeContainer(inMemory: true)
         let context = ModelContext(container)

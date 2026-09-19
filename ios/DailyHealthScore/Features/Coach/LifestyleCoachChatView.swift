@@ -319,7 +319,7 @@ struct LifestyleCoachChatView: View {
                 focus: focus,
                 activities: appState.smartGoalStore.activities
             )
-            showFeedback = true
+            showFeedback = coach.memory.turns.last?.role == .coach && coach.chatError == nil
         }
     }
 
