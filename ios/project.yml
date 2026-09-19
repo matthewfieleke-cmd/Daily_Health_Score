@@ -12,7 +12,7 @@ options:
 settings:
   SWIFT_VERSION: "5.9"
   MARKETING_VERSION: "1.7.0"
-  CURRENT_PROJECT_VERSION: "12"
+  CURRENT_PROJECT_VERSION: "13"
   # PCC's PrivateCloudComputeLanguageModel is not in every iOS 27 SDK. Leave this
   # unset so the coach compiles and runs on-device. When Xcode's FoundationModels
   # module contains that type AND the managed entitlement is on the App ID, add:
@@ -39,7 +39,9 @@ targets:
       # interface orientations in Info.plist or setting UIRequiresFullScreen.
       TARGETED_DEVICE_FAMILY: "1"
       MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "12"
+      CURRENT_PROJECT_VERSION: "13"
+      # Allow the Debug Watch/PlugIns mirror to write into the .app after embed.
+      ENABLE_USER_SCRIPT_SANDBOXING: NO
     entitlements:
       path: DailyHealthScore/DailyHealthScore.entitlements
     dependencies:
@@ -47,6 +49,13 @@ targets:
         embed: true
         codeSign: true
         link: false
+    postBuildScripts:
+      - name: Mirror Watch companion into PlugIns for Debug device install
+        basedOnDependencyAnalysis: false
+        path: scripts/mirror_watch_for_debug_install.sh
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(FULL_PRODUCT_NAME)/Watch/DailyHealthScoreWatch.app
+          - $(TARGET_BUILD_DIR)/$(FULL_PRODUCT_NAME)/PlugIns/DailyHealthScoreWatch.app
 
   DailyHealthScoreWatch:
     type: application
@@ -62,15 +71,20 @@ targets:
       PRODUCT_BUNDLE_IDENTIFIER: com.dailyhealthscore.app.mf.watchkitapp
       INFOPLIST_FILE: DailyHealthScoreWatch/Info.plist
       INFOPLIST_KEY_WKCompanionAppBundleIdentifier: com.dailyhealthscore.app.mf
-      INFOPLIST_KEY_WKWatchOnlyApp: "NO"
-      INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp: "NO"
+      INFOPLIST_KEY_WKWatchOnlyApp: false
+      INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp: false
       CODE_SIGN_ENTITLEMENTS: DailyHealthScoreWatch/DailyHealthScoreWatch.entitlements
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       TARGETED_DEVICE_FAMILY: "4"
       SDKROOT: watchos
       SKIP_INSTALL: YES
+      # Ultra 4 / S11 and Series 9+ are 64-bit. watchOS 27 hides apps that
+      # lack an arm64 slice. Do not thin to the last-selected Series 10.
+      ARCHS: arm64
+      ONLY_ACTIVE_ARCH: NO
+      "EXCLUDED_ARCHS[sdk=watchos*]": "arm64_32 armv7k"
       MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "12"
+      CURRENT_PROJECT_VERSION: "13"
     entitlements:
       path: DailyHealthScoreWatch/DailyHealthScoreWatch.entitlements
     dependencies:
@@ -97,9 +111,12 @@ targets:
       SDKROOT: watchos
       SKIP_INSTALL: YES
       APPLICATION_EXTENSION_API_ONLY: YES
+      ARCHS: arm64
+      ONLY_ACTIVE_ARCH: NO
+      "EXCLUDED_ARCHS[sdk=watchos*]": "arm64_32 armv7k"
       LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/Frameworks @executable_path/../../Frameworks
       MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "12"
+      CURRENT_PROJECT_VERSION: "13"
     entitlements:
       path: DailyHealthScoreWatchWidgets/DailyHealthScoreWatchWidgets.entitlements
 

@@ -24,6 +24,10 @@ Package.resolved
 # Logs
 *.log
 
+# Python
+__pycache__/
+*.pyc
+
 # Leftover web build artifacts (app is iOS-only)
 dist/
 node_modules/

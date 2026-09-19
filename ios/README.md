@@ -36,23 +36,30 @@ open DailyHealthScore.xcodeproj
 3. When prompted, allow **read** access to Sleep, Fiber, and Exercise.
 4. **Today** syncs from Health on launch and when returning to the app.
 
-## Watch companion (Series 10 / Ultra)
+## Watch companion (Series 10 / Ultra 4)
 
-The Watch app is a companion of the iPhone app (not independent). Apple’s layout is:
+The Watch app is a companion of the iPhone app (not independent). Apple Watch Ultra 4 ships with **watchOS 27** and the **S11** chip. Pairing requires **iOS 27** on iPhone. **watchOS 27 hides Watch apps that do not include a 64-bit (`arm64`) slice**, so the Watch and widget targets are pinned to `arm64`.
+
+Apple’s App Store layout is:
 
 `DailyHealthScore.app/Watch/DailyHealthScoreWatch.app` (widgets live in that Watch app’s own PlugIns folder).
 
-After `xcodegen generate`, confirm **DailyHealthScore → Build Phases → Embed Watch Content**: Destination **Products Directory**, Subpath contains `Watch` — not “Plugins and Foundation…”.
+Debug installs from Xcode 27 also copy that companion into `PlugIns/` so the on-device installer accepts it. Release/Archive keep `Watch/` only — a second copy in `PlugIns/` fails App Store validation.
+
+After `xcodegen generate`, confirm **DailyHealthScore → Build Phases → Embed Watch Content**: Destination **Products Directory**, Subpath contains `Watch` — not “Plugins and Foundation…”. You should also see **Mirror Watch companion into PlugIns for Debug device install**.
 
 `xcodegen generate` clears **Team**. Set Team again on **DailyHealthScore**, **DailyHealthScoreWatch**, and **DailyHealthScoreWatchWidgets** (not Tests). Enable App Group `group.com.dailyhealthscore.app.mf` on those three. Do not add Background Modes.
 
-Then:
+Then, on a **newly paired Ultra 4** (or any Watch that will not take the app):
 
-1. On the iPhone, delete **Daily Health Score** completely (long-press → Remove App → Delete App). Overwriting an old install can leave iOS thinking there is no Watch companion.
-2. In Xcode: **Product → Clean Build Folder**.
-3. Scheme **DailyHealthScore**, destination **Matt’s iPhone**, Run.
-4. Open the **Watch** app on the iPhone. Check the **My Watch** home list (apps already on the wrist) **and** **Available Apps** (alphabetically between CVS Health and ESPN).
-5. If it is still missing, switch the scheme to **DailyHealthScoreWatch**, destination **Matt’s Series 10**, and Run. Developer Mode must be on on the Watch.
+1. On the iPhone, delete **Daily Health Score** completely (long-press → Remove App → Delete App). Overwriting an old Series 10 install can leave iOS thinking there is no Watch companion.
+2. On the Watch: **Settings → Privacy & Security → Developer Mode** On, then restart if Xcode still cannot see the Ultra 4.
+3. In Xcode: **Product → Clean Build Folder**.
+4. Scheme **DailyHealthScore**, destination **Matt’s iPhone**, Run. Unlock the Watch and leave it on the charger while Xcode copies the companion.
+5. Open the **Watch** app on the iPhone. Check the **My Watch** home list **and** **Available Apps** (alphabetically between CVS Health and ESPN).
+6. If it is still missing, switch the scheme to **DailyHealthScoreWatch**, destination **Matt’s Ultra 4** (not Series 10), and Run.
+
+The iPhone app can still run if the Watch companion is waiting. A missing Watch app is a packaging/install issue, not a coach or SMART-goal issue.
 
 ## Features
 

@@ -73,12 +73,98 @@ class BundleIDAlignmentTests(unittest.TestCase):
         self.assertTrue(watch["WKApplication"])
         self.assertFalse(watch["WKRunsIndependentlyOfCompanionApp"])
 
-    def test_project_yml_uses_watch_folder_only(self) -> None:
+    def test_project_yml_pins_watch_folder_and_debug_plugins_mirror(self) -> None:
         yml = (IOS / "project.yml").read_text()
         self.assertIn("postGenCommand: python3 scripts/patch_watch_embed.py", yml)
-        self.assertNotIn("mirror_watch_embed", yml)
-        self.assertNotIn("postBuildScripts:", yml)
+        self.assertIn("mirror_watch_for_debug_install.sh", yml)
+        self.assertIn("ARCHS: arm64", yml)
+        self.assertIn("ONLY_ACTIVE_ARCH: NO", yml)
+        self.assertNotIn("relocate_watch_for_debug_install", yml)
+        self.assertNotIn("mirror_watch_embed.sh", yml)
         self.assertIn("executable: DailyHealthScoreWatch", yml)
+        self.assertIn('CURRENT_PROJECT_VERSION: "13"', yml)
+
+
+class DebugWatchMirrorTests(unittest.TestCase):
+    def _run(self, env: dict) -> None:
+        import subprocess
+
+        subprocess.check_call(
+            ["sh", str(SCRIPTS / "mirror_watch_for_debug_install.sh")],
+            env=env,
+        )
+
+    def test_debug_copies_watch_into_plugins(self) -> None:
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            products = Path(tmp)
+            contents = products / "DailyHealthScore.app"
+            watch_app = contents / "Watch" / "DailyHealthScoreWatch.app"
+            watch_app.mkdir(parents=True)
+            (watch_app / "Info.plist").write_text("placeholder", encoding="utf-8")
+            env = os.environ.copy()
+            env.update(
+                {
+                    "CONFIGURATION": "Debug",
+                    "PLATFORM_NAME": "iphoneos",
+                    "TARGET_BUILD_DIR": str(products),
+                    "FULL_PRODUCT_NAME": "DailyHealthScore.app",
+                }
+            )
+            self._run(env)
+            plugin_app = contents / "PlugIns" / "DailyHealthScoreWatch.app"
+            self.assertTrue(plugin_app.is_dir())
+            self.assertTrue((plugin_app / "Info.plist").is_file())
+            self.assertTrue(watch_app.is_dir())
+
+    def test_debug_copies_plugins_into_watch(self) -> None:
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            products = Path(tmp)
+            contents = products / "DailyHealthScore.app"
+            plugin_app = contents / "PlugIns" / "DailyHealthScoreWatch.app"
+            plugin_app.mkdir(parents=True)
+            (plugin_app / "Info.plist").write_text("placeholder", encoding="utf-8")
+            env = os.environ.copy()
+            env.update(
+                {
+                    "CONFIGURATION": "Debug",
+                    "PLATFORM_NAME": "iphoneos",
+                    "TARGET_BUILD_DIR": str(products),
+                    "FULL_PRODUCT_NAME": "DailyHealthScore.app",
+                }
+            )
+            self._run(env)
+            watch_app = contents / "Watch" / "DailyHealthScoreWatch.app"
+            self.assertTrue(watch_app.is_dir())
+            self.assertTrue((watch_app / "Info.plist").is_file())
+            self.assertTrue(plugin_app.is_dir())
+
+    def test_release_leaves_watch_folder(self) -> None:
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            products = Path(tmp)
+            contents = products / "DailyHealthScore.app"
+            watch_app = contents / "Watch" / "DailyHealthScoreWatch.app"
+            watch_app.mkdir(parents=True)
+            env = os.environ.copy()
+            env.update(
+                {
+                    "CONFIGURATION": "Release",
+                    "PLATFORM_NAME": "iphoneos",
+                    "TARGET_BUILD_DIR": str(products),
+                    "FULL_PRODUCT_NAME": "DailyHealthScore.app",
+                }
+            )
+            self._run(env)
+            self.assertTrue(watch_app.is_dir())
+            self.assertFalse((contents / "PlugIns").exists())
 
 
 if __name__ == "__main__":
