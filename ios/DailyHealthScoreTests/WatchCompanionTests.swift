@@ -484,6 +484,25 @@ final class WatchSnapshotTests: XCTestCase {
         let loaded = try XCTUnwrap(WatchSnapshotStore.load(defaults: nil, containerURL: dir))
         XCTAssertEqual(loaded.formattedScore, "2.9")
         XCTAssertEqual(loaded.sleep.value, 5.4, accuracy: 0.01)
+        let file = try XCTUnwrap(WatchSnapshotStore.snapshotFileURL(containerURL: dir))
+        let attrs = try FileManager.default.attributesOfItem(atPath: file.path)
+        if let protection = attrs[.protectionKey] as? FileProtectionType {
+            XCTAssertEqual(protection, .none)
+        }
+    }
+
+    func test_faceRefreshCooldownAllowsRetryAfterTheMinimumInterval() {
+        XCTAssertTrue(WatchFaceRefreshCooldown.shouldRequest(lastRequestedAt: nil, now: Date()))
+        let now = Date(timeIntervalSince1970: 1_787_000_000)
+        XCTAssertFalse(
+            WatchFaceRefreshCooldown.shouldRequest(lastRequestedAt: now, now: now.addingTimeInterval(30))
+        )
+        XCTAssertTrue(
+            WatchFaceRefreshCooldown.shouldRequest(
+                lastRequestedAt: now,
+                now: now.addingTimeInterval(WatchFaceRefreshCooldown.minimumInterval)
+            )
+        )
     }
 
     func test_pendingStorePersistsAndClears() {

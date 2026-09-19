@@ -6,7 +6,7 @@ import Foundation
 /// complication transfer is skipped. Reloading on a short interval lets the
 /// widget re-read the App Group file the Watch app already has.
 enum WatchComplicationTimeline {
-    static let refreshInterval: TimeInterval = 15 * 60
+    static let refreshInterval: TimeInterval = 5 * 60
 
     /// Next time to rebuild the timeline. Midnight still wins when it is closer
     /// than the refresh, so yesterday never sits on the face after 12:00.
@@ -17,5 +17,16 @@ enum WatchComplicationTimeline {
             return midnight.addingTimeInterval(60)
         }
         return periodic
+    }
+}
+
+/// Watch-side throttle for `refreshFace` userInfo. Asking once per day left the
+/// Ultra 4 stuck when the first request was dropped or the iPhone skipped the transfer.
+enum WatchFaceRefreshCooldown {
+    static let minimumInterval: TimeInterval = 90
+
+    static func shouldRequest(lastRequestedAt: Date?, now: Date = Date()) -> Bool {
+        guard let lastRequestedAt else { return true }
+        return now.timeIntervalSince(lastRequestedAt) >= minimumInterval
     }
 }

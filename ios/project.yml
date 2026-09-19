@@ -12,7 +12,7 @@ options:
 settings:
   SWIFT_VERSION: "5.9"
   MARKETING_VERSION: "1.7.0"
-  CURRENT_PROJECT_VERSION: "15"
+  CURRENT_PROJECT_VERSION: "16"
 targets:
   DailyHealthScore:
     type: application
@@ -35,7 +35,7 @@ targets:
       # interface orientations in Info.plist or setting UIRequiresFullScreen.
       TARGETED_DEVICE_FAMILY: "1"
       MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "15"
+      CURRENT_PROJECT_VERSION: "16"
       OTHER_CODE_SIGN_FLAGS: --generate-entitlement-der
       # Turns on PrivateCloudComputeLanguageModel routing. Requires the managed
       # Private Cloud Compute entitlement on the App ID.
@@ -84,7 +84,7 @@ targets:
       "EXCLUDED_ARCHS[sdk=watchos*]": "arm64_32 armv7k"
       OTHER_CODE_SIGN_FLAGS: --generate-entitlement-der
       MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "15"
+      CURRENT_PROJECT_VERSION: "16"
     entitlements:
       path: DailyHealthScoreWatch/DailyHealthScoreWatch.entitlements
     dependencies:
@@ -117,7 +117,7 @@ targets:
       OTHER_CODE_SIGN_FLAGS: --generate-entitlement-der
       LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/Frameworks @executable_path/../../Frameworks
       MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "15"
+      CURRENT_PROJECT_VERSION: "16"
     entitlements:
       path: DailyHealthScoreWatchWidgets/DailyHealthScoreWatchWidgets.entitlements
 

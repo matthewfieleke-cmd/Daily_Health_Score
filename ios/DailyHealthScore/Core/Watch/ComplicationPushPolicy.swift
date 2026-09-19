@@ -109,7 +109,14 @@ enum PairedWatchIdentityStore {
     static let defaultsKey = "dhs.pairedWatchDirectory"
 
     static func hasChanged(currentPath: String?, defaults: UserDefaults = .standard) -> Bool {
-        defaults.string(forKey: defaultsKey) != currentPath
+        let stored = defaults.string(forKey: defaultsKey)
+        guard let currentPath, !currentPath.isEmpty else {
+            // A leftover Series 10 path must not look like "same watch" when
+            // this session has no URL yet (common right after Ultra 4 pairing).
+            if let stored, !stored.isEmpty { return true }
+            return stored == nil
+        }
+        return stored != currentPath
     }
 
     /// Call only after a complication transfer actually went to this watch.
@@ -117,7 +124,9 @@ enum PairedWatchIdentityStore {
         if let currentPath, !currentPath.isEmpty {
             defaults.set(currentPath, forKey: defaultsKey)
         } else {
-            defaults.removeObject(forKey: defaultsKey)
+            // Record that *a* transfer happened even without a URL, so the next
+            // nil-URL session does not look like a brand-new pairing.
+            defaults.set("", forKey: defaultsKey)
         }
     }
 }
@@ -128,6 +137,50 @@ enum ComplicationEnabledEdge {
         current && previous == false
     }
 }
+
+/// Whether `WatchSyncCoordinator` should call `transferCurrentComplicationUserInfo`.
+///
+/// `WCSession.isComplicationEnabled` is a false-negative on some Modular Ultra
+/// / watchOS 27 faces. When that flag is false, `remainingComplicationUserInfoTransfers`
+/// is 0 and Apple degrades the call to regular userInfo — still worth sending
+/// when the Watch asked (`forceComplication`) or this pairing has never been painted.
+enum ComplicationTransferDecision {
+    struct Input: Equatable {
+        var remainingTransfers: Int
+        var complicationEnabled: Bool
+        var justEnabled: Bool
+        var watchReplaced: Bool
+        var alreadyOnThisWatch: Bool
+        var forceComplication: Bool
+        var kind: HealthChangeKind
+        var endedWorkoutSinceLastPush: Bool
+        var previousFace: ComplicationPushPolicy.Face?
+        var nextFace: ComplicationPushPolicy.Face
+    }
+
+    static func shouldTransfer(_ input: Input) -> Bool {
+        if input.forceComplication { return true }
+        if input.justEnabled || input.watchReplaced {
+            return input.remainingTransfers > 0 || !input.complicationEnabled
+        }
+
+        if input.complicationEnabled {
+            guard input.remainingTransfers > 0 else { return false }
+            return ComplicationPushPolicy.shouldPushComplication(
+                from: input.previousFace,
+                to: input.nextFace,
+                kind: input.kind,
+                endedWorkoutSinceLastPush: input.endedWorkoutSinceLastPush,
+                remainingTransfers: input.remainingTransfers
+            )
+        }
+
+        // Flag said no complication. Still try a first paint so a false-negative
+        // does not leave "-- / Open iPhone" on a face that is actually installed.
+        return input.kind == .foreground && !input.alreadyOnThisWatch
+    }
+}
+
 
 /// A snapshot that could not be sent because Watch Connectivity was still
 /// activating. Always keep the newest snapshot; remember a workout if either

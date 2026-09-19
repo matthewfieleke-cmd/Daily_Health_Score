@@ -22,7 +22,7 @@ final class WatchSnapshotController: NSObject, ObservableObject {
     private var pendingFills: [UUID: Int] = [:]
     private var pendingOutgoing: [WatchCheckInEvent] = []
     private var didActivate = false
-    private var lastRequestedFaceDateKey: String?
+    private var lastRequestedFaceAt: Date?
 
     private override init() {
         super.init()
@@ -72,13 +72,15 @@ final class WatchSnapshotController: NSObject, ObservableObject {
     /// The Watch app can have today's snapshot while the face is still the
     /// placeholder. Opening the app asks the iPhone to spend a complication
     /// transfer — the only reliable way watchOS refreshes WidgetKit faces.
+    /// Retry on each foreground after a short cooldown; a once-per-day gate
+    /// left the Ultra 4 stuck when the first request was dropped.
     private func requestPhoneFaceRefresh() {
-        guard let snapshot else { return }
-        guard lastRequestedFaceDateKey != snapshot.dateKey else { return }
+        guard snapshot != nil else { return }
+        guard WatchFaceRefreshCooldown.shouldRequest(lastRequestedAt: lastRequestedFaceAt) else { return }
         #if canImport(WatchConnectivity)
         guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
         WCSession.default.transferUserInfo([WatchBridge.userInfoRefreshFaceKey: "1"])
-        lastRequestedFaceDateKey = snapshot.dateKey
+        lastRequestedFaceAt = Date()
         #endif
     }
 

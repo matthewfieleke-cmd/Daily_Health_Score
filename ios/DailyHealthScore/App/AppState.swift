@@ -184,7 +184,8 @@ final class AppState: ObservableObject {
             watchSync.publish(
                 kind: kind,
                 endedWorkoutSinceLastPush: endedWorkout,
-                latestWorkoutEnd: latestWorkoutEnd
+                latestWorkoutEnd: latestWorkoutEnd,
+                forceComplication: userInitiated || (!silent && kind == .foreground)
             )
         } catch {
             lastSyncError = error.localizedDescription
@@ -226,7 +227,7 @@ final class AppState: ObservableObject {
             sleepHrvSDNNMs: existing?.sleepHrvSDNNMs
         )
         recordStore.save(record)
-        watchSync.publish(kind: .foreground)
+        watchSync.publish(kind: .foreground, forceComplication: true)
     }
 
     /// Refreshes today's suggestion when the day/evening phase changes (e.g. after 7:30 PM).
