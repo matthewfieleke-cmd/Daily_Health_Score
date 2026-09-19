@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Settings is a native iOS Form. The Apple Watch section may make the screen
 /// scroll on smaller phones; that is preferred to hiding the pace-nudge toggle.
@@ -57,12 +60,11 @@ struct SettingsView: View {
                     Text("If fiber or movement is still low later in the day, your Watch (or iPhone, if no Watch is paired) will remind you. Fiber reminders ask you to log a meal on iPhone or eat a high-fiber food — they never log from the Watch.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button {
-                        appState.watchSync.publish(kind: .foreground, forceComplication: true)
-                    } label: {
-                        Label("Refresh Watch face", systemImage: "applewatch.and.arrow.forward")
+                    WatchFaceRefreshButton(watchSync: appState.watchSync)
+                    if !appState.watchSync.facePushMessage.isEmpty {
+                        WatchFaceRefreshStatus(watchSync: appState.watchSync)
                     }
-                    Text("Add the Daily Health Score complication from the Watch face editor. If a slot still says Open iPhone, tap Refresh Watch face, then remove and re-add that slot.")
+                    Text("Add the Daily Health Score complication from the Watch face editor. Refresh Watch face stays enabled and reports what happened. If a slot still says Open iPhone after a successful send, raise your wrist and wait a few seconds.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -253,5 +255,40 @@ struct SettingsView: View {
                 Task { await appState.refreshFollowThrough() }
             }
         )
+    }
+}
+
+/// Observes `WatchSyncCoordinator` directly. `AppState.watchSync` is not
+/// `@Published`, so a nested status string would not redraw this Form without
+/// this object — that is why Refresh looked inactive.
+private struct WatchFaceRefreshButton: View {
+    @ObservedObject var watchSync: WatchSyncCoordinator
+
+    var body: some View {
+        Button {
+            #if canImport(UIKit)
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            #endif
+            watchSync.refreshWatchFace()
+        } label: {
+            Label(
+                watchSync.isRefreshingFace ? "Sending to Watch…" : "Refresh Watch face",
+                systemImage: "applewatch.and.arrow.forward"
+            )
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .disabled(false)
+    }
+}
+
+private struct WatchFaceRefreshStatus: View {
+    @ObservedObject var watchSync: WatchSyncCoordinator
+
+    var body: some View {
+        Text(watchSync.facePushMessage)
+            .font(.caption)
+            .foregroundStyle(watchSync.facePushSucceeded ? Color.green : Color.secondary)
     }
 }

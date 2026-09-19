@@ -41,6 +41,7 @@ final class AppState: ObservableObject {
 
     private var activeSyncGeneration: UInt = 0
     private var sleepSettleRetry: Task<Void, Never>?
+    private var watchSyncObservations = Set<AnyCancellable>()
 
     init(modelContext: ModelContext) {
         recordStore = RecordStore(modelContext: modelContext)
@@ -51,6 +52,12 @@ final class AppState: ObservableObject {
             smartGoalStore: smartGoalStore,
             settingsStore: settingsStore
         )
+        watchSync.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &watchSyncObservations)
         watchSync.activate()
         healthKit.onBackgroundChange = { [weak self] kind in
             await self?.syncTodayFromHealth(silent: true, kind: kind)

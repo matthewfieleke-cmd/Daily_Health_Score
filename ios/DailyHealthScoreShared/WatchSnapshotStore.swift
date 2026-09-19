@@ -39,10 +39,14 @@ enum WatchSnapshotStore {
     ) -> Bool {
         guard let data = try? WatchBridge.encoder.encode(snapshot) else { return false }
         var wrote = false
-        if let json = String(data: data, encoding: .utf8) {
-            defaults?.set(json, forKey: WatchBridge.snapshotDefaultsKey)
-            defaults?.set(snapshot.compactFaceRecord, forKey: WatchBridge.compactFaceFileName)
-            defaults?.synchronize()
+        // `UserDefaults(suiteName:)` still returns an object when the App Group
+        // entitlement is missing. Those writes stay in-process and the widget
+        // never sees them. Only count a suite write when the group container
+        // actually exists.
+        if containerURL != nil, let defaults, let json = String(data: data, encoding: .utf8) {
+            defaults.set(json, forKey: WatchBridge.snapshotDefaultsKey)
+            defaults.set(snapshot.compactFaceRecord, forKey: WatchBridge.compactFaceFileName)
+            defaults.synchronize()
             wrote = true
         }
         for file in snapshotWriteURLs(containerURL: containerURL) {
@@ -55,23 +59,34 @@ enum WatchSnapshotStore {
                 try? Self.protect(folder)
                 try data.write(to: file, options: [.atomic, .noFileProtection])
                 try? Self.protect(file)
-                wrote = true
+                if FileManager.default.fileExists(atPath: file.path) {
+                    wrote = true
+                }
             } catch {
                 continue
             }
         }
         if let compact = compactFaceURL(containerURL: containerURL),
            let face = snapshot.compactFaceRecord.data(using: .utf8) {
-            try? FileManager.default.createDirectory(
-                at: compact.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try? face.write(to: compact, options: [.atomic, .noFileProtection])
-            try? Self.protect(compact)
-            wrote = true
+            do {
+                try FileManager.default.createDirectory(
+                    at: compact.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try face.write(to: compact, options: [.atomic, .noFileProtection])
+                try? Self.protect(compact)
+                if FileManager.default.fileExists(atPath: compact.path) {
+                    wrote = true
+                }
+            } catch {
+                // Compact face is a fallback, not a success on its own if the write failed.
+            }
         }
         return wrote
     }
+
+    /// False when this process is not actually in `group.com.dailyhealthscore.app.mf`.
+    static var canShareGroup: Bool { groupContainer != nil }
 
     /// WidgetKit reads this file on a locked wrist. Complete protection makes
     /// `getTimeline` return nil and the face stays "-- / Open iPhone".

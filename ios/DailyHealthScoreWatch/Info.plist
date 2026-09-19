@@ -30,5 +30,9 @@
 	<false/>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>Daily Health Score can remind you later in the day if fiber or movement is still low, and when a SMART goal check-in is due.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Daily Health Score reads your sleep, dietary fiber, and exercise minutes from Apple Health so the Watch app and face can show today’s score.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Daily Health Score does not write data to Apple Health. This description is required because HealthKit may reference write APIs; the app only reads authorized health types.</string>
 </dict>
 </plist>

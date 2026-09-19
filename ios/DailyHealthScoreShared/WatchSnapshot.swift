@@ -78,6 +78,26 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
         }
     }
 
+    /// Face paint order: a today-snapshot, then any snapshot written in the last
+    /// 18 hours. Widget calendars can disagree with the iPhone `dateKey`; that
+    /// must not keep "-- / Open iPhone" on a slot that already has bytes.
+    static func preferredForFace(
+        _ first: WatchSnapshot?,
+        _ second: WatchSnapshot? = nil,
+        at date: Date = Date(),
+        calendar: Calendar = .current,
+        recentInterval: TimeInterval = 18 * 3600
+    ) -> WatchSnapshot? {
+        if let shown = newestCurrent(first, second, at: date, calendar: calendar) {
+            return shown
+        }
+        let recent = [first, second].compactMap { $0 }.filter { snapshot in
+            let age = date.timeIntervalSince(snapshot.updatedAt)
+            return age >= -3600 && age <= recentInterval
+        }
+        return recent.max(by: { $0.updatedAt < $1.updatedAt })
+    }
+
     /// Prefer a matching dateKey. If the widget calendar disagrees with the
     /// iPhone dateKey, still show a snapshot written the same local day so the
     /// face does not stay on Open iPhone.

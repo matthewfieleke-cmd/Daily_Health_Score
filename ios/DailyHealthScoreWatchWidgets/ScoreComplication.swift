@@ -15,41 +15,59 @@ struct ScoreEntry: TimelineEntry {
 
 struct ScoreProvider: TimelineProvider {
     func placeholder(in context: Context) -> ScoreEntry {
-        ScoreEntry(date: Date(), snapshot: WatchSnapshotStore.load())
+        ScoreEntry(date: Date(), snapshot: Self.loadStoredSnapshot(at: Date()))
     }
 
     func getSnapshot(in context: Context, completion: @escaping (ScoreEntry) -> Void) {
-        let now = Date()
-        completion(
-            ScoreEntry(
-                date: now,
-                snapshot: Self.loadLiveSnapshot(at: now)
-            )
-        )
+        Self.loadBestSnapshot(timeout: 1.0) { snapshot in
+            completion(ScoreEntry(date: Date(), snapshot: snapshot))
+        }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ScoreEntry>) -> Void) {
-        let now = Date()
-        let snapshot = Self.loadLiveSnapshot(at: now)
-        var entries = [ScoreEntry(date: now, snapshot: snapshot)]
-        let calendar = Calendar.current
-        let midnight = calendar.nextDate(
-            after: now,
-            matching: DateComponents(hour: 0, minute: 0, second: 0),
-            matchingPolicy: .nextTime
-        )
-        if let midnight {
-            entries.append(ScoreEntry(date: midnight, snapshot: nil))
+        Self.loadBestSnapshot(timeout: 1.5) { snapshot in
+            let now = Date()
+            var entries = [ScoreEntry(date: now, snapshot: snapshot)]
+            let calendar = Calendar.current
+            let midnight = calendar.nextDate(
+                after: now,
+                matching: DateComponents(hour: 0, minute: 0, second: 0),
+                matchingPolicy: .nextTime
+            )
+            if let midnight {
+                entries.append(ScoreEntry(date: midnight, snapshot: nil))
+            }
+            let reloadAfter = WatchComplicationTimeline.reloadDate(now: now, midnight: midnight)
+            completion(Timeline(entries: entries, policy: .after(reloadAfter)))
         }
-        let reloadAfter = WatchComplicationTimeline.reloadDate(now: now, midnight: midnight)
-        completion(Timeline(entries: entries, policy: .after(reloadAfter)))
     }
 
-    /// WidgetKit is a separate process from the Watch app. Re-read the App
-    /// Group file here so a stale timeline entry cannot keep "Open iPhone"
-    /// on the face after the Watch app already saved today.
-    static func loadLiveSnapshot(at now: Date) -> WatchSnapshot? {
-        WatchSnapshot.newestCurrent(nil, WatchSnapshotStore.load(), at: now)
+    /// App Group first (Watch app persist), then the same WCSession context
+    /// the Watch app already shows, then HealthKit. The face used to stay on
+    /// Open iPhone whenever the group container was nil.
+    static func loadStoredSnapshot(at now: Date) -> WatchSnapshot? {
+        WatchSnapshot.preferredForFace(WatchSnapshotStore.load(), at: now)
+    }
+
+    static func loadBestSnapshot(
+        timeout: TimeInterval,
+        completion: @escaping (WatchSnapshot?) -> Void
+    ) {
+        let now = Date()
+        if let stored = loadStoredSnapshot(at: now) {
+            completion(stored)
+            return
+        }
+        WatchFaceSessionReader.fetch(timeout: timeout) { sessionSnapshot in
+            if let sessionSnapshot {
+                completion(WatchSnapshot.preferredForFace(sessionSnapshot, at: now) ?? sessionSnapshot)
+                return
+            }
+            Task {
+                let health = await WatchFaceHealthSnapshot.loadToday(at: now)
+                completion(health)
+            }
+        }
     }
 }
 
@@ -76,7 +94,7 @@ struct ScoreComplicationView: View {
     private var score: Double { liveSnapshot?.totalScore ?? 0 }
     private var placeholder: Bool { liveSnapshot == nil }
     private var liveSnapshot: WatchSnapshot? {
-        WatchSnapshot.newestCurrent(entry.snapshot, WatchSnapshotStore.load(), at: Date())
+        WatchSnapshot.preferredForFace(entry.snapshot, WatchSnapshotStore.load(), at: Date())
     }
     private var label: String {
         placeholder ? "--" : String(format: "%.1f", (score * 10).rounded() / 10)

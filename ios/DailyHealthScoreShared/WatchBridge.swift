@@ -16,7 +16,16 @@ enum WatchBridge {
     static let applicationContextSnapshotKey = "snapshotJSON"
     static let userInfoCheckInKey = "checkInJSON"
     static let userInfoRefreshFaceKey = "refreshFace"
+    static let userInfoConfirmedScoreKey = "confirmedScore"
     static let scoreComplicationKind = "DHSScoreComplication"
+    static let watchAppBundleIdentifier = "com.dailyhealthscore.app.mf.watchkitapp"
+
+    /// Snapshot JSON lives under `applicationContextSnapshotKey` in application
+    /// context, userInfo, and `sendMessage` payloads.
+    static func snapshot(from payload: [String: Any]) -> WatchSnapshot? {
+        guard let json = payload[applicationContextSnapshotKey] as? String else { return nil }
+        return decode(WatchSnapshot.self, from: json)
+    }
 
     /// Same `yyyy-MM-dd` local key as iPhone `DateHelpers.localDateKey`.
     static func localDateKey(from date: Date = Date(), calendar: Calendar = .current) -> String {
