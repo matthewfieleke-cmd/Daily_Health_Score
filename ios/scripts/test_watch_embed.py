@@ -81,6 +81,7 @@ class BundleIDAlignmentTests(unittest.TestCase):
         self.assertIn("ONLY_ACTIVE_ARCH: NO", yml)
         self.assertNotIn("relocate_watch_for_debug_install", yml)
         self.assertNotIn("mirror_watch_embed.sh", yml)
+        self.assertNotIn("outputFiles:", yml)
         self.assertIn("executable: DailyHealthScoreWatch", yml)
         self.assertIn('CURRENT_PROJECT_VERSION: "13"', yml)
 
