@@ -527,6 +527,16 @@ enum CoachMemoryLogic {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
+    /// The durable files with nothing in them yet, in the order the intake
+    /// asks about them. Recent is state, not a file to fill.
+    static func emptySections(in items: [CoachMemoryItem]) -> [CoachMemorySection] {
+        let filled = Set(items.map(\.section))
+        let intakeOrder: [CoachMemorySection] = [
+            .aboutYou, .routines, .people, .likes, .body, .patterns, .coaching, .goals
+        ]
+        return intakeOrder.filter { !filled.contains($0) }
+    }
+
     static func isTombstoned(content: String, tombstones: Set<String>) -> Bool {
         tombstones.contains(CoachMemoryFingerprint.fingerprint(content))
     }

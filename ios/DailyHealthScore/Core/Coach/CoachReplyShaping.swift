@@ -10,6 +10,7 @@ enum CoachReplyShape: String, Equatable, Sendable {
     case data
     case winReport
     case statement
+    case writing
     case smallTalk
     case general
 
@@ -20,24 +21,36 @@ enum CoachReplyShape: String, Equatable, Sendable {
             .filter { !$0.isEmpty }
             .joined(separator: " ") + " "
         let asksQuestion = message.contains("?")
+        func has(_ cues: [String]) -> Bool { cues.contains { text.contains($0) } }
 
         if intent == .smallTalk { return .smallTalk }
-        if intent == .support { return .feeling }
+
+        // Writing help comes before how-to: "help me word a note" is not a plan.
+        let writingCues = [" word a ", " draft a ", " write a ", " write an ", " help me write ", " help me word ", " help me say ", " how do i say ", " how should i say ", " what should i say ", " what do i say ", " a note to ", " a message to ", " an email to ", " a text to ", " reword "]
+        if has(writingCues) { return .writing }
 
         let evaluationCues = [" is this ", " is that ", " is the ", " is my ", " was this ", " was that ", " are these ", " healthy?", " good?", " okay?", " ok?", " bad?", " enough?", " reasonable?", " a good "]
-        if asksQuestion, evaluationCues.contains(where: { text.contains($0) }),
+        if asksQuestion, has(evaluationCues),
            text.contains("healthy") || text.contains("good") || text.contains("okay") || text.contains(" ok") || text.contains("bad") || text.contains("enough") || text.contains("reasonable") {
             return .evaluation
         }
 
         let howToCues = [" how do i ", " how can i ", " how should i ", " help me ", " what should i do ", " what can i do ", " how do we ", " increase the likelihood ", " make it easier ", " any tips ", " how might i ", " how to "]
-        if howToCues.contains(where: { text.contains($0) }) { return .howTo }
+        if has(howToCues) { return .howTo }
 
-        if intent == .dataLookup { return .data }
+        // A named feeling is a feeling even when the classifier called it something else.
+        let feelingCues = [" i feel ", " i'm feeling ", " i am feeling ", " feeling ", " i felt ", " insecure ", " anxious ", " anxiety ", " stressed ", " overwhelmed ", " discouraged ", " frustrated ", " lonely ", " i'm sad ", " worried ", " tension ", " depressed ", " burned out ", " burnt out ", " exhausted ", " ashamed ", " guilty "]
+        if intent == .support || has(feelingCues) { return .feeling }
+
+        // A data answer needs a question or a request, not a mention of the week.
+        let dataCues = [" how did ", " how was ", " how many ", " how much did ", " how much have ", " what was my ", " what's my ", " what is my ", " what did my ", " show me ", " tell me my ", " my average ", " my score ", " did i hit ", " did i get "]
+        if intent == .dataLookup || has(dataCues), asksQuestion || has([" show me ", " tell me my "]) {
+            return .data
+        }
 
         if !asksQuestion {
-            let winCues = [" doing better ", " did better ", " i managed ", " finally ", " i've been able ", " i have been able ", " went well ", " i did it ", " proud ", " a win ", " succeeded ", " kept my ", " stuck to ", " i made it "]
-            if winCues.contains(where: { text.contains($0) }) { return .winReport }
+            let winCues = [" doing better ", " did better ", " i managed ", " finally ", " i've been able ", " i have been able ", " went well ", " i did it ", " proud ", " a win ", " succeeded ", " kept my ", " stuck to ", " i made it ", " i've been doing ", " i have been doing "]
+            if has(winCues) { return .winReport }
             return .statement
         }
         return intent == .planning ? .howTo : .general
@@ -46,14 +59,24 @@ enum CoachReplyShape: String, Equatable, Sendable {
     /// One line for the prompt.
     var hint: String {
         switch self {
-        case .feeling: return "Likely shape: a feeling. Validate, name the mechanism, one question. Advice only if they ask."
-        case .howTo: return "Likely shape: how-do-I. Need, mechanism, up to four numbered levers, the smallest first step, an offer to track it."
-        case .evaluation: return "Likely shape: evaluation. Verdict first, what is working with numbers, the honest caveat, one upgrade that fits what they already do."
-        case .data: return "Likely shape: a data question. The exact numbers from the snapshot or tools, in one or two plain sentences."
-        case .winReport: return "Likely shape: a win report. Name the win specifically, one sentence on why it matters, one question. No plan."
-        case .statement: return "Likely shape: a statement with no question. Reflect it, add the facts it implies, no plan unless invited."
-        case .smallTalk: return "Likely shape: small talk. One or two sentences."
-        case .general: return "Likely shape: a general question. Answer it directly."
+        case .feeling:
+            return "Likely shape: a feeling. Meet it like a wise friend: name the strain or loss in your own words (no paraphrase), one honest insight that reframes it, then a concrete next move or simply presence. No numbered levers. Advice only if they ask."
+        case .howTo:
+            return "Likely shape: how-do-I. The need the behavior serves, the real levers ordered by effort (a short list is fine), the smallest first step, an offer to track it. Anchor cues to when the behavior actually happens for them."
+        case .evaluation:
+            return "Likely shape: evaluation. Verdict first, what is working with numbers, the honest caveat, one upgrade that fits what they already eat."
+        case .data:
+            return "Likely shape: a data question. The exact numbers from the snapshot or tools in one or two plain sentences, then stop. No memory callback, no question."
+        case .winReport:
+            return "Likely shape: a win report. React like you mean it, name the win specifically and what it makes possible, one sentence of real expertise made vivid, and one concrete question about how it is going. No plan."
+        case .statement:
+            return "Likely shape: a statement with no question. React, do not paraphrase; add what it implies and what you would try or watch for; no plan unless invited."
+        case .writing:
+            return "Likely shape: writing help. Gather what matters first — who, what they meant to people, timing, tone — in one short set of questions unless the message already holds it; then draft in their voice. No levers, no health steer, none of your notes about them in someone else's message."
+        case .smallTalk:
+            return "Likely shape: small talk. One or two warm sentences. No question, no memory callback."
+        case .general:
+            return "Likely shape: a general question. Answer it directly with real substance; structure only if they asked how."
         }
     }
 
@@ -61,7 +84,7 @@ enum CoachReplyShape: String, Equatable, Sendable {
     var reasoningDepth: CoachReasoningDepth {
         switch self {
         case .howTo, .evaluation: return .deep
-        case .feeling, .winReport, .statement, .general: return .moderate
+        case .feeling, .winReport, .statement, .writing, .general: return .moderate
         case .data, .smallTalk: return .light
         }
     }

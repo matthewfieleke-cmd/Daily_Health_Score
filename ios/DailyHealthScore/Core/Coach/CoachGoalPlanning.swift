@@ -86,9 +86,12 @@ enum CoachGoalPlanning {
     static func isGoalConversation(message: String, focusedGoalID: UUID?, hasProposal: Bool) -> Bool {
         if focusedGoalID != nil || hasProposal { return true }
         let text = message.lowercased()
-        return text.contains("smart goal") || text.contains("formulate a goal")
-            || text.contains("create a goal") || text.contains("edit my goal")
-            || text.contains("change my goal") || text.contains("revise my goal")
+        let cues = [
+            "smart goal", "formulate a goal", "create a goal", "edit my goal", "change my goal",
+            "revise my goal", "set a goal", "a goal around", "a goal for", "make a goal",
+            "new goal", "start a goal", "track a goal", "goal to "
+        ]
+        return cues.contains { text.contains($0) }
     }
 
     /// Separate from today's Health record: goal coaching works without Health access.

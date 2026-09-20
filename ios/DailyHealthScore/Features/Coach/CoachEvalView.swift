@@ -57,6 +57,11 @@ struct CoachEvalView: View {
                             Text("\(result.tier == .privateCloud ? "Private Cloud Compute" : "On-device") · \(result.shape.rawValue) · \(String(format: "%.1f", result.seconds))s · \(CoachReplyPolish.wordCount(result.reply)) words")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                            if let reason = result.fallbackReason, !reason.isEmpty {
+                                Text("Fell back to on-device because: \(reason)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
                             if !result.memoryNotes.isEmpty {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("Memory the Coach would have written")
