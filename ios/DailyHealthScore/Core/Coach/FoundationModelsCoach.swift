@@ -169,12 +169,12 @@ final class FoundationModelsCoach {
         let isGoalConversation = planningGoal || context.thread?.kind == .goal || CoachGoalPlanning.isGoalConversation(
             message: userMessage, focusedGoalID: focusedGoalID, hasProposal: previousProposal != nil
         )
-        func instructions(for answeringTier: CoachModelTier) -> String {
+        func charter(for answeringTier: CoachModelTier) -> String {
             isGoalConversation
                 ? CoachCharter.goalPlanningInstructions(for: answeringTier)
                 : CoachCharter.instructions(for: answeringTier)
         }
-        let instructions = instructions(for: tier)
+        let instructions = charter(for: tier)
         let budget = CoachContextBudget.make(
             totalTokens: await CoachModelProvider.contextTokens(for: tier),
             instructionCharacters: instructions.count
@@ -402,7 +402,7 @@ final class FoundationModelsCoach {
             if tier == .privateCloud {
                 fallbackReason = Self.describe(error)
             }
-            let retryInstructions = instructions(for: .onDevice)
+            let retryInstructions = charter(for: .onDevice)
             let retryBudget = CoachContextBudget.make(
                 totalTokens: await CoachModelProvider.contextTokens(for: .onDevice),
                 instructionCharacters: retryInstructions.count
