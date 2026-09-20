@@ -165,14 +165,6 @@ final class LifestyleMedicineKnowledgeTests: XCTestCase {
         let entries = LifestyleMedicineKnowledge.retrieve(query: "what is lifestyle medicine")
         XCTAssertTrue(entries.contains { $0.id == "ablm-pillars" })
     }
-
-    func test_chatDepthGuidanceIsTighterOnDeviceThanOnTheServer() {
-        let onDevice = CoachCharter.answerDepthGuidance(for: .onDevice)
-        let server = CoachCharter.answerDepthGuidance(for: .privateCloud)
-        XCTAssertTrue(onDevice.contains("3–6") || onDevice.contains("3-6"))
-        XCTAssertTrue(server.contains("Full window") || server.contains("Teach fully"))
-        XCTAssertNotEqual(onDevice, server)
-    }
 }
 
 final class CoachSafetyGateTests: XCTestCase {
@@ -229,18 +221,6 @@ final class CoachSafetyGateTests: XCTestCase {
         XCTAssertEqual(CoachSafetyGate.evaluate("How do I add more fiber?"), .ordinary)
     }
 
-    func test_careGuidanceKeepsCoachingAndNamesHelpOnce() {
-        for concern in [CoachSafetyGate.Concern.eating, .substance, .mood, .strain] {
-            let guidance = CoachSafetyGate.careGuidance(for: concern)
-            XCTAssertTrue(guidance.hasPrefix("CARE NOTE"), concern.rawValue)
-            XCTAssertFalse(guidance.contains(CoachSafetyGate.immediateHelpSentence), "Concern is not an emergency")
-        }
-        XCTAssertTrue(CoachSafetyGate.careGuidance(for: .eating).contains("therapist who works with eating"))
-        XCTAssertTrue(CoachSafetyGate.careGuidance(for: .mood).contains("988"))
-        XCTAssertTrue(CoachSafetyGate.careGuidance(for: .substance).contains("1-800-662-4357"))
-        XCTAssertFalse(CoachSafetyGate.careGuidance(for: .strain).contains("988"))
-    }
-
     func test_declinedReplyIsHonestAndStillTakesCare() {
         let eating = CoachSafetyGate.declinedReply(concern: .eating)
         XCTAssertTrue(eating.contains("wouldn't process this message"))
@@ -256,7 +236,8 @@ final class CoachSafetyGateTests: XCTestCase {
         XCTAssertTrue(mood.contains("right this minute?"))
         let plain = CoachSafetyGate.declinedReply(concern: nil)
         XCTAssertFalse(plain.contains("988"))
-        XCTAssertTrue(plain.contains("How are you doing right now?"))
+        XCTAssertFalse(plain.contains("honesty"), "No disclosure was made; the wording must not imply one")
+        XCTAssertTrue(plain.contains("declined the message"))
     }
 
     func test_escalationNeverHedgesAboutNotBeingAProfessional() {

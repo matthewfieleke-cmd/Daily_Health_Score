@@ -14,6 +14,8 @@ struct CoachEvalResult: Identifiable, Equatable, Sendable {
     var fallbackReason: String?
     /// The SMART goal draft the reply carried, if any.
     var draft: String?
+    /// Tools the model reached for, in order.
+    var toolsUsed: [String] = []
 
     init(
         id: UUID = UUID(),
@@ -25,7 +27,8 @@ struct CoachEvalResult: Identifiable, Equatable, Sendable {
         seconds: Double,
         error: String? = nil,
         fallbackReason: String? = nil,
-        draft: String? = nil
+        draft: String? = nil,
+        toolsUsed: [String] = []
     ) {
         self.id = id
         self.promptID = promptID
@@ -37,6 +40,7 @@ struct CoachEvalResult: Identifiable, Equatable, Sendable {
         self.error = error
         self.fallbackReason = fallbackReason
         self.draft = draft
+        self.toolsUsed = toolsUsed
     }
 }
 
@@ -214,6 +218,7 @@ enum CoachEvalPrompts {
             if let draft = result.draft {
                 lines.append("Draft: \(draft)")
             }
+            lines.append("Tools: \(result.toolsUsed.isEmpty ? "none" : result.toolsUsed.joined(separator: ", "))")
             if let error = result.error, !error.isEmpty {
                 lines.append("Error: \(error)")
             } else {

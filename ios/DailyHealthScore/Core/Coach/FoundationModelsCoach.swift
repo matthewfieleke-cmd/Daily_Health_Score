@@ -145,409 +145,240 @@ final class FoundationModelsCoach {
 
     // MARK: - Chat
 
+    /// One conversation per chat, held by the framework the way any assistant
+    /// holds a thread. Rebuilt when the tier or the standing profile changes,
+    /// or after a context overflow; seeded from the stored turns on a cold start.
+    #if canImport(FoundationModels)
+    private struct LiveSession {
+        var session: LanguageModelSession
+        var tier: CoachModelTier
+        var profileRevision: Int
+        var turnsSeen: Int
+    }
+    private var sessions: [UUID: LiveSession] = [:]
+    #endif
+
+    /// Drop a chat's session: the chat was deleted, or memory changed underneath it.
+    func forgetSession(for threadID: UUID) {
+        #if canImport(FoundationModels)
+        sessions[threadID] = nil
+        #endif
+    }
+
+    func forgetAllSessions() {
+        #if canImport(FoundationModels)
+        sessions.removeAll()
+        #endif
+    }
+
+    /// The reply. The model sees the conversation, the standing profile, and a
+    /// set of tools for facts and actions; it decides what this message needs.
     func reply(
         to userMessage: String,
-        intent: CoachIntent,
-        snapshot: CoachSnapshot?,
-        historyBlock: String?,
-        profile: String,
-        memoryBlock: String,
-        essentialMemoryBlock: String = "",
         recentTurns: [CoachChatTurn],
-        goals: [SMARTGoal] = [],
-        focusedGoalID: UUID? = nil,
-        previousProposal: CoachGoalProposal? = nil,
-        planningGoal: Bool = false,
+        profile: String,
+        profileRevision: Int,
+        live: CoachLiveContext,
         focus: CoachFocusContext? = nil,
-        activitiesByGoal: [UUID: [SMARTGoalActivity]] = [:],
-        bodyTrend: BodyTrend? = nil,
+        historyBlock: String? = nil,
         context: CoachReplyContext
     ) async throws -> CoachReplyResult {
         #if canImport(FoundationModels)
         try ensureAvailable()
-        let tier = CoachModelProvider.tier(for: intent)
-        let shape = CoachReplyShape.detect(message: userMessage, intent: intent)
-        let isGoalConversation = planningGoal || context.thread?.kind == .goal || CoachGoalPlanning.isGoalConversation(
-            message: userMessage, focusedGoalID: focusedGoalID, hasProposal: previousProposal != nil
-        )
-        func charter(for answeringTier: CoachModelTier) -> String {
-            isGoalConversation
-                ? CoachCharter.goalPlanningInstructions(for: answeringTier)
-                : CoachCharter.instructions(for: answeringTier)
-        }
-        let instructions = charter(for: tier)
-        let budget = CoachContextBudget.make(
-            totalTokens: await CoachModelProvider.contextTokens(for: tier),
-            instructionCharacters: instructions.count
-        )
+        let tier = CoachModelProvider.preferredTier()
+        let shape = CoachReplyShape.detect(message: userMessage, intent: CoachIntentClassifier.classify(userMessage))
         lastTierUsed = tier
-        // Relevance is decided here, before the prompt exists: the model receives
-        // only what this message needs, and everything else stays one tool call
-        // away. The intake sees every file, since it is filling them; a goal
-        // conversation sees the essentials plus the goals themselves.
-        let loweredMessage = userMessage.lowercased()
-        let memoryScope: CoachMemoryScope = context.isAcquaintance ? .full : (isGoalConversation ? .essentials : shape.memoryScope)
-        let mentionsOwnData = [
-            "today", "my score", "my numbers", "my data", "my sleep", "my fiber", "my exercise", "my steps",
-            "how am i doing", "how did i", "this week", "last week", "yesterday", "last night", "this morning",
-            "my week", "my day", "my goal", "my weight", "am i on track"
-        ].contains { loweredMessage.contains($0) }
-        let healthRelevant = shape == .data || focus != nil || context.thread?.kind == .checkInReply
-            || isGoalConversation || mentionsOwnData || intent == .dataLookup
-        let asksAboutHRV = ["hrv", "heart rate variability", "variability", "recover", "resting heart", "rested", "sleep quality", "how well did i sleep"]
-            .contains { loweredMessage.contains($0) }
-        var snapshot = snapshot
-        if !asksAboutHRV { snapshot?.hrvSummary = nil }
-        // A data question is answered with the metrics it asked about. Goals and
-        // weight stay out unless named, and the goal-pace nudge stays out entirely.
-        if shape == .data {
-            let asksGoals = ["goal", "check-in", "check in", "checkin", "smart", "streak"].contains { loweredMessage.contains($0) }
-            let asksBody = ["weight", "weigh", "bmi", "pound", "kilo", "scale", "body"].contains { loweredMessage.contains($0) }
-            if !asksGoals { snapshot?.smartGoals = [] }
-            if !asksBody { snapshot?.bodyLine = nil }
-        }
-        let goalPaceDirective = shape == .data ? nil : context.goalPaceDirective
-        let tools: [any Tool] = tier == .privateCloud
-            ? CoachSessionTools.make(
-                snapshot: snapshot,
-                goals: goals,
-                memoryBlock: memoryBlock,
-                recentConversations: context.recentConversations,
-                activitiesByGoal: activitiesByGoal,
-                bodyTrend: bodyTrend
-            )
-            : []
-        let session = CoachModelProvider.makeSession(
-            tier: tier,
-            instructions: instructions,
-            tools: tools
-        )
-        // The server model sees everything and is trusted to use it well.
-        // The small on-device model still gets the metric-gated view.
-        let healthBlock: String
-        if let focus, focus.isHistorical {
-            healthBlock = """
-            \(focus.promptBlock)
-            TODAY (only if the user asks about today; do not substitute it for the selected period):
-            \(snapshot?.minimalBlock ?? "No live daily record is available right now.")
-            """
-        } else if let snapshot, healthRelevant {
-            if tier == .privateCloud || intent.usesFullMetrics {
-                healthBlock = snapshot.promptBlock + "\nNever print the status tokens; speak like a person."
-            } else {
-                healthBlock = snapshot.minimalBlock
-            }
-        } else if let snapshot, context.allowUnpromptedHealth {
-            healthBlock = snapshot.minimalBlock + "\nOne sentence about today is allowed if it genuinely helps this answer; otherwise leave it out."
-        } else if snapshot != nil {
-            healthBlock = "Not loaded for this message: it is not about their day or their numbers. If they ask about today or their data, use lookupTodayHealth."
-        } else {
-            healthBlock = "No live daily record is available right now. Do not invent personal metrics; answer from general knowledge."
-        }
-        let topics = LifestyleMedicineKnowledge.retrievalTopics(
-            intent: intent,
-            query: userMessage,
-            primaryFocus: snapshot?.primaryFocus
-        )
-        let chatLine: String = {
-            guard let thread = context.thread else { return "CHAT: new." }
-            var parts = ["CHAT: \"\(thread.title)\""]
+        lastFailureReason = nil
+        live.beginTurn()
+
+        // Framing the model would not otherwise know: which chat this is, what a
+        // metric tap or a past-day question already resolved, and the intake.
+        var framing: [String] = []
+        if let thread = context.thread {
             switch thread.kind {
             case .conversation: break
-            case .acquaintance: parts.append("(getting acquainted)")
-            case .checkInReply: parts.append("(reply to a Home check-in)")
-            case .goal: parts.append("(about a saved SMART goal)")
+            case .acquaintance: framing.append(CoachCharter.acquaintanceContract(emptyFiles: context.emptyMemorySections))
+            case .checkInReply: framing.append("This chat began from today's Home check-in card; the person is replying to it.")
+            case .goal: framing.append("This chat is about one saved SMART goal (see lookupSMARTGoals; the focused goal is marked). Updates go to that goal only.")
             }
-            if !thread.contextNote.isEmpty { parts.append("— \(thread.contextNote.limitedToCoachBudget(300))") }
-            return parts.joined(separator: " ")
-        }()
-        let alreadySuggested = CoachRepetitionGuard.promptBlock(
-            in: recentTurns.filter { $0.role == .coach }.map(\.text)
-        )
-        // Every block is sized against whichever model is answering, so the
-        // on-device retry re-trims rather than reusing server-sized text.
-        func makePrompt(compact: Bool, budget: CoachContextBudget, answeringTier: CoachModelTier) -> String {
-            let notLoaded = "Not loaded for this kind of message. If they refer to something personal, use lookupWhatWeRemember."
-            let profileSection: String
-            let memorySection: String
-            let recentSection: String
-            switch memoryScope {
-            case .none:
-                profileSection = notLoaded
-                memorySection = notLoaded
-                recentSection = notLoaded
-            case .essentials:
-                profileSection = "Only the essentials are loaded (below)."
-                memorySection = compact
-                    ? "Omitted."
-                    : (essentialMemoryBlock.isEmpty ? "No notes in these files yet." : essentialMemoryBlock.limitedToCoachBudget(budget.profileCharacters))
-                        + "\nThese are the facts that shape advice for anyone: how they eat, their body, their staples. Their relationships, patterns, and recent state are not loaded; if the question turns personal, use lookupWhatWeRemember."
-                recentSection = notLoaded
-            case .full:
-                if compact {
-                    profileSection = "Omitted."
-                    memorySection = "Omitted."
-                    recentSection = "Omitted."
-                } else {
-                    profileSection = profile.isEmpty ? "None yet." : profile.limitedToCoachBudget(budget.profileCharacters)
-                    let thin = context.memoryNoteCount < 6
-                        ? "\nFILES ARE THIN (\(context.memoryNoteCount) notes): you know a few facts about this person, not their life. Do not stretch them across replies."
-                        : ""
-                    memorySection = memoryBlock.limitedToCoachBudget(budget.profileCharacters) + thin
-                    recentSection = context.recentConversations.limitedToCoachBudget(budget.summaryCharacters)
-                }
+            if !thread.contextNote.isEmpty, context.isFirstReply {
+                framing.append("Context for this chat: \(thread.contextNote.limitedToCoachBudget(300))")
             }
-            let acquaintance = context.isAcquaintance
-                ? CoachCharter.acquaintanceContract(emptyFiles: context.emptyMemorySections)
-                : ""
-            let care = context.safetyConcern.map { CoachSafetyGate.careGuidance(for: $0) } ?? ""
-            let opening = context.isFirstReply
-                ? "This is the first exchange of a new chat. Most first replies need no callback to the files; use one only if a note genuinely bears on this message."
-                : "Stay with this conversation; do not restart it."
-            if isGoalConversation {
-                let goalContext = CoachGoalPlanning.context(
-                    goals: goals, focusedGoalID: focusedGoalID ?? context.thread?.goalId, previousProposal: previousProposal,
-                    activitiesByGoal: activitiesByGoal
-                ).limitedToCoachBudget(1800)
-                let dialogue = Self.transcriptBlock(
-                    recentTurns, maxTurns: compact ? 3 : 8,
-                    maxCharactersPerTurn: compact ? 200 : 320
-                )
-                return """
-                \(chatLine)
-                Shape: goal shaping. When the plan is mostly clear, propose a draft with sensible defaults and ask the one question whose answer most changes it; never a numbered list of levers.
-                \(care)
-                USER MESSAGE: \(userMessage.limitedToCoachBudget(1200))
-                \(CoachGoalPlanning.contract)
-                \(goalContext)
-                \(context.goalPaceDirective ?? "")
-                \(focus.map { $0.promptBlock.limitedToCoachBudget(500) } ?? "")
-                AVAILABLE HEALTH FACTS (only use when relevant):
-                \(snapshot?.metrics.map(\.sentence).joined(separator: "\n").limitedToCoachBudget(650) ?? "No Health record; goal planning is still available.")
-                PROFILE:
-                \(profileSection)
-                MEMORY FILES (dated; quote accurately):
-                \(memorySection)
-                RECENT CONVERSATION (drafts are unsaved until a save confirmation):
-                \(dialogue)
-                \(CoachCharter.outputContract)
-                Reply in message and supply a goalProposal only for a concrete plan.
-                Never invent past behavior. Set goalCheckIn only when they clearly said they did the action.
-                """
-            }
-            let transcript = Self.transcriptBlock(
-                recentTurns,
-                maxTurns: budget.transcriptTurns,
-                maxCharactersPerTurn: budget.transcriptCharactersPerTurn
-            )
-            // Background, not script: the server model's own knowledge and the
-            // tools come first; the on-device model leans on it more.
-            let knowledge = LifestyleMedicineKnowledge.promptBlock(
-                query: userMessage,
-                topics: topics,
-                limit: answeringTier == .privateCloud ? 3 : (intent == .education ? 12 : 4),
-                characterBudget: answeringTier == .privateCloud
-                    ? budget.knowledgeCharacters / 2
-                    : (intent == .education ? budget.knowledgeCharacters : budget.knowledgeCharacters * 2 / 3)
-            )
-            let historySection = historyBlock.map {
-                """
-
-
-                EARLIER DAYS THE USER ASKED ABOUT (already computed — use these numbers exactly):
-                \($0.limitedToCoachBudget(budget.historyCharacters))
-                """
-            } ?? ""
-            let focusSection = focus.map {
-                """
-
-
-                \($0.promptBlock.limitedToCoachBudget(budget.historyCharacters))
-                """
-            } ?? ""
-            let toolsLine = answeringTier == .privateCloud
-                ? "TOOLS: \(CoachSessionTools.toolNames). Look up any food or product they named or asked about before estimating — not foods you are merely recommending; use the calculator for totals; use the evidence tool when a claim deserves a source."
-                : "TOOLS: none on this device. Estimate food values and label them approximate."
-            let suggestedSection = alreadySuggested.map { "\n" + $0 } ?? ""
-            return """
-            Continue the DHS Lifestyle Coach conversation.
-
-            \(chatLine)
-            \(opening)
-            \(shape.hint)
-            \(acquaintance)
-            \(care)
-
-            USER MESSAGE:
-            \(userMessage)
-
-            \(CoachCharter.answerDepthGuidance(for: answeringTier))
-
-            HEALTH SNAPSHOT (authoritative numbers, loaded only when the message is about them):
-            \(healthBlock)\(historySection)\(focusSection)
-            \(goalPaceDirective ?? "")
-
-            PROFILE (compiled from the memory files):
-            \(profileSection)
-
-            MEMORY FILES (dated; "stated" = they said it, "inferred" = your read):
-            \(memorySection)
-
-            RECENT CONVERSATIONS (other chats, newest first; for callbacks only):
-            \(recentSection)
-
-            RECENT TRANSCRIPT (this chat):
-            \(compact ? Self.transcriptBlock(recentTurns, maxTurns: 2, maxCharactersPerTurn: 220).nilIfEmpty ?? "None yet." : (transcript.isEmpty ? "None yet." : transcript))
-            \(suggestedSection)
-
-            BACKGROUND (optional reference; your own knowledge and the tools come first):
-            \(compact || knowledge.isEmpty ? "None." : knowledge)
-
-            \(toolsLine)
-
-            \(CoachCharter.outputContract)
-
-            Reply as the coach. Your first sentence answers the message.
-            """
+        }
+        if let focus {
+            framing.append(focus.promptBlock.limitedToCoachBudget(CoachContextBudget.maxHistoryCharacters))
+        }
+        if let historyBlock {
+            framing.append("EARLIER DAYS THE PERSON ASKED ABOUT (already computed — use these numbers exactly):\n" + historyBlock.limitedToCoachBudget(CoachContextBudget.maxHistoryCharacters))
         }
 
-        let content: GenerableCoachReply
-        var fallbackReason: String?
-        lastFailureReason = nil
-        do {
-            do {
-                content = try await CoachModelProvider.respond(
+        func prompt(seedingTranscript turns: [CoachChatTurn]?, budget: CoachContextBudget) -> String {
+            var parts: [String] = []
+            if let turns, !turns.isEmpty {
+                parts.append("EARLIER IN THIS CHAT (oldest first):\n" + Self.transcriptBlock(turns, maxTurns: budget.transcriptTurns, maxCharactersPerTurn: budget.transcriptCharactersPerTurn))
+            }
+            parts.append(contentsOf: framing)
+            parts.append(userMessage)
+            return parts.joined(separator: "\n\n")
+        }
+
+        // Server: a persistent session per chat.
+        if tier == .privateCloud {
+            let instructions = CoachCharter.instructions(for: .privateCloud, profile: profile)
+            let budget = CoachContextBudget.make(
+                totalTokens: await CoachModelProvider.contextTokens(for: .privateCloud),
+                instructionCharacters: instructions.count
+            )
+            let threadID = context.thread?.id
+            var seed: [CoachChatTurn]? = nil
+            var liveSession: LiveSession
+            if let threadID, let existing = sessions[threadID], existing.tier == .privateCloud, existing.profileRevision == profileRevision {
+                liveSession = existing
+            } else {
+                // Cold start: the stored turns (minus the message being sent) seed
+                // the first prompt; from here on the session carries the thread.
+                seed = Array(recentTurns.dropLast(recentTurns.last?.role == .user ? 1 : 0))
+                liveSession = LiveSession(
+                    session: CoachModelProvider.makeSession(tier: .privateCloud, instructions: instructions, tools: CoachSessionTools.make(context: live)),
+                    tier: .privateCloud,
+                    profileRevision: profileRevision,
+                    turnsSeen: 0
+                )
+            }
+
+            func attempt(_ session: LanguageModelSession, seed: [CoachChatTurn]?) async throws -> String {
+                try await CoachModelProvider.respondText(
                     session,
-                    to: makePrompt(compact: false, budget: budget, answeringTier: tier),
-                    generating: GenerableCoachReply.self,
-                    tier: tier,
-                    depth: shape.reasoningDepth
-                )
-            } catch where tier == .privateCloud && !Self.isContentDecline(error) && !Self.isContextOverflow(error) {
-                // A server hiccup is usually gone a second later. One more try on
-                // a fresh session before giving the message to the small model.
-                let again = CoachModelProvider.makeSession(tier: tier, instructions: instructions, tools: tools)
-                content = try await CoachModelProvider.respond(
-                    again,
-                    to: makePrompt(compact: false, budget: budget, answeringTier: tier),
-                    generating: GenerableCoachReply.self,
-                    tier: tier,
-                    depth: shape.reasoningDepth
+                    to: prompt(seedingTranscript: seed, budget: budget),
+                    tier: .privateCloud,
+                    depth: .moderate
                 )
             }
-        } catch {
-            // One fallback covers every failure mode that matters: no network,
-            // exhausted server quota, or context pressure. Retry on-device with
-            // the shorter charter and memory and reference material dropped.
-            let firstError = error
-            if tier == .privateCloud {
-                fallbackReason = Self.describe(error)
-            }
-            let retryInstructions = charter(for: .onDevice)
-            let retryBudget = CoachContextBudget.make(
-                totalTokens: await CoachModelProvider.contextTokens(for: .onDevice),
-                instructionCharacters: retryInstructions.count
-            )
-            lastTierUsed = .onDevice
-            // The small model gets the compact prompt every time. If even that
-            // overflows the window, one more attempt at half the budget: the
-            // estimate is an estimate, and a one-token miss should not end the turn.
-            var budgets = [retryBudget]
-            budgets.append(CoachContextBudget.make(
-                totalTokens: retryBudget.totalTokens / 2,
-                instructionCharacters: retryInstructions.count
-            ))
-            var lastRetryError: Error?
-            var retried: GenerableCoachReply?
-            for attemptBudget in budgets {
-                let retrySession = CoachModelProvider.makeSession(
-                    tier: .onDevice,
-                    instructions: retryInstructions,
-                    tools: []
-                )
+
+            do {
+                let text: String
                 do {
-                    retried = try await retrySession.respond(
-                        to: makePrompt(compact: true, budget: attemptBudget, answeringTier: .onDevice),
-                        generating: GenerableCoachReply.self
-                    ).content
-                    break
-                } catch {
-                    lastRetryError = error
-                    guard Self.isContextOverflow(error) else { break }
+                    text = try await attempt(liveSession.session, seed: seed)
+                } catch where Self.isContextOverflow(error) {
+                    // The thread outgrew the window: start a fresh session seeded
+                    // with the recent turns and continue.
+                    let fresh = CoachModelProvider.makeSession(tier: .privateCloud, instructions: instructions, tools: CoachSessionTools.make(context: live))
+                    liveSession = LiveSession(session: fresh, tier: .privateCloud, profileRevision: profileRevision, turnsSeen: 0)
+                    text = try await attempt(fresh, seed: Array(recentTurns.suffix(8).dropLast(recentTurns.last?.role == .user ? 1 : 0)))
+                } catch where !Self.isContentDecline(error) {
+                    // A server hiccup is usually gone a second later.
+                    text = try await attempt(liveSession.session, seed: seed)
                 }
-            }
-            // The content itself was refused: one more on-device attempt with the
-            // input classifier relaxed for the person's own words. Sensitive topics
-            // deserve a real answer, and this is the framework's sanctioned way in.
-            if retried == nil, Self.isContentDecline(lastRetryError ?? firstError) || Self.isContentDecline(firstError) {
-                let permissive = CoachModelProvider.makeSession(
-                    tier: .onDevice,
-                    instructions: retryInstructions,
-                    tools: [],
-                    permissiveGuardrails: true
+                liveSession.turnsSeen += 1
+                if let threadID { sessions[threadID] = liveSession }
+                return finish(text, tier: .privateCloud, shape: shape, live: live, fallbackReason: nil)
+            } catch {
+                if let threadID { sessions[threadID] = nil }
+                return try await onDeviceReply(
+                    userMessage: userMessage,
+                    recentTurns: recentTurns,
+                    framing: framing,
+                    live: live,
+                    shape: shape,
+                    firstError: error,
+                    fallbackReason: Self.describe(error)
                 )
-                do {
-                    retried = try await permissive.respond(
-                        to: makePrompt(compact: true, budget: retryBudget, answeringTier: .onDevice),
-                        generating: GenerableCoachReply.self
-                    ).content
-                } catch {
-                    lastRetryError = error
-                }
             }
-            guard let retried else {
-                let error = lastRetryError ?? firstError
-                // Both declined the content itself: the app answers, with care.
-                // Anything else is size or reachability, and gets the plain message.
-                lastFailureReason = "\(Self.describe(firstError)); on-device retry: \(Self.describe(error))"
-                if Self.isContentDecline(error) || Self.isContentDecline(firstError) {
-                    throw CoachError.declined(reason: Self.describe(error))
-                }
-                throw CoachError.generationFailed(Self.friendlyFailureMessage)
-            }
-            content = retried
         }
-        let message = CoachReplyPolish.polish(content.message.trimmedForCoach())
-        guard !message.isEmpty else {
-            lastFailureReason = "empty message from \(lastTierUsed.rawValue)"
-            throw CoachError.generationFailed("The coach returned an empty reply.")
-        }
-        let memoryUpdates = content.memoryUpdates.compactMap {
-            CoachMemoryUpdate(operation: $0.operation, section: $0.section, text: $0.text, replaces: $0.replaces, basis: $0.basis)
-        }
-        // The model's structured fields are claims; the message has to back them.
-        let checkIn = CoachGoalCheckInRequest.claimsCompletion(userMessage)
-            ? content.goalCheckIn.flatMap {
-                CoachGoalCheckInRequest.make(goalID: $0.goalID, when: $0.when, note: $0.note, goals: goals)
-            }
-            : nil
-        let rawProposal = isGoalConversation ? content.goalProposal.flatMap { draft in
-            CoachGoalProposal.make(
-                operation: draft.operation, goalID: draft.goalID,
-                specificText: draft.specificText, targetCount: draft.targetCount,
-                theme: draft.theme, daysFromToday: draft.daysFromToday, goals: goals,
-                focusedGoalID: focusedGoalID,
-                personalReason: draft.personalReason,
-                cue: draft.cue,
-                expectedBarriers: draft.expectedBarriers,
-                fallbackAction: draft.fallbackAction
-            )
-        } : nil
-        let proposal = rawProposal?.isNoOp == true ? nil : rawProposal
-        return CoachReplyResult(
-            message: message,
-            memoryUpdates: memoryUpdates,
-            goalCheckIn: checkIn,
-            goalProposal: proposal,
-            proposalRejected: isGoalConversation && content.goalProposal != nil && rawProposal == nil,
-            tier: lastTierUsed,
+
+        return try await onDeviceReply(
+            userMessage: userMessage,
+            recentTurns: recentTurns,
+            framing: framing,
+            live: live,
             shape: shape,
-            fallbackReason: fallbackReason
+            firstError: nil,
+            fallbackReason: nil
         )
         #else
         throw CoachError.unavailable(.unavailable)
         #endif
     }
+
+    #if canImport(FoundationModels)
+    /// The small model gets a fresh session each time with the recent turns as
+    /// text, and one more try at half the budget if the window overflows. When
+    /// the content itself is refused, one attempt with the input classifier
+    /// relaxed, then the app answers.
+    private func onDeviceReply(
+        userMessage: String,
+        recentTurns: [CoachChatTurn],
+        framing: [String],
+        live: CoachLiveContext,
+        shape: CoachReplyShape,
+        firstError: Error?,
+        fallbackReason: String?
+    ) async throws -> CoachReplyResult {
+        lastTierUsed = .onDevice
+        // Anything a failed server attempt asked for is void; this turn starts over.
+        live.beginTurn()
+        let instructions = CoachCharter.instructions(for: .onDevice)
+        let fullBudget = CoachContextBudget.make(
+            totalTokens: await CoachModelProvider.contextTokens(for: .onDevice),
+            instructionCharacters: instructions.count
+        )
+        let halfBudget = CoachContextBudget.make(totalTokens: fullBudget.totalTokens / 2, instructionCharacters: instructions.count)
+        let history = Array(recentTurns.dropLast(recentTurns.last?.role == .user ? 1 : 0))
+
+        func prompt(budget: CoachContextBudget) -> String {
+            var parts: [String] = []
+            let turns = Self.transcriptBlock(history, maxTurns: min(budget.transcriptTurns, 6), maxCharactersPerTurn: budget.transcriptCharactersPerTurn)
+            if !turns.isEmpty { parts.append("EARLIER IN THIS CHAT (oldest first):\n" + turns) }
+            parts.append(contentsOf: framing.map { $0.limitedToCoachBudget(budget.historyCharacters) })
+            parts.append(userMessage)
+            return parts.joined(separator: "\n\n")
+        }
+
+        var lastError: Error? = firstError
+        for (budget, permissive) in [(fullBudget, false), (halfBudget, false), (fullBudget, true)] {
+            if permissive {
+                guard let declined = lastError ?? firstError, Self.isContentDecline(declined) else { break }
+            }
+            // No tools on the small model: eleven schemas would eat a 4K window,
+            // and it answers from the recent turns instead.
+            let session = CoachModelProvider.makeSession(
+                tier: .onDevice,
+                instructions: instructions,
+                tools: [],
+                permissiveGuardrails: permissive
+            )
+            do {
+                let text = try await CoachModelProvider.respondText(session, to: prompt(budget: budget), tier: .onDevice, depth: .light)
+                return finish(text, tier: .onDevice, shape: shape, live: live, fallbackReason: fallbackReason)
+            } catch {
+                lastError = error
+                if !permissive, !Self.isContextOverflow(error), !Self.isContentDecline(error) { break }
+            }
+        }
+
+        let lastFailure: Error = lastError ?? CoachError.generationFailed(Self.friendlyFailureMessage)
+        lastFailureReason = [firstError.map(Self.describe), "on-device: " + Self.describe(lastFailure)].compactMap { $0 }.joined(separator: "; ")
+        if Self.isContentDecline(lastFailure) || (firstError.map(Self.isContentDecline) ?? false) {
+            throw CoachError.declined(reason: Self.describe(lastFailure))
+        }
+        throw CoachError.generationFailed(Self.friendlyFailureMessage)
+    }
+
+    private func finish(_ text: String, tier: CoachModelTier, shape: CoachReplyShape, live: CoachLiveContext, fallbackReason: String?) -> CoachReplyResult {
+        let message = CoachReplyPolish.polish(text.trimmedForCoach())
+        return CoachReplyResult(
+            message: message.isEmpty ? Self.friendlyFailureMessage : message,
+            memoryUpdates: live.pendingMemoryUpdates,
+            goalCheckIn: live.pendingCheckIn,
+            goalProposal: live.pendingProposal,
+            proposalRejected: live.proposalRejected,
+            tier: tier,
+            shape: shape,
+            fallbackReason: fallbackReason,
+            toolsUsed: live.toolLog
+        )
+    }
+    #endif
 
     /// The framework's error, named for the eval screen: the enum case plus its
     /// message, so a guardrail refusal reads differently from a network drop.
@@ -723,51 +554,6 @@ struct GenerableCoachCheckIn {
 }
 
 @Generable
-struct GenerableMemoryUpdate {
-    @Guide(description: "add, update, or remove.")
-    var operation: String
-
-    @Guide(description: "aboutYou, people, patterns, coaching, goals, likes, routines, body, or recent.")
-    var section: String
-
-    @Guide(description: "The note as one full sentence with its context — the when, the why, or the person's own words — never a bare word ('Does yoga; part of what a good day looks like to him', not 'Yoga.'). Under 240 characters, third person, present tense, specific: names, products, dates as of a month. Empty for remove.")
-    var text: String
-
-    @Guide(description: "For update or remove: the existing note being replaced or removed, quoted as closely as possible. Empty for add.")
-    var replaces: String
-
-    @Guide(description: "stated when the person said it; inferred when it is your read of them.")
-    var basis: String
-}
-
-@Generable
-struct GenerableGoalCheckIn {
-    @Guide(description: "Exact goalID from CURRENT GOALS or the SMART goals lookup.")
-    var goalID: String
-
-    @Guide(description: "today or yesterday.")
-    var when: String
-
-    @Guide(description: "Short note in the person's words. Empty if none.")
-    var note: String
-}
-
-@Generable
-struct GenerableCoachReply {
-    @Guide(description: "The coach's reply, in second person, following the charter. Light Markdown only. Hard ceiling 350 words; most replies far shorter.")
-    var message: String
-
-    @Guide(description: "Memory file edits learned in this exchange, at most five. Empty when nothing durable was learned. Never today's numbers.")
-    var memoryUpdates: [GenerableMemoryUpdate]
-
-    @Guide(description: "Only when the person clearly said they completed a saved SMART goal action today or yesterday. Nil otherwise.")
-    var goalCheckIn: GenerableGoalCheckIn?
-
-    @Guide(description: "An unsaved SMART goal draft to review. Nil for advice, questions, progress reports or unsafe requests.")
-    var goalProposal: GenerableSMARTGoalProposal?
-}
-
-@Generable
 struct GenerableChatFiling {
     @Guide(description: "Two to five Title Case words naming this chat like a note to self, for example Fiber at Dinner. No quotes, no trailing punctuation.")
     var threadTitle: String
@@ -803,29 +589,6 @@ struct GenerableFileReview {
     var operations: [GenerableFileReviewOperation]
 }
 
-@Generable
-struct GenerableSMARTGoalProposal {
-    @Guide(description: "Exactly create or update.")
-    var operation: String
-    @Guide(description: "Exact goalID from CURRENT GOALS for update; nil for create. Never invent an ID.")
-    var goalID: String?
-    @Guide(description: "One specific action per check-in, at most 500 characters. Required for create; nil to preserve the action on update.")
-    var specificText: String?
-    @Guide(description: "Total target check-ins, 1 through 30, at least the recorded count. Required for create; nil to preserve on update.")
-    var targetCount: Int?
-    @Guide(description: "marriage, parenting, health, relationships, finances, career, or choresMisc. Required for create; nil to preserve on update.")
-    var theme: String?
-    @Guide(description: "Days from today until the deadline, 1 through 30. Required for create; nil for update unless a deadline change was requested.")
-    var daysFromToday: Int?
-    @Guide(description: "Optional personal reason. Nil to preserve on update.")
-    var personalReason: String?
-    @Guide(description: "Optional cue such as after lunch. Nil to preserve on update.")
-    var cue: String?
-    @Guide(description: "Optional expected barriers. Ask; do not invent. Nil to preserve on update.")
-    var expectedBarriers: String?
-    @Guide(description: "Optional smaller fallback that does not silently satisfy a larger accepted action.")
-    var fallbackAction: String?
-}
 #endif
 
 private extension String {

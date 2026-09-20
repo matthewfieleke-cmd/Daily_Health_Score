@@ -7,6 +7,8 @@ import SwiftData
 final class LifestyleCoachController: ObservableObject {
     let memory: CoachMemoryStore
     private let model: FoundationModelsCoach
+    /// What the Coach's tools read during a reply, and where its actions land.
+    private let live = CoachLiveContext()
     private var cancellables = Set<AnyCancellable>()
 
     @Published private(set) var availability: CoachAvailabilityStatus = .unavailable
@@ -247,28 +249,17 @@ final class LifestyleCoachController: ObservableObject {
             todayKey: todayKey,
             focus: focus
         )
-        let intent = CoachIntentClassifier.classify(trimmed, hasHistoryReference: historyBlock != nil)
-        let allowHealth = CoachThreadLogic.shouldMentionHealth(
-            pillar: thread.pillar,
-            alreadyMentionedInWindow: memory.hasMentionedHealthThisWindow(),
-            userAskedAboutNumbers: intent.usesFullMetrics
-        )
         let context = CoachReplyContext(
             thread: thread,
             isFirstReply: isFirstReply,
-            pillar: thread.pillar,
-            allowUnpromptedHealth: allowHealth,
-            recentConversations: memory.recentConversationsBlock(),
-            goalPaceDirective: SMARTGoalPace.directive(goals: goals),
-            emptyMemorySections: memory.emptySectionLabels,
-            memoryNoteCount: memory.liveMemoryCount,
-            safetyConcern: safetyConcern
+            emptyMemorySections: memory.emptySectionLabels
         )
 
         await compileProfileIfNeeded()
 
         do {
-            let snapshot = todayRecord.map {
+            // Everything the tools can reach for, live, for this turn.
+            live.snapshot = todayRecord.map {
                 CoachSnapshotBuilder.build(
                     today: $0,
                     records: records,
@@ -277,22 +268,23 @@ final class LifestyleCoachController: ObservableObject {
                     bodyTrend: bodyTrend
                 )
             }
+            live.goals = goals
+            live.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
+            live.memoryBlock = memory.promptMemoryBlock
+            live.recentConversations = memory.recentConversationsBlock()
+            live.bodyTrend = bodyTrend
+            live.focusedGoalID = focusedGoalID ?? thread.goalId
+            live.personsWords = ([trimmed] + memory.turns.filter { $0.role == .user }.suffix(6).map(\.text)).joined(separator: " ")
+            _ = planningGoal
+
             let result = try await model.reply(
                 to: trimmed,
-                intent: intent,
-                snapshot: snapshot,
-                historyBlock: historyBlock,
-                profile: memory.compiledProfile,
-                memoryBlock: memory.promptMemoryBlock,
-                essentialMemoryBlock: memory.promptMemoryBlock(scope: .essentials),
                 recentTurns: memory.recentTurnsForPrompt(limit: CoachContextBudget.maxTranscriptTurns),
-                goals: goals,
-                focusedGoalID: focusedGoalID ?? thread.goalId,
-                previousProposal: goalProposal,
-                planningGoal: planningGoal,
+                profile: memory.compiledProfile,
+                profileRevision: memory.compiledProfile.hashValue,
+                live: live,
                 focus: focus,
-                activitiesByGoal: Dictionary(grouping: activities, by: \.goalId),
-                bodyTrend: bodyTrend,
+                historyBlock: historyBlock,
                 context: context
             )
             guard chatGenerationID == generationID else { return }
@@ -303,25 +295,19 @@ final class LifestyleCoachController: ObservableObject {
             // The reply is on screen; the composer reopens now, while filing
             // and profile work continue on-device behind it.
             isChatBusy = false
-            if allowHealth {
-                memory.markHealthMentioned()
-            }
             goalProposal = result.goalProposal
             pendingGoalCheckIn = result.goalCheckIn
             if result.proposalRejected {
                 chatError = "The draft needs clarification before it can be saved. Ask the coach to clarify the action, target, or deadline, or create the goal manually."
             }
             if memory.memoryRevision == memoryRevisionAtStart {
-                // A note has to come from the person's words in this exchange or
-                // the recent transcript, never from the Coach's own suggestions.
-                let spoken = ([trimmed] + memory.turns.filter { $0.role == .user }.suffix(6).map(\.text)).joined(separator: " ")
-                let grounded = result.memoryUpdates.filter { CoachMemoryLogic.isGrounded($0, inPersonsWords: spoken) }
+                // The remember tool already validated and grounded each note.
                 let applied = memory.applyCoachUpdates(
-                    grounded,
+                    result.memoryUpdates,
                     threadID: thread.id,
                     generationRevision: memoryRevisionAtStart
                 )
-                if applied.isEmpty, grounded.isEmpty {
+                if applied.isEmpty, result.memoryUpdates.isEmpty {
                     // Deterministic safety net when the model kept no notes.
                     memory.ingestUserStatedFacts(from: trimmed)
                 }
@@ -429,43 +415,31 @@ final class LifestyleCoachController: ObservableObject {
                 seconds: 0, error: availability.guidance
             )
         }
-        let intent = CoachIntentClassifier.classify(prompt)
-        var safetyConcern: CoachSafetyGate.Concern?
-        if case .concern(let concern) = CoachSafetyGate.evaluate(prompt) { safetyConcern = concern }
-        let context = CoachReplyContext(
-            thread: nil,
-            isFirstReply: true,
-            pillar: .general,
-            allowUnpromptedHealth: false,
-            recentConversations: memory.recentConversationsBlock(),
-            goalPaceDirective: SMARTGoalPace.directive(goals: goals),
-            emptyMemorySections: memory.emptySectionLabels,
-            memoryNoteCount: memory.liveMemoryCount,
-            safetyConcern: safetyConcern
-        )
+        let context = CoachReplyContext(thread: nil, isFirstReply: true, emptyMemorySections: memory.emptySectionLabels)
         do {
-            let snapshot = todayRecord.map {
+            // A throwaway turn: the tools see the real app state, nothing is saved.
+            live.snapshot = todayRecord.map {
                 CoachSnapshotBuilder.build(
                     today: $0, records: records, goals: goals, hrvSensitivity: hrvSensitivity, bodyTrend: bodyTrend
                 )
             }
+            live.goals = goals
+            live.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
+            live.memoryBlock = memory.promptMemoryBlock
+            live.recentConversations = memory.recentConversationsBlock()
+            live.bodyTrend = bodyTrend
+            live.focusedGoalID = nil
+            live.personsWords = prompt
             let result = try await model.reply(
                 to: prompt,
-                intent: intent,
-                snapshot: snapshot,
-                historyBlock: nil,
-                profile: memory.compiledProfile,
-                memoryBlock: memory.promptMemoryBlock,
-                essentialMemoryBlock: memory.promptMemoryBlock(scope: .essentials),
                 recentTurns: [],
-                goals: goals,
-                activitiesByGoal: Dictionary(grouping: activities, by: \.goalId),
-                bodyTrend: bodyTrend,
+                profile: memory.compiledProfile,
+                profileRevision: memory.compiledProfile.hashValue,
+                live: live,
                 context: context
             )
-            let notes = result.memoryUpdates.map { update -> String in
-                let line = "\(update.operation.rawValue) · \(update.section.label) · \(update.basis.rawValue): \(update.text.isEmpty ? update.replaces : update.text)"
-                return CoachMemoryLogic.isGrounded(update, inPersonsWords: prompt) ? line : "DROPPED (not in the person's words) · " + line
+            let notes = result.memoryUpdates.map { update in
+                "\(update.operation.rawValue) · \(update.section.label) · \(update.basis.rawValue): \(update.text.isEmpty ? update.replaces : update.text)"
             }
             let draft = result.goalProposal.map { proposal in
                 "\(proposal.isUpdate ? "update" : "create"): \(proposal.edit.specificText) × \(proposal.edit.targetCount)"
@@ -478,7 +452,8 @@ final class LifestyleCoachController: ObservableObject {
                 memoryNotes: notes,
                 seconds: Date().timeIntervalSince(started),
                 fallbackReason: result.fallbackReason,
-                draft: draft ?? (result.proposalRejected ? "rejected (needs clarification)" : nil)
+                draft: draft ?? (result.proposalRejected ? "rejected (needs clarification)" : nil),
+                toolsUsed: result.toolsUsed
             )
         } catch {
             let reason = model.lastFailureReason ?? error.localizedDescription
@@ -492,7 +467,12 @@ final class LifestyleCoachController: ObservableObject {
     // MARK: - Clearing
 
     /// Chats, files, and the card.
+    func forgetSession(for threadID: UUID) {
+        model.forgetSession(for: threadID)
+    }
+
     func clearMemory() {
+        model.forgetAllSessions()
         chatGenerationID = UUID()
         isChatBusy = false
         goalProposal = nil
@@ -506,6 +486,7 @@ final class LifestyleCoachController: ObservableObject {
 
     /// Chats only; the memory files stay.
     func deleteAllChats() {
+        model.forgetAllSessions()
         chatGenerationID = UUID()
         isChatBusy = false
         goalProposal = nil

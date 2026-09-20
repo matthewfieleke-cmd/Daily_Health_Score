@@ -4,86 +4,71 @@ import Foundation
 import FoundationModels
 #endif
 
-/// Live lookups the Private Cloud Compute session can call instead of guessing.
-/// Payloads are built in Swift from the same stores the rest of the app uses.
+/// What the Coach can reach for during a reply, and what it can ask the app to
+/// do. Facts are read live from the context so a long-lived session never sees
+/// stale numbers; actions land in the context for the app to validate and show.
 enum CoachSessionTools {
     #if canImport(FoundationModels)
-    static func make(
-        snapshot: CoachSnapshot?,
-        goals: [SMARTGoal],
-        memoryBlock: String,
-        recentConversations: String,
-        activitiesByGoal: [UUID: [SMARTGoalActivity]],
-        bodyTrend: BodyTrend? = nil
-    ) -> [any Tool] {
-        let today = snapshot?.promptBlock ?? "No live daily record is available."
-        let goalText = CoachGoalPlanning.context(
-            goals: goals,
-            focusedGoalID: nil,
-            previousProposal: nil,
-            activitiesByGoal: activitiesByGoal
-        )
-        let conversations = recentConversations.trimmingCharacters(in: .whitespacesAndNewlines)
-        let person = [
-            "MEMORY FILES:\n" + memoryBlock.trimmingCharacters(in: .whitespacesAndNewlines),
-            conversations.isEmpty || conversations == "None yet." ? "" : "RECENT CONVERSATIONS:\n" + conversations
-        ].filter { !$0.isEmpty }.joined(separator: "\n")
-        return [
-            CoachLookupTodayTool(payload: today),
-            CoachLookupGoalsTool(payload: goalText.isEmpty ? "No SMART goals saved." : goalText),
-            CoachLookupPersonTool(payload: person.isEmpty ? "No personal notes yet." : person),
+    static func make(context: CoachLiveContext) -> [any Tool] {
+        [
+            CoachLookupTodayTool(context: context),
+            CoachLookupGoalsTool(context: context),
+            CoachLookupPersonTool(context: context),
+            CoachBodyTrendTool(context: context),
             CoachSearchLifestyleTool(),
             CoachFoodLookupTool(),
             CoachEvidenceSearchTool(),
             CoachCalculatorTool(),
-            CoachBodyTrendTool(payload: bodyTrend?.promptBlock ?? "No weight or height data has been shared from Apple Health.")
+            CoachRememberTool(context: context),
+            CoachProposeGoalTool(context: context),
+            CoachLogCheckInTool(context: context)
         ]
     }
-
-    /// The names the prompt lists so the model knows what it can reach for.
-    static let toolNames = "lookupFood, searchEvidence, calculate, lookupWeightTrend, lookupTodayHealth, lookupSMARTGoals, lookupWhatWeRemember, searchLifestyleMedicine"
     #endif
+
+    /// The names the charter refers to.
+    static let toolNames = "lookupTodayHealth, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, searchLifestyleMedicine, lookupFood, searchEvidence, calculate, rememberAboutPerson, proposeSMARTGoal, logGoalCheckIn"
 }
 
 #if canImport(FoundationModels)
 struct CoachLookupTodayTool: Tool {
     let name = "lookupTodayHealth"
-    let description = "Today's Daily Health Score, sleep, fiber, exercise, HRV, and computed goal status. Use only when the person asked about their numbers or a plan that needs them."
-    let payload: String
+    let description = "Today's Daily Health Score with sleep, fiber, exercise, this week's averages, HRV against their usual range, and computed SMART goal status. Call when the person asks about their day, their numbers, or how they are doing."
+    let context: CoachLiveContext
 
     @Generable
     struct Arguments {
-        @Guide(description: "Why today's numbers are needed.")
+        @Guide(description: "What you need the numbers for.")
         var reason: String
     }
 
     func call(arguments: Arguments) async throws -> String {
-        _ = arguments
-        return payload
+        await context.log("lookupTodayHealth")
+        return await context.todayPayload
     }
 }
 
 struct CoachLookupGoalsTool: Tool {
     let name = "lookupSMARTGoals"
-    let description = "Saved SMART goals, check-ins, deadlines, and cues. Use when the person asks how a goal is going or wants to change one."
-    let payload: String
+    let description = "Saved SMART goals with exact goalIDs, progress, pace, deadlines, and cues. Call when goals come up, before proposing a change, and before offering to log a check-in."
+    let context: CoachLiveContext
 
     @Generable
     struct Arguments {
-        @Guide(description: "Which goal or check-in question you are answering.")
+        @Guide(description: "Which goal or question you are working on.")
         var focus: String
     }
 
     func call(arguments: Arguments) async throws -> String {
-        _ = arguments
-        return payload
+        await context.log("lookupSMARTGoals")
+        return await context.goalsPayload
     }
 }
 
 struct CoachLookupPersonTool: Tool {
     let name = "lookupWhatWeRemember"
-    let description = "What this person has told us that exercise science, nutrition, and behavioral psychology would keep: triggers, relationships, recovery, identity, constraints, and what helps."
-    let payload: String
+    let description = "Your dated notes about this person — who is in their life, their patterns and what helps, how they eat, their routines, their health, recent state — plus summaries of other recent chats. Call when the conversation turns to their life and the profile is not enough."
+    let context: CoachLiveContext
 
     @Generable
     struct Arguments {
@@ -92,14 +77,32 @@ struct CoachLookupPersonTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
-        _ = arguments
-        return payload
+        await context.log("lookupWhatWeRemember")
+        return await context.personPayload
+    }
+}
+
+struct CoachBodyTrendTool: Tool {
+    let name = "lookupWeightTrend"
+    let description = "The person's weight trend, BMI, age, and sex as shared from Apple Health. Call when weight, age, protein or energy needs come up. Never for praise or judgment; never guess an age instead of calling this."
+    let context: CoachLiveContext
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Why the trend is needed.")
+        var reason: String
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await context.log("lookupWeightTrend")
+        return await context.bodyPayload
     }
 }
 
 struct CoachSearchLifestyleTool: Tool {
     let name = "searchLifestyleMedicine"
-    let description = "Guideline-aligned Lifestyle Medicine facts (nutrition, activity, sleep, stress, connection, substances, behavior change). Search before inventing a number or a protocol."
+    let description = "Guideline-aligned Lifestyle Medicine reference entries (nutrition, activity, sleep, stress, connection, substances, behavior change). Optional background; your own knowledge comes first."
+
     @Generable
     struct Arguments {
         @Guide(description: "The lifestyle question to look up.")
@@ -113,9 +116,107 @@ struct CoachSearchLifestyleTool: Tool {
             limit: 6,
             characterBudget: 3500
         )
-        return block.isEmpty
-            ? "No matching Lifestyle Medicine entry. Stay general and do not invent a protocol."
-            : block
+        return block.isEmpty ? "No matching reference entry." : block
+    }
+}
+
+// MARK: - Actions
+
+struct CoachRememberTool: Tool {
+    let name = "rememberAboutPerson"
+    let description = "Keep a dated note about this person in one of nine files. One full sentence with its context, in their own framing (a struggle they are working on is not a habit they keep), third person, under 240 characters; names, ages and jobs with an 'as of' month, their phrases in quotes. Never their metrics, the score, or your own advice. Only what they actually said."
+    let context: CoachLiveContext
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "add, update, or remove.")
+        var operation: String
+        @Guide(description: "aboutYou, people, patterns, coaching, goals, likes, routines, body, or recent.")
+        var section: String
+        @Guide(description: "The note. Empty for remove.")
+        var text: String
+        @Guide(description: "For update or remove: the existing note being replaced or removed, quoted as closely as possible. Empty for add.")
+        var replaces: String
+        @Guide(description: "stated when they said it; inferred when it is your read.")
+        var basis: String
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await context.log("rememberAboutPerson")
+        return await context.remember(
+            operation: arguments.operation,
+            section: arguments.section,
+            text: arguments.text,
+            replaces: arguments.replaces,
+            basis: arguments.basis
+        )
+    }
+}
+
+struct CoachProposeGoalTool: Tool {
+    let name = "proposeSMARTGoal"
+    let description = "Hand the person a SMART goal draft to review — a new goal, or an update to a saved one by exact goalID — once a concrete plan is agreed. The app shows it for review; nothing is saved until they save it."
+    let context: CoachLiveContext
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "create or update.")
+        var operation: String
+        @Guide(description: "Exact goalID from lookupSMARTGoals for update; nil for create.")
+        var goalID: String?
+        @Guide(description: "One specific action per check-in, at most 500 characters. Required for create; nil to keep on update.")
+        var specificText: String?
+        @Guide(description: "Total target check-ins, 1 through 30. Required for create; nil to keep on update.")
+        var targetCount: Int?
+        @Guide(description: "marriage, parenting, health, relationships, finances, career, or choresMisc. Required for create; nil to keep on update.")
+        var theme: String?
+        @Guide(description: "Days from today until the deadline, 1 through 30. Required for create; nil for update unless the deadline changes.")
+        var daysFromToday: Int?
+        @Guide(description: "Their reason, in their words. Optional.")
+        var personalReason: String?
+        @Guide(description: "The moment it happens, such as after dinner. Optional.")
+        var cue: String?
+        @Guide(description: "What they said might get in the way. Optional; never invented.")
+        var expectedBarriers: String?
+        @Guide(description: "A smaller version for hard days. Optional.")
+        var fallbackAction: String?
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await context.log("proposeSMARTGoal")
+        return await context.propose(
+            operation: arguments.operation,
+            goalID: arguments.goalID,
+            specificText: arguments.specificText,
+            targetCount: arguments.targetCount,
+            theme: arguments.theme,
+            daysFromToday: arguments.daysFromToday,
+            personalReason: arguments.personalReason,
+            cue: arguments.cue,
+            expectedBarriers: arguments.expectedBarriers,
+            fallbackAction: arguments.fallbackAction
+        )
+    }
+}
+
+struct CoachLogCheckInTool: Tool {
+    let name = "logGoalCheckIn"
+    let description = "Offer to record a check-in on a saved SMART goal, only when the person clearly said they completed that action today or yesterday. The app asks them to confirm; never say it is logged."
+    let context: CoachLiveContext
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Exact goalID from lookupSMARTGoals.")
+        var goalID: String
+        @Guide(description: "today or yesterday.")
+        var when: String
+        @Guide(description: "A short note in their words. Empty if none.")
+        var note: String
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await context.log("logGoalCheckIn")
+        return await context.logCheckIn(goalID: arguments.goalID, when: arguments.when, note: arguments.note)
     }
 }
 #endif

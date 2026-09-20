@@ -1,20 +1,13 @@
 import Foundation
 
-/// Everything the reply pipeline needs to know about the chat it is answering in.
+/// What the reply needs to know about the chat it is answering in. Small on
+/// purpose: the conversation lives in the session, the facts live in the tools.
 struct CoachReplyContext: Equatable, Sendable {
     var thread: CoachThread?
     /// No Coach reply exists yet in this chat (openers do not count).
     var isFirstReply: Bool
-    var pillar: CoachPillar
-    var allowUnpromptedHealth: Bool
-    var recentConversations: String
-    var goalPaceDirective: String?
     /// Memory files with nothing in them yet; the intake asks toward these.
     var emptyMemorySections: [String] = []
-    /// How many live notes exist; a handful means the files are thin.
-    var memoryNoteCount: Int = 0
-    /// A disclosure in this message that deserves care, found deterministically.
-    var safetyConcern: CoachSafetyGate.Concern? = nil
     var isAcquaintance: Bool { thread?.kind == .acquaintance }
 }
 
@@ -90,9 +83,12 @@ struct CoachReplyResult: Equatable {
     var proposalRejected: Bool
     /// Which model wrote the message.
     var tier: CoachModelTier
+    /// A label for the eval screen; nothing steers on it.
     var shape: CoachReplyShape
     /// Why the server model did not answer, when the on-device retry did.
     var fallbackReason: String? = nil
+    /// Tools the model called, in order.
+    var toolsUsed: [String] = []
 }
 
 /// What the on-device filing pass returns for a chat.
