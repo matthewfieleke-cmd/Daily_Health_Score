@@ -4,8 +4,28 @@ import Foundation
 /// nutrition, and behavioral-psychology training would write down — from the
 /// person's own words, not from today's score.
 enum CoachPhDMemoryExtractor {
+    /// A long message is filed one sentence at a time, so a paragraph about work,
+    /// eating, and a marriage does not land in three files as one block.
     static func items(from message: String, now: Date = Date()) -> [CoachMemoryItem] {
-        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sentences = message
+            .replacingOccurrences(of: "\n", with: " ")
+            .components(separatedBy: CharacterSet(charactersIn: ".!?"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.count >= 8 }
+        let sources = sentences.count > 1 ? sentences : [message.trimmingCharacters(in: .whitespacesAndNewlines)]
+        var all: [CoachMemoryItem] = []
+        var seen = Set<String>()
+        for sentence in sources {
+            for item in items(fromSentence: sentence, now: now)
+            where seen.insert("\(item.category.rawValue)#\(item.contentFingerprint)").inserted {
+                all.append(item)
+            }
+        }
+        return all
+    }
+
+    private static func items(fromSentence sentence: String, now: Date) -> [CoachMemoryItem] {
+        let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 8 else { return [] }
         let lower = trimmed.lowercased()
         var items: [CoachMemoryItem] = []

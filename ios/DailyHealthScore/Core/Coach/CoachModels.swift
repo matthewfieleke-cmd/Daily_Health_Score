@@ -85,6 +85,8 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
     var threadId: UUID?
     /// Which model wrote a Coach turn. Nil for user turns.
     var modelTier: CoachModelTier?
+    /// Why the server model did not write this turn, when it fell to on-device.
+    var fallbackReason: String? = nil
 
     init(
         id: UUID = UUID(),
@@ -92,7 +94,8 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
         text: String,
         createdAt: Date = Date(),
         threadId: UUID? = nil,
-        modelTier: CoachModelTier? = nil
+        modelTier: CoachModelTier? = nil,
+        fallbackReason: String? = nil
     ) {
         self.id = id
         self.role = role
@@ -100,6 +103,7 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
         self.createdAt = createdAt
         self.threadId = threadId
         self.modelTier = modelTier
+        self.fallbackReason = fallbackReason
     }
 }
 
