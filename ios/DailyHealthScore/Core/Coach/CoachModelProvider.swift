@@ -123,12 +123,15 @@ extension CoachModelProvider {
     }
 
     private static func readContextTokens(for tier: CoachModelTier) async -> Int {
-        let reported: Int
+        // `contextSize` is an async, throwing read (it fails when the model is
+        // not ready); fall back to the assumed window in that case.
+        let reported: Int?
         switch tier {
-        case .privateCloud: reported = PrivateCloudComputeLanguageModel().contextSize
-        case .onDevice: reported = SystemLanguageModel.default.contextSize
+        case .privateCloud: reported = try? await PrivateCloudComputeLanguageModel().contextSize
+        case .onDevice: reported = try? await SystemLanguageModel.default.contextSize
         }
-        return reported > 0 ? reported : tier.assumedContextTokens
+        if let reported = reported, reported > 0 { return reported }
+        return tier.assumedContextTokens
     }
 }
 #else
