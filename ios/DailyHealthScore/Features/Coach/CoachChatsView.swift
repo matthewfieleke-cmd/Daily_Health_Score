@@ -82,6 +82,7 @@ struct CoachChatsView: View {
         .onAppear {
             coach.refreshAvailability()
             coach.memory.open(.chats)
+            Task { await coach.performHousekeepingIfDue() }
         }
         .sheet(item: $opened) { launch in
             NavigationStack {

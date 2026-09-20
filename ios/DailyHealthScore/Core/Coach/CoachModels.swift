@@ -83,19 +83,23 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
     var text: String
     var createdAt: Date
     var threadId: UUID?
+    /// Which model wrote a Coach turn. Nil for user turns.
+    var modelTier: CoachModelTier?
 
     init(
         id: UUID = UUID(),
         role: Role,
         text: String,
         createdAt: Date = Date(),
-        threadId: UUID? = nil
+        threadId: UUID? = nil,
+        modelTier: CoachModelTier? = nil
     ) {
         self.id = id
         self.role = role
         self.text = text
         self.createdAt = createdAt
         self.threadId = threadId
+        self.modelTier = modelTier
     }
 }
 
@@ -146,6 +150,8 @@ struct CoachSnapshot: Equatable, Sendable {
     var hrvSummary: String?
     /// Precomputed SMART goal lines, progress and pace already judged.
     var smartGoals: [String] = []
+    /// Weight, trend, and BMI in sentences; nil when nothing was shared.
+    var bodyLine: String? = nil
 
     var metrics: [CoachMetricStatus] { [sleep, fiber, exercise] }
 
@@ -210,11 +216,28 @@ struct CoachSnapshot: Equatable, Sendable {
             lines.append("SMART GOALS (progress and pace already computed — repeat them exactly):")
             lines.append(contentsOf: smartGoals.map { "- \($0)" })
         }
+        if let bodyLine {
+            lines.append("BODY (shared for coaching only; never part of the score): \(bodyLine)")
+        }
 
         lines.append(
             "FACT RULES: Use only these numbers. Never claim a metric is above or below goal "
                 + "unless its status line says so. Missing data means unlogged, not zero behavior."
         )
+        return lines.joined(separator: "\n")
+    }
+
+    /// Date, clock, and goals as facts for chat — no scheduling rules, which
+    /// belong to the Home card, not to a conversation.
+    var chatContextBlock: String {
+        var lines = [
+            "TODAY: \(todayDisplay)",
+            "LOCAL TIME: \(clockLabel)",
+            "USER'S GOALS: \(goalsBlock)"
+        ]
+        if let bodyLine {
+            lines.append("BODY (shared for coaching only; never part of the score): \(bodyLine)")
+        }
         return lines.joined(separator: "\n")
     }
 

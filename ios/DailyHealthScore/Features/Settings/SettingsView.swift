@@ -89,6 +89,21 @@ struct SettingsView: View {
                     Text("Deleting chats keeps what your coach has learned about you. Clearing memory removes the notes too.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    NavigationLink {
+                        CoachEvalView()
+                            .environmentObject(appState)
+                            .environmentObject(appState.coach)
+                    } label: {
+                        Label("Coach eval (developer)", systemImage: "checklist")
+                    }
+                    Text(CoachSecrets.hasUSDAKey
+                         ? "Food lookups use USDA FoodData Central with the app’s key, then Open Food Facts. Studies come from PubMed. These requests carry a food or topic name only, never your data."
+                         : "Food lookups use USDA FoodData Central on a shared demo key (limited) and Open Food Facts. Studies come from PubMed. These requests carry a food or topic name only, never your data.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Food data © USDA FoodData Central (public domain) and Open Food Facts contributors (ODbL).")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Follow-through quiet hours") {

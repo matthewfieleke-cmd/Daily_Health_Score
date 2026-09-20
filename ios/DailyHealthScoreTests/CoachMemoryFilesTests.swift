@@ -8,12 +8,38 @@ final class CoachMemoryFilesLogicTests: XCTestCase {
         XCTAssertEqual(CoachMemoryCategory.relationship.section, .people)
         XCTAssertEqual(CoachMemoryCategory.recovery.section, .body)
         XCTAssertEqual(CoachMemoryCategory.nutrition.section, .routines)
-        XCTAssertEqual(CoachMemoryCategory.whatToAvoid.section, .helps)
+        XCTAssertEqual(CoachMemoryCategory.whatToAvoid.section, .coaching)
+        XCTAssertEqual(CoachMemoryCategory.preference.section, .coaching)
         XCTAssertEqual(CoachMemoryCategory.identity.section, .aboutYou)
-        XCTAssertEqual(CoachMemoryCategory(section: .checkIns), .checkIns)
+        XCTAssertEqual(CoachMemoryCategory.circumstance.section, .recent)
+        XCTAssertEqual(CoachMemoryCategory(section: .recent), .checkIns)
+        XCTAssertEqual(CoachMemoryCategory(section: .coaching), .helps)
+        XCTAssertEqual(CoachMemoryCategory(section: .likes), .likes)
+        // Storage keys stay stable across the rename.
+        XCTAssertEqual(CoachMemorySection.coaching.rawValue, "helps")
+        XCTAssertEqual(CoachMemorySection.recent.rawValue, "checkIns")
         XCTAssertEqual(CoachMemorySection(modelValue: "Patterns & triggers"), .patterns)
         XCTAssertEqual(CoachMemorySection(modelValue: "people"), .people)
+        XCTAssertEqual(CoachMemorySection(modelValue: "coaching"), .coaching)
+        XCTAssertEqual(CoachMemorySection(modelValue: "How to coach me"), .coaching)
+        XCTAssertEqual(CoachMemorySection(modelValue: "likes"), .likes)
+        XCTAssertEqual(CoachMemorySection(modelValue: "recent"), .recent)
+        XCTAssertEqual(CoachMemorySection(modelValue: "checkIns"), .recent)
         XCTAssertEqual(CoachMemorySection(modelValue: "nonsense"), .aboutYou)
+        XCTAssertEqual(CoachMemorySection.allCases.count, 9)
+    }
+
+    func test_memoryUpdateCarriesBasisAndLongerNotes() {
+        let stated = CoachMemoryUpdate(operation: "add", section: "aboutYou", text: "Family medicine physician, outpatient.", replaces: "", basis: "stated")
+        XCTAssertEqual(stated?.basis, .stated)
+        XCTAssertEqual(stated?.basis.provenance, .coachRecorded)
+        let inferred = CoachMemoryUpdate(operation: "add", section: "patterns", text: "Tends to withdraw when a steadying person leaves.", replaces: "", basis: "Inferred")
+        XCTAssertEqual(inferred?.basis, .inferred)
+        XCTAssertEqual(inferred?.basis.provenance, .coachNoted)
+        let pattern = "Tends to withdraw and snack late after conflict at home, usually evenings; a ten-minute walk with his wife before anything else has helped him more than once (as of Sep 2026)."
+        let long = CoachMemoryUpdate(operation: "add", section: "patterns", text: pattern, replaces: "")
+        XCTAssertEqual(long?.text, pattern)
+        XCTAssertEqual(CoachMemoryItem.maxContentLength, 240)
     }
 
     func test_memoryUpdateParsesLooseModelOutput() {
@@ -21,6 +47,7 @@ final class CoachMemoryFilesLogicTests: XCTestCase {
         XCTAssertEqual(add?.operation, .add)
         XCTAssertEqual(add?.section, .people)
         XCTAssertEqual(add?.text, "Wife is Sarah; two kids.")
+        XCTAssertEqual(add?.basis, .stated)
 
         let remove = CoachMemoryUpdate(operation: "delete", section: "body", text: "", replaces: "Sprained ankle")
         XCTAssertEqual(remove?.operation, .remove)
@@ -53,18 +80,56 @@ final class CoachMemoryFilesLogicTests: XCTestCase {
         XCTAssertFalse(CoachMemoryLogic.hasEquivalent("Prefers morning workouts.", in: items))
     }
 
-    func test_promptBlockGroupsByFileAndMarksWhatThePersonSaid() {
+    func test_promptBlockDatesEntriesAndSeparatesStatedFromInferred() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Chicago")!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 20, hour: 12))!
+        let sep6 = calendar.date(from: DateComponents(year: 2026, month: 9, day: 6, hour: 9))!
+        let july = calendar.date(from: DateComponents(year: 2026, month: 7, day: 20, hour: 9))!
         let items = [
-            CoachMemoryItem(category: .people, content: "Wife is Sarah.", provenance: .coachNoted),
-            CoachMemoryItem(category: .trigger, content: "I overeat when we argue.", provenance: .userStated, confirmation: .confirmed)
+            CoachMemoryItem(category: .people, content: "Wife is Sarah.", provenance: .coachRecorded, createdAt: now),
+            CoachMemoryItem(category: .patterns, content: "Seems to withdraw when a steadying person leaves.", provenance: .coachNoted, createdAt: now),
+            CoachMemoryItem(category: .trigger, content: "I overeat when we argue.", provenance: .userStated, createdAt: now, confirmation: .confirmed),
+            CoachMemoryItem(category: .checkIns, content: "Mood: depressed lately; late-night gaming is the hurdle.", provenance: .coachRecorded, createdAt: sep6),
+            CoachMemoryItem(category: .checkIns, content: "Started evening walks with his wife.", provenance: .coachRecorded, createdAt: july)
         ]
-        let block = CoachMemoryLogic.promptBlock(items: items)
+        let block = CoachMemoryLogic.promptBlock(items: items, at: now, calendar: calendar)
         XCTAssertTrue(block.contains("PEOPLE:"))
+        XCTAssertTrue(block.contains("- [Sep 20] Wife is Sarah. (stated)"))
         XCTAssertTrue(block.contains("PATTERNS & TRIGGERS:"))
-        XCTAssertTrue(block.contains("- I overeat when we argue. (they said this)"))
-        XCTAssertTrue(block.contains("- Wife is Sarah.\n") || block.hasSuffix("- Wife is Sarah."))
+        XCTAssertTrue(block.contains("- [Sep 20] Seems to withdraw when a steadying person leaves. (inferred)"))
+        XCTAssertTrue(block.contains("- [Sep 20] I overeat when we argue. (stated)"))
+        XCTAssertTrue(block.contains("RECENT (newest first"))
+        XCTAssertTrue(block.contains("- [Sep 6] Mood: depressed lately; late-night gaming is the hurdle. (stated)"))
+        XCTAssertTrue(block.contains("- [Jul 20] Started evening walks with his wife. (stated) (older)"))
+        XCTAssertFalse(block.contains("Sep 6] Mood: depressed lately; late-night gaming is the hurdle. (stated) (older)"))
         XCTAssertFalse(block.contains("unconfirmed"))
         XCTAssertTrue(CoachMemoryLogic.promptBlock(items: []).contains("No notes yet"))
+    }
+
+    func test_entryListCarriesIdsForTheOnDevicePasses() {
+        let item = CoachMemoryItem(category: .likes, content: "Seven Sundays Wild Berry Protein Oats.", provenance: .coachRecorded)
+        let list = CoachMemoryLogic.entryList(items: [item])
+        XCTAssertTrue(list.hasPrefix(String(item.id.uuidString.prefix(8))))
+        XCTAssertTrue(list.contains("| likes |"))
+        XCTAssertTrue(list.contains("| stated |"))
+        XCTAssertEqual(CoachMemoryLogic.entryList(items: []), "None.")
+    }
+
+    func test_reviewOperationsParseAndValidate() {
+        let refile = CoachFileReviewOperation(kind: "refile", id: "abcdef12", section: "people", text: "", basis: "")
+        XCTAssertEqual(refile?.kind, .refile)
+        XCTAssertEqual(refile?.section, .people)
+        XCTAssertNil(CoachFileReviewOperation(kind: "refile", id: "abc", section: "people", text: "", basis: ""))
+        let update = CoachFileReviewOperation(kind: "update", id: "ABCDEF12", section: "", text: "Isaac (Freshman as of Aug 2026).", basis: "")
+        XCTAssertEqual(update?.kind, .update)
+        XCTAssertEqual(update?.idPrefix, "abcdef12")
+        XCTAssertNil(update?.section)
+        let add = CoachFileReviewOperation(kind: "add", id: "", section: "patterns", text: "Tends to disengage after conflict; small tasks restore momentum.", basis: "inferred")
+        XCTAssertEqual(add?.kind, .add)
+        XCTAssertEqual(add?.basis, .inferred)
+        XCTAssertNil(CoachFileReviewOperation(kind: "add", id: "", section: "", text: "Something", basis: ""))
+        XCTAssertNil(CoachFileReviewOperation(kind: "explode", id: "abcdef12", section: "", text: "", basis: ""))
     }
 
     func test_coachNotesSurviveAConfirmedNoteInTheSameFile() {
@@ -95,7 +160,7 @@ final class CoachMemoryFilesStoreTests: XCTestCase {
         XCTAssertEqual(added.count, 1)
         XCTAssertEqual(added.first?.kind, .added)
         XCTAssertEqual(store.effectiveMemories.map(\.content), ["Wife is Sarah."])
-        XCTAssertEqual(store.effectiveMemories.first?.provenance, .coachNoted)
+        XCTAssertEqual(store.effectiveMemories.first?.provenance, .coachRecorded)
 
         // Duplicates are dropped silently.
         XCTAssertTrue(store.applyCoachUpdates(
@@ -271,6 +336,82 @@ final class CoachMemoryFilesStoreTests: XCTestCase {
 
         store.clearAllMemory()
         XCTAssertTrue(store.effectiveMemories.isEmpty)
+    }
+
+    func test_inferredNotesCanBeConfirmedOrRejected() {
+        let store = makeStore()
+        store.applyCoachUpdates(
+            [CoachMemoryUpdate(operation: .add, section: .patterns, text: "Seems to withdraw when a steadying person leaves.", basis: .inferred)],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        let inferred = store.effectiveMemories[0]
+        XCTAssertEqual(inferred.provenance, .coachNoted)
+        XCTAssertFalse(inferred.provenance.isStated)
+        XCTAssertTrue(store.promptMemoryBlock.contains("(inferred)"))
+
+        store.confirmInference(inferred)
+        let confirmed = store.effectiveMemories[0]
+        XCTAssertEqual(confirmed.provenance, .userConfirmed)
+        XCTAssertTrue(store.promptMemoryBlock.contains("(stated)"))
+        XCTAssertFalse(store.promptMemoryBlock.contains("(inferred)"))
+    }
+
+    func test_reviewRefilesAndUndoMovesItBack() {
+        let store = makeStore()
+        store.applyCoachUpdates(
+            [CoachMemoryUpdate(operation: .add, section: .goals, text: "Sons: Isaac (Freshman as of Aug 2026), Caleb (7th grade).")],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        let item = store.effectiveMemories[0]
+        XCTAssertEqual(item.section, .goals)
+        let prefix = String(item.id.uuidString.prefix(8))
+        let applied = store.applyReview([
+            CoachFileReviewOperation(kind: "refile", id: prefix, section: "people", text: "", basis: "")!
+        ])
+        XCTAssertEqual(applied.count, 1)
+        XCTAssertEqual(applied.first?.kind, .refiled)
+        XCTAssertEqual(store.effectiveMemories[0].section, .people)
+        XCTAssertTrue(applied.first?.summaryLine.hasPrefix("Moved to People") == true)
+
+        store.undo(applied[0])
+        XCTAssertEqual(store.effectiveMemories[0].section, .goals)
+        XCTAssertEqual(store.effectiveMemories[0].content, item.content)
+    }
+
+    func test_reviewCannotShrinkAStatedNoteButMayDateIt() {
+        let store = makeStore()
+        store.addNote(section: .people, content: "Isaac is a freshman.")
+        let item = store.effectiveMemories[0]
+        let prefix = String(item.id.uuidString.prefix(8))
+        let shrink = store.applyReview([
+            CoachFileReviewOperation(kind: "update", id: prefix, section: "", text: "Isaac.", basis: "")!
+        ])
+        XCTAssertTrue(shrink.isEmpty)
+        let dated = store.applyReview([
+            CoachFileReviewOperation(kind: "update", id: prefix, section: "", text: "Isaac is a freshman (as of Aug 2026).", basis: "")!
+        ])
+        XCTAssertEqual(dated.count, 1)
+        XCTAssertEqual(store.effectiveMemories[0].content, "Isaac is a freshman (as of Aug 2026).")
+        XCTAssertTrue(store.effectiveMemories[0].provenance.isStated)
+        XCTAssertTrue(store.applyReview([
+            CoachFileReviewOperation(kind: "retire", id: String(store.effectiveMemories[0].id.uuidString.prefix(8)), section: "", text: "", basis: "")!
+        ]).isEmpty, "A stated note outside Recent is never retired by housekeeping")
+    }
+
+    func test_compiledProfileIsInvalidatedWhenEntriesChange() {
+        let store = makeStore()
+        XCTAssertFalse(store.needsProfileCompile)
+        store.addNote(section: .aboutYou, content: "Family medicine physician, outpatient.")
+        XCTAssertTrue(store.needsProfileCompile)
+        XCTAssertEqual(store.compiledProfile, "")
+        store.saveCompiledProfile("About you: Family medicine physician, outpatient.")
+        XCTAssertFalse(store.needsProfileCompile)
+        XCTAssertEqual(store.compiledProfile, "About you: Family medicine physician, outpatient.")
+        store.addNote(section: .likes, content: "Oatmeal for breakfast.")
+        XCTAssertTrue(store.needsProfileCompile)
+        XCTAssertEqual(store.compiledProfile, "", "A stale profile must not reach the prompt")
     }
 
     func test_focusLaunchTagsThePillarAndKeepsContext() {

@@ -38,6 +38,8 @@ final class AppState: ObservableObject {
     @Published var pendingCoachFocus: CoachFocusContext?
     @Published var pendingGoalId: UUID?
     @Published var showCoachMemory = false
+    /// Weight, trend, and BMI from Health, for the Coach only. Never scored.
+    @Published private(set) var bodyTrend: BodyTrend?
 
     private var activeSyncGeneration: UInt = 0
     private var sleepSettleRetry: Task<Void, Never>?
@@ -167,6 +169,7 @@ final class AppState: ObservableObject {
             scheduleSleepSettleRetryIfNeeded(todayMetrics)
 
             if !silent {
+                await refreshBodyTrend()
                 // Backfill never aborts because of an individual day; failures simply
                 // skip that day and the rest of the window still updates.
                 var backfillBatch: [DailyRecord] = []
@@ -214,6 +217,13 @@ final class AppState: ObservableObject {
         try? await Task.sleep(for: .seconds(SyncBannerTiming.completeDuration))
         guard generation == activeSyncGeneration else { return }
         healthSyncBannerPhase = .hidden
+    }
+
+    /// Weight, height, and BMI for the Coach. Denied permission or no data
+    /// simply leaves it nil, and the Coach says nothing about weight.
+    func refreshBodyTrend() async {
+        let measurements = await healthKit.fetchBodyMeasurements()
+        bodyTrend = BodyTrend.build(from: measurements)
     }
 
     private func waitForMinimumSyncingBannerDuration(since start: Date) async {

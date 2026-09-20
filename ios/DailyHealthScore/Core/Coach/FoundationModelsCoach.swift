@@ -4,8 +4,9 @@ import Foundation
 import FoundationModels
 #endif
 
-/// DHS Lifestyle Coach on Apple Foundation Models: Private Cloud Compute when it
-/// is available, the on-device model otherwise.
+/// DHS Lifestyle Coach on Apple Foundation Models. Private Cloud Compute
+/// thinks and answers; the on-device model does the filing (titles, summaries,
+/// pillar tags, the compiled profile, housekeeping) so it costs no quota.
 @MainActor
 final class FoundationModelsCoach {
     enum CoachError: LocalizedError {
@@ -39,6 +40,7 @@ final class FoundationModelsCoach {
     func generateCheckIn(
         kind: CoachCheckInKind,
         snapshot: CoachSnapshot,
+        profile: String,
         memoryBlock: String,
         recentConversations: String,
         goalRows: [CoachCheckInGoalRow],
@@ -49,14 +51,9 @@ final class FoundationModelsCoach {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             try ensureAvailable()
-            let tier = CoachModelProvider.preferredTier()
+            // Background writes yield to chat when the daily allowance is nearly spent.
+            let tier: CoachModelTier = CoachModelProvider.isServerQuotaApproaching ? .onDevice : CoachModelProvider.preferredTier()
             let budget = await CoachModelProvider.contextBudget(for: tier)
-            let knowledge = LifestyleMedicineKnowledge.promptBlock(
-                query: snapshot.primaryFocus.rawValue,
-                topics: LifestyleMedicineKnowledge.topics(for: snapshot.primaryFocus),
-                limit: 2,
-                characterBudget: budget.knowledgeCharacters / 2
-            )
             func makePrompt(budget: CoachContextBudget) -> String {
                 """
                 Write today's \(kind.title.lowercased()) card for the Home screen.
@@ -73,14 +70,14 @@ final class FoundationModelsCoach {
 
                 \(trend?.promptBlock ?? "TREND FACTS: none today.")
 
-                MEMORY FILES (what you know about this person; quote accurately):
+                PROFILE (compiled from the memory files):
+                \(profile.isEmpty ? "None yet." : profile.limitedToCoachBudget(budget.profileCharacters))
+
+                MEMORY FILES (dated; quote accurately):
                 \(memoryBlock.limitedToCoachBudget(budget.profileCharacters))
 
                 RECENT CONVERSATIONS (for the question; quote accurately):
                 \(recentConversations.limitedToCoachBudget(budget.summaryCharacters))
-
-                REFERENCE MATERIAL (authoritative content):
-                \(knowledge.isEmpty ? "None." : knowledge)
 
                 \(CoachCharter.checkInContract(kind: kind, hasTrend: trend != nil))
                 """
@@ -90,7 +87,11 @@ final class FoundationModelsCoach {
                 lastTierUsed = tier
                 content = try await CoachModelProvider
                     .makeSession(tier: tier, instructions: CoachCharter.instructions)
-                    .respond(to: makePrompt(budget: budget), generating: GenerableCoachCheckIn.self)
+                    .respond(
+                        to: makePrompt(budget: budget),
+                        generating: GenerableCoachCheckIn.self,
+                        contextOptions: CoachModelProvider.contextOptions(tier: tier, depth: .light)
+                    )
                     .content
             } catch where tier == .privateCloud {
                 // Network loss, quota, or a server hiccup should never cost the
@@ -116,7 +117,7 @@ final class FoundationModelsCoach {
             return CoachCheckIn(
                 kind: kind,
                 dateKey: snapshot.todayKey,
-                healthLine: health,
+                healthLine: CoachReplyPolish.polish(health),
                 question: question,
                 tomorrowLine: tomorrow,
                 trendLine: trendLine.isEmpty ? (trend?.sentence ?? "") : trendLine,
@@ -135,6 +136,7 @@ final class FoundationModelsCoach {
         intent: CoachIntent,
         snapshot: CoachSnapshot?,
         historyBlock: String?,
+        profile: String,
         memoryBlock: String,
         recentTurns: [CoachChatTurn],
         goals: [SMARTGoal] = [],
@@ -143,12 +145,14 @@ final class FoundationModelsCoach {
         planningGoal: Bool = false,
         focus: CoachFocusContext? = nil,
         activitiesByGoal: [UUID: [SMARTGoalActivity]] = [:],
+        bodyTrend: BodyTrend? = nil,
         context: CoachReplyContext
     ) async throws -> CoachReplyResult {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             try ensureAvailable()
             let tier = CoachModelProvider.tier(for: intent)
+            let shape = CoachReplyShape.detect(message: userMessage, intent: intent)
             let isGoalConversation = planningGoal || context.thread?.kind == .goal || CoachGoalPlanning.isGoalConversation(
                 message: userMessage, focusedGoalID: focusedGoalID, hasProposal: previousProposal != nil
             )
@@ -158,18 +162,23 @@ final class FoundationModelsCoach {
                 instructionCharacters: instructions.count
             )
             lastTierUsed = tier
-            let tools: [any Tool] = CoachSessionTools.make(
-                snapshot: snapshot,
-                goals: goals,
-                memoryBlock: memoryBlock,
-                recentConversations: context.recentConversations,
-                activitiesByGoal: activitiesByGoal
-            )
+            let tools: [any Tool] = tier == .privateCloud
+                ? CoachSessionTools.make(
+                    snapshot: snapshot,
+                    goals: goals,
+                    memoryBlock: memoryBlock,
+                    recentConversations: context.recentConversations,
+                    activitiesByGoal: activitiesByGoal,
+                    bodyTrend: bodyTrend
+                )
+                : []
             let session = CoachModelProvider.makeSession(
                 tier: tier,
                 instructions: instructions,
                 tools: tools
             )
+            // The server model sees everything and is trusted to use it well.
+            // The small on-device model still gets the metric-gated view.
             let healthBlock: String
             if let focus, focus.isHistorical {
                 healthBlock = """
@@ -178,58 +187,15 @@ final class FoundationModelsCoach {
                 \(snapshot?.minimalBlock ?? "No live daily record is available right now.")
                 """
             } else if let snapshot {
-                if intent.usesFullMetrics || context.allowUnpromptedHealth {
-                    healthBlock = snapshot.promptBlock + """
-
-
-                    CHAT PHRASING: Use these numbers as facts when the user asked about them.
-                    Never print the tokens BELOW GOAL, GOAL MET, GOAL EXCEEDED, or NO DATA.
-                    Speak like a person in the room.
-                    """
+                if tier == .privateCloud {
+                    healthBlock = snapshot.promptBlock + "\nThese are here for when they matter. Do not recite them unprompted."
+                } else if intent.usesFullMetrics || context.allowUnpromptedHealth {
+                    healthBlock = snapshot.promptBlock + "\nNever print the status tokens; speak like a person."
                 } else {
                     healthBlock = snapshot.minimalBlock
                 }
             } else {
-                healthBlock = "No live daily record is available right now. Do not invent personal metrics; answer from general Lifestyle Medicine knowledge."
-            }
-            let nextStepPolicy: String
-            switch intent {
-            case .support:
-                nextStepPolicy = """
-                LISTEN RULE: They shared a feeling, relationship, or pattern. Stay with that.
-                Do not mention today's fiber, sleep, exercise, or score. Do not follow
-                metric coaching directives. Validate first. One skill or one question —
-                not a food plan and not a dashboard recap.
-                """
-            case .general:
-                nextStepPolicy = """
-                LISTEN RULE: Answer what they actually said. Do not mention today's fiber,
-                sleep, exercise, or score unless they asked about those numbers or this chat
-                leads with numbers. Do not follow metric coaching directives.
-                """
-            case .planning:
-                nextStepPolicy = """
-                COACHING DIRECTIVES (use the numbers; never print status tokens):
-                \(snapshot?.coachingDirective ?? "No metric directives available.")
-                Speak like a person. At most two concrete options.
-                """
-            case .dataLookup, .education:
-                if context.allowUnpromptedHealth {
-                    nextStepPolicy = """
-                    You may mention today's Health in one sentence if it helps. Do not
-                    recap the dashboard. Never print status tokens.
-                    """
-                } else {
-                    nextStepPolicy = """
-                    NEXT STEP POLICY: This message did not ask for a plan. Do not offer a
-                    suggestion, a next step, or an activity idea. Answer only what was asked.
-                    """
-                }
-            default:
-                nextStepPolicy = """
-                NEXT STEP POLICY: This message did not ask for a plan. Do not offer a
-                suggestion, a next step, or an activity idea. Answer only what was asked.
-                """
+                healthBlock = "No live daily record is available right now. Do not invent personal metrics; answer from general knowledge."
             }
             let topics = LifestyleMedicineKnowledge.retrievalTopics(
                 intent: intent,
@@ -248,16 +214,19 @@ final class FoundationModelsCoach {
                 if !thread.contextNote.isEmpty { parts.append("— \(thread.contextNote.limitedToCoachBudget(300))") }
                 return parts.joined(separator: " ")
             }()
+            let alreadySuggested = CoachRepetitionGuard.promptBlock(
+                in: recentTurns.filter { $0.role == .coach }.map(\.text)
+            )
             // Every block is sized against whichever model is answering, so the
             // on-device retry re-trims rather than reusing server-sized text.
             func makePrompt(compact: Bool, budget: CoachContextBudget, answeringTier: CoachModelTier) -> String {
-                let memorySection = compact
-                    ? "Omitted."
-                    : memoryBlock.limitedToCoachBudget(budget.profileCharacters)
-                let recentSection = compact
-                    ? "Omitted."
-                    : context.recentConversations.limitedToCoachBudget(budget.summaryCharacters)
+                let profileSection = compact ? "Omitted." : (profile.isEmpty ? "None yet." : profile.limitedToCoachBudget(budget.profileCharacters))
+                let memorySection = compact ? "Omitted." : memoryBlock.limitedToCoachBudget(budget.profileCharacters)
+                let recentSection = compact ? "Omitted." : context.recentConversations.limitedToCoachBudget(budget.summaryCharacters)
                 let acquaintance = context.isAcquaintance ? CoachCharter.acquaintanceContract : ""
+                let opening = context.isFirstReply
+                    ? "This is the first exchange of a new chat; if a note or an earlier chat connects, one accurate callback belongs near the top."
+                    : "Stay with this conversation; do not restart it."
                 if isGoalConversation {
                     let goalContext = CoachGoalPlanning.context(
                         goals: goals, focusedGoalID: focusedGoalID ?? context.thread?.goalId, previousProposal: previousProposal,
@@ -276,7 +245,9 @@ final class FoundationModelsCoach {
                     \(focus.map { $0.promptBlock.limitedToCoachBudget(500) } ?? "")
                     AVAILABLE HEALTH FACTS (only use when relevant):
                     \(snapshot?.metrics.map(\.sentence).joined(separator: "\n").limitedToCoachBudget(650) ?? "No Health record; goal planning is still available.")
-                    MEMORY FILES (quote accurately):
+                    PROFILE:
+                    \(profileSection)
+                    MEMORY FILES (dated; quote accurately):
                     \(memorySection)
                     RECENT CONVERSATION (drafts are unsaved until a save confirmation):
                     \(dialogue)
@@ -290,18 +261,16 @@ final class FoundationModelsCoach {
                     maxTurns: budget.transcriptTurns,
                     maxCharactersPerTurn: budget.transcriptCharactersPerTurn
                 )
-                // Education questions get the biggest slice of reference material;
-                // other intents stay lean. Both scale with the context window.
+                // Background, not script: the server model's own knowledge and the
+                // tools come first; the on-device model leans on it more.
                 let knowledge = LifestyleMedicineKnowledge.promptBlock(
                     query: userMessage,
                     topics: topics,
-                    limit: intent == .education ? 12 : 4,
-                    characterBudget: intent == .education
-                        ? budget.knowledgeCharacters
-                        : budget.knowledgeCharacters * 2 / 3
+                    limit: answeringTier == .privateCloud ? 3 : (intent == .education ? 12 : 4),
+                    characterBudget: answeringTier == .privateCloud
+                        ? budget.knowledgeCharacters / 2
+                        : (intent == .education ? budget.knowledgeCharacters : budget.knowledgeCharacters * 2 / 3)
                 )
-                // Only present when the user referenced an earlier day, so unrelated
-                // questions never see a history section to riff on.
                 let historySection = historyBlock.map {
                     """
 
@@ -317,33 +286,33 @@ final class FoundationModelsCoach {
                     \($0.promptBlock.limitedToCoachBudget(budget.historyCharacters))
                     """
                 } ?? ""
+                let toolsLine = answeringTier == .privateCloud
+                    ? "TOOLS: \(CoachSessionTools.toolNames). Look up any food or product they named before estimating; use the calculator for totals; use the evidence tool when a claim deserves a source."
+                    : "TOOLS: none on this device. Estimate food values and label them approximate."
+                let suggestedSection = alreadySuggested.map { "\n" + $0 } ?? ""
                 return """
                 Continue the DHS Lifestyle Coach conversation.
 
-                \(CoachCharter.attentionContract(pillar: context.pillar, isNewChat: context.isFirstReply))
-                Unprompted Health this turn: \(context.allowUnpromptedHealth ? "allowed, one sentence max" : "not allowed").
                 \(chatLine)
+                \(opening)
+                \(shape.hint)
+                Attention: this chat has mostly been about \(context.pillar.label.lowercased()). \(context.pillar.leadsWithNumbers ? "Their numbers are welcome here when they help." : "Lead with the person; numbers only if they ask.")
+                Unprompted Health this turn: \(context.allowUnpromptedHealth ? "allowed, one sentence max" : "not allowed").
                 \(acquaintance)
 
                 USER MESSAGE:
                 \(userMessage)
 
-                DETECTED INTENT: \(intent.rawValue)
-
-                \(intent.contract)
-
                 \(CoachCharter.answerDepthGuidance(for: answeringTier))
 
                 HEALTH SNAPSHOT (authoritative numbers):
                 \(healthBlock)\(historySection)\(focusSection)
-
-                \(nextStepPolicy)
                 \(context.goalPaceDirective ?? "")
 
-                REFERENCE MATERIAL (authoritative content — use it to answer accurately):
-                \(compact || knowledge.isEmpty ? "None retrieved; answer from general Lifestyle Medicine knowledge and stay non-diagnostic." : knowledge)
+                PROFILE (compiled from the memory files):
+                \(profileSection)
 
-                MEMORY FILES (what you know about this person; quote accurately; you may add, update, or remove notes):
+                MEMORY FILES (dated; "stated" = they said it, "inferred" = your read):
                 \(memorySection)
 
                 RECENT CONVERSATIONS (other chats, newest first; for callbacks only):
@@ -351,27 +320,25 @@ final class FoundationModelsCoach {
 
                 RECENT TRANSCRIPT (this chat):
                 \(compact || transcript.isEmpty ? "None yet." : transcript)
+                \(suggestedSection)
 
-                TOOLS: lookupTodayHealth, lookupSMARTGoals, lookupWhatWeRemember,
-                searchLifestyleMedicine. Call them when a number, a saved goal, a personal
-                note, or a Lifestyle Medicine fact would make the answer true. Do not call
-                lookupTodayHealth for a feeling, a relationship, or a confession.
+                BACKGROUND (optional reference; your own knowledge and the tools come first):
+                \(compact || knowledge.isEmpty ? "None." : knowledge)
+
+                \(toolsLine)
 
                 \(CoachCharter.outputContract)
 
-                Reply as the coach, following the response contract above. Your first sentence must
-                answer the user's message. Never repeat a sentence or a suggestion that already
-                appears in the recent transcript. Set goalProposal to nil unless they asked to build
-                or change a SMART goal; for editable SMART goal planning, invite the user to say
-                "help me formulate a SMART goal."
+                Reply as the coach. Your first sentence answers the message.
                 """
             }
 
-            let content: GenerableCoachChatReply
+            let content: GenerableCoachReply
             do {
                 content = try await session.respond(
                     to: makePrompt(compact: false, budget: budget, answeringTier: tier),
-                    generating: GenerableCoachChatReply.self
+                    generating: GenerableCoachReply.self,
+                    contextOptions: CoachModelProvider.contextOptions(tier: tier, depth: shape.reasoningDepth)
                 ).content
             } catch {
                 // One fallback covers every failure mode that matters: no network,
@@ -391,18 +358,18 @@ final class FoundationModelsCoach {
                 do {
                     content = try await retrySession.respond(
                         to: makePrompt(compact: tier == .onDevice, budget: retryBudget, answeringTier: .onDevice),
-                        generating: GenerableCoachChatReply.self
+                        generating: GenerableCoachReply.self
                     ).content
                 } catch {
                     throw CoachError.generationFailed(Self.friendlyFailureMessage)
                 }
             }
-            let message = content.message.trimmedForCoach()
+            let message = CoachReplyPolish.polish(content.message.trimmedForCoach())
             guard !message.isEmpty else {
                 throw CoachError.generationFailed("The coach returned an empty reply.")
             }
             let memoryUpdates = content.memoryUpdates.compactMap {
-                CoachMemoryUpdate(operation: $0.operation, section: $0.section, text: $0.text, replaces: $0.replaces)
+                CoachMemoryUpdate(operation: $0.operation, section: $0.section, text: $0.text, replaces: $0.replaces, basis: $0.basis)
             }
             let checkIn = content.goalCheckIn.flatMap {
                 CoachGoalCheckInRequest.make(goalID: $0.goalID, when: $0.when, note: $0.note, goals: goals)
@@ -421,14 +388,98 @@ final class FoundationModelsCoach {
             } : nil
             return CoachReplyResult(
                 message: message,
-                title: content.threadTitle,
-                summary: content.threadSummary,
-                pillar: CoachPillar(modelValue: content.pillar),
                 memoryUpdates: memoryUpdates,
                 goalCheckIn: checkIn,
                 goalProposal: proposal,
-                proposalRejected: isGoalConversation && content.goalProposal != nil && proposal == nil
+                proposalRejected: isGoalConversation && content.goalProposal != nil && proposal == nil,
+                tier: lastTierUsed,
+                shape: shape
             )
+        }
+        #endif
+        throw CoachError.unavailable(.unavailable)
+    }
+
+    // MARK: - On-device filing
+
+    /// Title, summary, and pillar for a chat after an exchange. On-device, no quota.
+    func fileChat(
+        userMessage: String,
+        reply: String,
+        currentTitle: String,
+        titleIsProvisional: Bool,
+        currentPillar: CoachPillar
+    ) async throws -> CoachChatFiling {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            try ensureAvailable()
+            let prompt = """
+            CURRENT TITLE: \(titleIsProvisional ? "(none yet — provisional: \(currentTitle))" : currentTitle)
+            CURRENT PILLAR: \(currentPillar.rawValue)
+
+            USER:
+            \(userMessage.limitedToCoachBudget(900))
+
+            COACH:
+            \(CoachMarkdown.plainText(reply).limitedToCoachBudget(1400))
+
+            File this chat.
+            """
+            let content = try await CoachModelProvider
+                .makeSession(tier: .onDevice, instructions: CoachCharter.filingInstructions)
+                .respond(to: prompt, generating: GenerableChatFiling.self)
+                .content
+            return CoachChatFiling(
+                title: content.threadTitle,
+                summary: content.threadSummary.trimmedForCoach(),
+                pillar: CoachPillar(modelValue: content.pillar)
+            )
+        }
+        #endif
+        throw CoachError.unavailable(.unavailable)
+    }
+
+    /// One paragraph per file, on-device. Empty when there is nothing to compile.
+    func compileProfile(entryList: String) async throws -> String {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            try ensureAvailable()
+            guard entryList != "None." else { return "" }
+            let prompt = """
+            ENTRIES (id | file | date | stated/inferred | note):
+            \(entryList.limitedToCoachBudget(9_000))
+
+            Compile the profile.
+            """
+            let text = try await CoachModelProvider
+                .makeSession(tier: .onDevice, instructions: CoachCharter.profileInstructions)
+                .respond(to: prompt)
+                .content
+            return CoachMarkdown.plainText(text).trimmedForCoach().limitedToCoachBudget(3_000)
+        }
+        #endif
+        throw CoachError.unavailable(.unavailable)
+    }
+
+    /// Housekeeping proposals for the files, on-device. Never new opinions.
+    func reviewFiles(entryList: String) async throws -> [CoachFileReviewOperation] {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            try ensureAvailable()
+            guard entryList != "None." else { return [] }
+            let prompt = """
+            ENTRIES (id | file | date | stated/inferred | note). Files: aboutYou, people, patterns, coaching, goals, likes, routines, body, recent.
+            \(entryList.limitedToCoachBudget(9_000))
+
+            Propose housekeeping operations, or none.
+            """
+            let content = try await CoachModelProvider
+                .makeSession(tier: .onDevice, instructions: CoachCharter.reviewInstructions)
+                .respond(to: prompt, generating: GenerableFileReview.self)
+                .content
+            return content.operations.prefix(6).compactMap {
+                CoachFileReviewOperation(kind: $0.kind, id: $0.id, section: $0.section, text: $0.text, basis: $0.basis)
+            }
         }
         #endif
         throw CoachError.unavailable(.unavailable)
@@ -510,14 +561,17 @@ struct GenerableMemoryUpdate {
     @Guide(description: "add, update, or remove.")
     var operation: String
 
-    @Guide(description: "aboutYou, people, patterns, helps, goals, routines, body, or checkIns.")
+    @Guide(description: "aboutYou, people, patterns, coaching, goals, likes, routines, body, or recent.")
     var section: String
 
-    @Guide(description: "The note, under 160 characters, third person, present tense. Empty for remove.")
+    @Guide(description: "The note, under 240 characters, third person, present tense, specific: names, products, dates as of a month, the person's own phrase in quotes when it matters. Empty for remove.")
     var text: String
 
     @Guide(description: "For update or remove: the existing note being replaced or removed, quoted as closely as possible. Empty for add.")
     var replaces: String
+
+    @Guide(description: "stated when the person said it; inferred when it is your read of them.")
+    var basis: String
 }
 
 @available(iOS 26.0, *)
@@ -535,10 +589,23 @@ struct GenerableGoalCheckIn {
 
 @available(iOS 26.0, *)
 @Generable
-struct GenerableCoachChatReply {
-    @Guide(description: "Coach reply that answers the user's message in its first sentence, in second person, with conviction and warmth. Usually 3-6 sentences; a substantive question supported by reference material may run longer. Light Markdown: **bold** at most twice, a short '-' list only for two to four options, a blank line between paragraphs. No headers, tables, or emoji.")
+struct GenerableCoachReply {
+    @Guide(description: "The coach's reply, in second person, following the charter. Light Markdown only. Hard ceiling 350 words; most replies far shorter.")
     var message: String
 
+    @Guide(description: "Memory file edits learned in this exchange, at most five. Empty when nothing durable was learned. Never today's numbers.")
+    var memoryUpdates: [GenerableMemoryUpdate]
+
+    @Guide(description: "Only when the person clearly said they completed a saved SMART goal action today or yesterday. Nil otherwise.")
+    var goalCheckIn: GenerableGoalCheckIn?
+
+    @Guide(description: "An unsaved SMART goal draft to review. Nil for advice, questions, progress reports or unsafe requests.")
+    var goalProposal: GenerableSMARTGoalProposal?
+}
+
+@available(iOS 26.0, *)
+@Generable
+struct GenerableChatFiling {
     @Guide(description: "Two to five Title Case words naming this chat like a note to self, for example Fiber at Dinner. No quotes, no trailing punctuation.")
     var threadTitle: String
 
@@ -547,15 +614,32 @@ struct GenerableCoachChatReply {
 
     @Guide(description: "One of: relationships, nutrition, sleep, activity, stress, hobbies, general.")
     var pillar: String
+}
 
-    @Guide(description: "Memory file edits learned in this exchange, at most four. Empty when nothing durable was learned. Never today's numbers.")
-    var memoryUpdates: [GenerableMemoryUpdate]
+@available(iOS 26.0, *)
+@Generable
+struct GenerableFileReviewOperation {
+    @Guide(description: "refile, update, retire, or add.")
+    var kind: String
 
-    @Guide(description: "Only when the person clearly said they completed a saved SMART goal action today or yesterday. Nil otherwise.")
-    var goalCheckIn: GenerableGoalCheckIn?
+    @Guide(description: "The 8-character id of the entry, exactly as listed. Empty for add.")
+    var id: String
 
-    @Guide(description: "An unsaved SMART goal draft to review. Nil for advice, questions, progress reports or unsafe requests.")
-    var goalProposal: GenerableSMARTGoalProposal?
+    @Guide(description: "Target file for refile or add: aboutYou, people, patterns, coaching, goals, likes, routines, body, recent. Empty otherwise.")
+    var section: String
+
+    @Guide(description: "New text for update or add. Empty otherwise.")
+    var text: String
+
+    @Guide(description: "stated or inferred, for add. Empty otherwise.")
+    var basis: String
+}
+
+@available(iOS 26.0, *)
+@Generable
+struct GenerableFileReview {
+    @Guide(description: "Housekeeping operations, at most six. Empty when the files are tidy.")
+    var operations: [GenerableFileReviewOperation]
 }
 
 @available(iOS 26.0, *)

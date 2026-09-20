@@ -14,7 +14,8 @@ enum CoachSessionTools {
         goals: [SMARTGoal],
         memoryBlock: String,
         recentConversations: String,
-        activitiesByGoal: [UUID: [SMARTGoalActivity]]
+        activitiesByGoal: [UUID: [SMARTGoalActivity]],
+        bodyTrend: BodyTrend? = nil
     ) -> [any Tool] {
         let today = snapshot?.promptBlock ?? "No live daily record is available."
         let goalText = CoachGoalPlanning.context(
@@ -32,9 +33,16 @@ enum CoachSessionTools {
             CoachLookupTodayTool(payload: today),
             CoachLookupGoalsTool(payload: goalText.isEmpty ? "No SMART goals saved." : goalText),
             CoachLookupPersonTool(payload: person.isEmpty ? "No personal notes yet." : person),
-            CoachSearchLifestyleTool()
+            CoachSearchLifestyleTool(),
+            CoachFoodLookupTool(),
+            CoachEvidenceSearchTool(),
+            CoachCalculatorTool(),
+            CoachBodyTrendTool(payload: bodyTrend?.promptBlock ?? "No weight or height data has been shared from Apple Health.")
         ]
     }
+
+    /// The names the prompt lists so the model knows what it can reach for.
+    static let toolNames = "lookupFood, searchEvidence, calculate, lookupWeightTrend, lookupTodayHealth, lookupSMARTGoals, lookupWhatWeRemember, searchLifestyleMedicine"
     #endif
 }
 

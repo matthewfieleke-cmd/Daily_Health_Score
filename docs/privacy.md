@@ -45,13 +45,22 @@ The app stores locally, on your iPhone:
 - Suggestions shown for each day
 - Optional SMART goals and check-in state
 - App preferences (e.g. rotation of encouragement/motivation text)
-- Optional **DHS Lifestyle Coach** chat transcript, a short running summary, and preference notes used only to personalize on-device coaching
+- Optional **DHS Lifestyle Coach** chats and memory files (dated notes about you, kept in nine files with an undo log) used only to personalize coaching
 
 Local retention is limited to approximately **125 days** of daily records, after which older records may be removed by the app’s storage rules. Coach chat memory can be cleared separately in Settings.
 
 ### Lifestyle Coach
 
 When available, **DHS Lifestyle Coach** uses Apple’s Foundation Models. It prefers Apple’s Private Cloud Compute server model and falls back to the on-device model if that server model is unavailable, offline, or out of quota. The app does not send your Health metrics or coach chats to a developer-operated cloud backend.
+
+While answering, the Coach may look up public reference data. These requests carry only a food or product name, or a research topic — never your health data, your notes, or your conversation:
+
+- **USDA FoodData Central** (api.nal.usda.gov) and **Open Food Facts** (world.openfoodfacts.org) for nutrition facts about foods and branded products you mention.
+- **PubMed** (eutils.ncbi.nlm.nih.gov) for published studies when the Coach cites evidence.
+
+If you grant access, the Coach can read your **weight, height, and BMI** from Apple Health. They are used only to describe trends in conversation and are never part of your score or shown elsewhere in the app.
+
+What the Coach remembers about you (the memory files) is stored on your device, sent to Apple’s Private Cloud Compute only as part of a reply request under Apple’s privacy guarantees, and can be edited, undone, or deleted in Settings.
 
 ### Notifications (optional)
 

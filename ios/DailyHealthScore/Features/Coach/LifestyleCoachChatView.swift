@@ -420,7 +420,8 @@ struct LifestyleCoachChatView: View {
                 focusedGoalID: focusedGoalID,
                 planningGoal: planningGoal,
                 focus: focus,
-                activities: appState.smartGoalStore.activities
+                activities: appState.smartGoalStore.activities,
+                bodyTrend: appState.bodyTrend
             )
         }
     }
@@ -473,13 +474,22 @@ struct LifestyleCoachChatView: View {
                     .frame(width: 26, height: 26)
                     .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     .accessibilityHidden(true)
-                CoachMarkdownText(text: turn.text)
-                    .foregroundStyle(Color.primary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(AppTheme.cardSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 4) {
+                    CoachMarkdownText(text: turn.text)
+                        .foregroundStyle(Color.primary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(AppTheme.cardSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .textSelection(.enabled)
+                    if turn.modelTier == .onDevice, CoachModelProvider.serverModelExists {
+                        // Honest about the fallback: this answer did not get the server model.
+                        Text("Answered on-device — Private Cloud Compute was unavailable or at today’s limit.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 6)
+                    }
+                }
                 Spacer(minLength: 24)
             }
         }

@@ -54,7 +54,7 @@ struct CoachMemoryListView: View {
                         } header: {
                             Text("Recently changed by your coach")
                         } footer: {
-                            Text("Undo puts a note back the way it was and tells your coach not to write it again.")
+                            Text("Undo puts a note back the way it was and tells your coach not to write it again. Notes marked as your coach’s read are guesses until you confirm them.")
                         }
                     }
                     ForEach(sectionsWithItems) { entry in
@@ -156,12 +156,17 @@ struct CoachMemoryListView: View {
     }
 
     private func changeRow(_ change: CoachMemoryChange) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        let source = change.threadId.flatMap { id in store.threads.first { $0.id == id }?.title }
+        return HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(change.summaryLine)
                     .font(.subheadline)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("\(change.section.label) · \(change.createdAt.formatted(.relative(presentation: .named)))")
+                Text([
+                    change.section.label,
+                    source.map { "from “\($0)”" } ?? "from tidying the files",
+                    change.createdAt.formatted(.relative(presentation: .named))
+                ].joined(separator: " · "))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -187,6 +192,19 @@ struct CoachMemoryListView: View {
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
+            if item.provenance == .coachNoted {
+                HStack {
+                    Button("Confirm") {
+                        store.confirmInference(item)
+                    }
+                    .buttonStyle(.bordered)
+                    Button("Not right") {
+                        store.delete(item)
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .font(.caption)
+            }
             if item.isTemporary || item.confirmation == .needsReview || (item.expiresAt ?? .distantFuture) < Date() {
                 Text("Does this still apply?")
                     .font(.caption.weight(.semibold))

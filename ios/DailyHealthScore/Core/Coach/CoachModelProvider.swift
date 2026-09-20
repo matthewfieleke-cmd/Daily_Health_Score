@@ -5,7 +5,7 @@ import FoundationModels
 #endif
 
 /// Which model answers a given message.
-enum CoachModelTier: String, Equatable, Sendable {
+enum CoachModelTier: String, Equatable, Codable, Sendable {
     /// Apple's server model on Private Cloud Compute: frontier-class breadth,
     /// a 32K context window, and reasoning. Requires iOS 27, a network, the
     /// managed Private Cloud Compute entitlement, and daily quota.
@@ -69,6 +69,30 @@ extension CoachModelProvider {
         return PrivateCloudComputeLanguageModel().quotaUsage.isLimitReached
     }
 
+    /// The app was built against an SDK that has the server model, so a reply
+    /// answered on-device is a fallback worth naming in the UI.
+    static let serverModelExists = true
+
+    /// Nearing the daily allowance: keep chat on PCC, let background writes go on-device.
+    static var isServerQuotaApproaching: Bool {
+        guard #available(iOS 27.0, *) else { return false }
+        if case .belowLimit(let info) = PrivateCloudComputeLanguageModel().quotaUsage.status {
+            return info.isApproachingLimit
+        }
+        return false
+    }
+
+    /// Reasoning is a server-model feature; the on-device model gets the defaults.
+    @available(iOS 26.0, *)
+    static func contextOptions(tier: CoachModelTier, depth: CoachReasoningDepth) -> ContextOptions {
+        guard tier == .privateCloud, #available(iOS 27.0, *) else { return ContextOptions() }
+        switch depth {
+        case .light: return ContextOptions(reasoningLevel: .light)
+        case .moderate: return ContextOptions(reasoningLevel: .moderate)
+        case .deep: return ContextOptions(reasoningLevel: .deep)
+        }
+    }
+
     @available(iOS 26.0, *)
     static func makeSession(
         tier: CoachModelTier,
@@ -82,7 +106,7 @@ extension CoachModelProvider {
                 instructions: instructions
             )
         }
-        return LanguageModelSession(instructions: instructions)
+        return LanguageModelSession(tools: tools, instructions: instructions)
     }
 
     fileprivate static func readContextTokens(for tier: CoachModelTier) async -> Int {
@@ -107,15 +131,24 @@ extension CoachModelProvider {
     /// asks this question; it just gets "use on-device" until then.
     static var isServerModelAvailable: Bool { false }
     static var isServerQuotaExhausted: Bool { false }
+    static var isServerQuotaApproaching: Bool { false }
+    static let serverModelExists = false
 
     #if canImport(FoundationModels)
+    @available(iOS 26.0, *)
+    static func contextOptions(tier: CoachModelTier, depth: CoachReasoningDepth) -> ContextOptions {
+        _ = tier
+        _ = depth
+        return ContextOptions()
+    }
+
     @available(iOS 26.0, *)
     static func makeSession(
         tier: CoachModelTier,
         instructions: String,
         tools: [any Tool] = []
     ) -> LanguageModelSession {
-        return LanguageModelSession(instructions: instructions)
+        return LanguageModelSession(tools: tools, instructions: instructions)
     }
     #endif
 

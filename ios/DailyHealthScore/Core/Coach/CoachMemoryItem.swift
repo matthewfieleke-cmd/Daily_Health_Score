@@ -1,15 +1,17 @@
 import Foundation
 
 /// The files the Coach keeps about a person. Every note lives in exactly one.
+/// Raw values are storage keys; two keep their build-20 spelling on purpose.
 enum CoachMemorySection: String, CaseIterable, Identifiable, Codable, Sendable {
     case aboutYou
     case people
     case patterns
-    case helps
+    case coaching = "helps"
     case goals
+    case likes
     case routines
     case body
-    case checkIns
+    case recent = "checkIns"
 
     var id: String { rawValue }
 
@@ -18,11 +20,21 @@ enum CoachMemorySection: String, CaseIterable, Identifiable, Codable, Sendable {
         case .aboutYou: return "About you"
         case .people: return "People"
         case .patterns: return "Patterns & triggers"
-        case .helps: return "What helps & what to avoid"
+        case .coaching: return "How to coach me"
         case .goals: return "Goals & plans"
+        case .likes: return "Likes & staples"
         case .routines: return "Routines & rhythms"
-        case .body: return "Body & recovery"
-        case .checkIns: return "Check-in notes"
+        case .body: return "Body & health"
+        case .recent: return "Recent"
+        }
+    }
+
+    /// The name the model uses when it files a note.
+    var modelKey: String {
+        switch self {
+        case .coaching: return "coaching"
+        case .recent: return "recent"
+        default: return rawValue
         }
     }
 
@@ -31,48 +43,59 @@ enum CoachMemorySection: String, CaseIterable, Identifiable, Codable, Sendable {
         case .aboutYou: return "person.text.rectangle"
         case .people: return "person.2"
         case .patterns: return "waveform.path.ecg"
-        case .helps: return "hand.thumbsup"
+        case .coaching: return "text.bubble"
         case .goals: return "target"
+        case .likes: return "heart.text.square"
         case .routines: return "clock.arrow.2.circlepath"
         case .body: return "figure.walk"
-        case .checkIns: return "note.text"
+        case .recent: return "clock"
         }
     }
 
     /// What belongs here, for the model.
     var promptHint: String {
         switch self {
-        case .aboutYou: return "identity, values, how they like to be coached, what a good day looks like"
-        case .people: return "partner, kids, friends, colleagues, and how those relationships affect health"
-        case .patterns: return "eating or behavior triggers, stress load, what tends to go wrong and when"
-        case .helps: return "what has worked before, what to avoid saying or suggesting"
-        case .goals: return "what they are working toward and why, beyond the saved SMART goals"
-        case .routines: return "work, sleep, meal, and movement rhythms; constraints like shift work or travel"
-        case .body: return "injuries, recovery limits, conditions they named, energy patterns"
-        case .checkIns: return "short dated notes from check-in replies: what they logged, how the day went"
+        case .aboutYou: return "name, profession, diet pattern, values, self-narratives in their own words, what a good day looks like"
+        case .people: return "partner, kids, friends, colleagues — names, ages with an as-of date, and how those relationships affect health"
+        case .patterns: return "trigger, tell, and antidote in one sentence: what tends to happen under strain, how it shows, what has helped"
+        case .coaching: return "how they want to be coached: what to call them, topics to return to, frames that land, what to avoid"
+        case .goals: return "what they are working toward and why, beyond the saved SMART goals; mottos they use"
+        case .likes: return "foods, products, activities, and rituals they enjoy, by name — the raw material for suggestions"
+        case .routines: return "work and clinic days, sleep and meal rhythms, commutes, constraints like shift work or travel"
+        case .body: return "conditions, devices, medications they mention, injuries, recovery limits, weight context — as stated"
+        case .recent: return "dated state: mood as reported, the current hurdle, a positive trend, a recent success"
         }
     }
 
+    /// Whether an entry here describes a passing state rather than a durable fact.
+    var isStateFile: Bool { self == .recent }
+
     init(modelValue: String) {
         let text = modelValue.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        if let exact = CoachMemorySection.allCases.first(where: { $0.rawValue.lowercased() == text }) {
+        if let exact = CoachMemorySection.allCases.first(where: {
+            $0.rawValue.lowercased() == text || $0.modelKey.lowercased() == text
+        }) {
             self = exact
             return
         }
         if text.contains("people") || text.contains("relation") || text.contains("family") {
             self = .people
-        } else if text.contains("pattern") || text.contains("trigger") || text.contains("stress") {
+        } else if text.contains("pattern") || text.contains("trigger") {
             self = .patterns
-        } else if text.contains("help") || text.contains("avoid") {
-            self = .helps
-        } else if text.contains("goal") || text.contains("plan") {
+        } else if text.contains("coach") || text.contains("prefer") || text.contains("help") || text.contains("avoid") {
+            self = .coaching
+        } else if text.contains("goal") || text.contains("plan") || text.contains("motto") {
             self = .goals
-        } else if text.contains("routine") || text.contains("rhythm") || text.contains("schedule") {
+        } else if text.contains("like") || text.contains("staple") || text.contains("food") || text.contains("enjoy") {
+            self = .likes
+        } else if text.contains("routine") || text.contains("rhythm") || text.contains("schedule") || text.contains("work") {
             self = .routines
-        } else if text.contains("body") || text.contains("recover") || text.contains("injur") || text.contains("health") {
+        } else if text.contains("body") || text.contains("recover") || text.contains("injur") || text.contains("health") || text.contains("weight") {
             self = .body
-        } else if text.contains("check") || text.contains("note") {
-            self = .checkIns
+        } else if text.contains("recent") || text.contains("check") || text.contains("mood") || text.contains("hurdle") || text.contains("now") || text.contains("state") {
+            self = .recent
+        } else if text.contains("stress") {
+            self = .patterns
         } else {
             self = .aboutYou
         }
@@ -86,6 +109,7 @@ enum CoachMemoryCategory: String, CaseIterable, Identifiable, Codable, Sendable 
     case patterns
     case helps
     case goals
+    case likes
     case routines
     case body
     case checkIns
@@ -115,30 +139,32 @@ enum CoachMemoryCategory: String, CaseIterable, Identifiable, Codable, Sendable 
         case .aboutYou: self = .aboutYou
         case .people: self = .people
         case .patterns: self = .patterns
-        case .helps: self = .helps
+        case .coaching: self = .helps
         case .goals: self = .goals
+        case .likes: self = .likes
         case .routines: self = .routines
         case .body: self = .body
-        case .checkIns: self = .checkIns
+        case .recent: self = .checkIns
         }
     }
 
     var section: CoachMemorySection {
         switch self {
-        case .aboutYou, .preference, .values, .identity, .circumstance, .other: return .aboutYou
+        case .aboutYou, .values, .identity, .other: return .aboutYou
         case .people, .relationship: return .people
         case .patterns, .trigger, .stress: return .patterns
-        case .helps, .whatHelps, .whatToAvoid: return .helps
+        case .helps, .whatHelps, .whatToAvoid, .preference: return .coaching
         case .goals, .goalContext: return .goals
+        case .likes: return .likes
         case .routines, .nutrition, .movement, .sleep, .constraint: return .routines
         case .body, .recovery: return .body
-        case .checkIns: return .checkIns
+        case .checkIns, .circumstance: return .recent
         }
     }
 
     var label: String {
         switch self {
-        case .aboutYou, .people, .patterns, .helps, .goals, .routines, .body, .checkIns:
+        case .aboutYou, .people, .patterns, .helps, .goals, .likes, .routines, .body, .checkIns:
             return section.label
         case .preference: return "Preference"
         case .constraint: return "Constraint"
@@ -164,7 +190,9 @@ enum CoachMemoryProvenance: String, Codable, Sendable {
     case userStated
     case userConfirmed
     case computedFromRecords
-    /// Written by the Coach during a chat. Live unless the person edits or undoes it.
+    /// The Coach wrote down something the person said. A stated fact.
+    case coachRecorded
+    /// The Coach's own read of the person. Inferred until they confirm it.
     case coachNoted
     /// Earlier builds: model guesses that were held apart from facts.
     case coachInterpretation
@@ -175,7 +203,8 @@ enum CoachMemoryProvenance: String, Codable, Sendable {
         case .userStated: return "You said this"
         case .userConfirmed: return "You confirmed this"
         case .computedFromRecords: return "Computed from app records"
-        case .coachNoted: return "Coach noted"
+        case .coachRecorded: return "You told your coach"
+        case .coachNoted: return "Your coach's read — tap Confirm if it fits"
         case .coachInterpretation: return "Coach interpretation (unconfirmed)"
         case .legacyCoachNotes: return "Earlier coach note (unconfirmed)"
         }
@@ -183,6 +212,11 @@ enum CoachMemoryProvenance: String, Codable, Sendable {
 
     var isConfirmedByUser: Bool {
         self == .userStated || self == .userConfirmed
+    }
+
+    /// Whether the note records what the person said rather than a guess.
+    var isStated: Bool {
+        isConfirmedByUser || self == .coachRecorded
     }
 
     /// Old-style guesses yield to a confirmed note in the same category.
@@ -199,8 +233,8 @@ enum CoachMemoryConfirmation: String, Codable, Sendable {
 }
 
 struct CoachMemoryItem: Identifiable, Equatable, Codable, Sendable {
-    /// Notes ride along in every prompt, so each one stays short.
-    static let maxContentLength = 160
+    /// One idea per note. Long enough for a pattern with its trigger and antidote.
+    static let maxContentLength = 240
 
     var id: UUID
     var category: CoachMemoryCategory
@@ -274,6 +308,8 @@ enum CoachMemoryChangeKind: String, Codable, Sendable {
     case added
     case updated
     case removed
+    /// Same note, different file. Undo moves it back.
+    case refiled
 }
 
 struct CoachMemoryChange: Identifiable, Equatable, Codable, Sendable {
@@ -319,6 +355,7 @@ struct CoachMemoryChange: Identifiable, Equatable, Codable, Sendable {
         case .added: return "Added: \(newContent)"
         case .updated: return "Updated: \(newContent)"
         case .removed: return "Removed: \(previousContent)"
+        case .refiled: return "Moved to \(section.label): \(newContent)"
         }
     }
 }
@@ -331,12 +368,28 @@ struct CoachMemoryUpdate: Equatable, Sendable {
         case remove
     }
 
+    /// Whether the note records what the person said or the Coach's read of them.
+    enum Basis: String, Sendable {
+        case stated
+        case inferred
+
+        init(modelValue: String) {
+            let text = modelValue.lowercased()
+            self = text.hasPrefix("infer") || text.hasPrefix("guess") || text.hasPrefix("read") ? .inferred : .stated
+        }
+
+        var provenance: CoachMemoryProvenance {
+            self == .stated ? .coachRecorded : .coachNoted
+        }
+    }
+
     var operation: Operation
     var section: CoachMemorySection
     var text: String
     var replaces: String
+    var basis: Basis = .stated
 
-    init?(operation: String, section: String, text: String, replaces: String) {
+    init?(operation: String, section: String, text: String, replaces: String, basis: String = "stated") {
         let op = operation.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         let parsed: Operation
         if op.hasPrefix("add") || op.hasPrefix("creat") || op.hasPrefix("new") {
@@ -362,13 +415,15 @@ struct CoachMemoryUpdate: Equatable, Sendable {
         self.section = CoachMemorySection(modelValue: section)
         self.text = cleanText
         self.replaces = cleanReplaces.isEmpty && parsed == .remove ? cleanText : cleanReplaces
+        self.basis = Basis(modelValue: basis)
     }
 
-    init(operation: Operation, section: CoachMemorySection, text: String, replaces: String = "") {
+    init(operation: Operation, section: CoachMemorySection, text: String, replaces: String = "", basis: Basis = .stated) {
         self.operation = operation
         self.section = section
         self.text = CoachMemoryUpdate.cleaned(text)
         self.replaces = CoachMemoryUpdate.cleaned(replaces)
+        self.basis = basis
     }
 
     static func cleaned(_ text: String) -> String {
@@ -383,6 +438,57 @@ struct CoachMemoryUpdate: Equatable, Sendable {
             return String(cut[..<space])
         }
         return cut
+    }
+}
+
+/// One housekeeping edit proposed by the files review pass, already validated.
+struct CoachFileReviewOperation: Equatable, Sendable {
+    enum Kind: String, Sendable {
+        case refile
+        case update
+        case retire
+        case add
+    }
+
+    var kind: Kind
+    /// First eight characters of the entry id, as listed to the model. Empty for add.
+    var idPrefix: String
+    var section: CoachMemorySection?
+    var text: String
+    var basis: CoachMemoryUpdate.Basis
+
+    init?(kind: String, id: String, section: String, text: String, basis: String) {
+        let op = kind.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsed: Kind
+        if op.hasPrefix("refile") || op.hasPrefix("move") {
+            parsed = .refile
+        } else if op.hasPrefix("upd") || op.hasPrefix("rewrite") || op.hasPrefix("edit") {
+            parsed = .update
+        } else if op.hasPrefix("retire") || op.hasPrefix("rem") || op.hasPrefix("del") || op.hasPrefix("stale") {
+            parsed = .retire
+        } else if op.hasPrefix("add") || op.hasPrefix("promote") || op.hasPrefix("new") {
+            parsed = .add
+        } else {
+            return nil
+        }
+        let prefix = String(id.trimmingCharacters(in: .whitespacesAndNewlines).prefix(8)).lowercased()
+        let cleanText = CoachMemoryUpdate.cleaned(text)
+        let trimmedSection = section.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch parsed {
+        case .refile:
+            guard prefix.count == 8, !trimmedSection.isEmpty else { return nil }
+        case .update:
+            guard prefix.count == 8, cleanText.count >= 4 else { return nil }
+        case .retire:
+            guard prefix.count == 8 else { return nil }
+        case .add:
+            guard cleanText.count >= 4, !trimmedSection.isEmpty else { return nil }
+        }
+        self.kind = parsed
+        self.idPrefix = prefix
+        self.section = trimmedSection.isEmpty ? nil : CoachMemorySection(modelValue: trimmedSection)
+        self.text = cleanText
+        self.basis = CoachMemoryUpdate.Basis(modelValue: basis)
     }
 }
 
@@ -440,12 +546,17 @@ enum CoachMemoryLogic {
         }
     }
 
-    /// The files as the model sees them: every live note, grouped by file.
+    /// State entries older than this are background, not the present.
+    static let recentWindowDays = 21
+
+    /// The files as the model sees them: every live note, dated, grouped by
+    /// file, with what the person said kept apart from what the Coach inferred.
     static func promptBlock(
         items: [CoachMemoryItem],
         tombstonesIgnored: Bool = true,
         at date: Date = Date(),
-        perSectionLimit: Int = 10
+        perSectionLimit: Int = 12,
+        calendar: Calendar = .current
     ) -> String {
         let live = itemsByOverridingContradictions(items, at: date)
         if live.isEmpty { return "No notes yet. Write down what a careful coach would keep." }
@@ -453,11 +564,25 @@ enum CoachMemoryLogic {
         for section in CoachMemorySection.allCases {
             let rows = live.filter { $0.section == section }
             guard !rows.isEmpty else { continue }
-            let lines = rows.prefix(perSectionLimit).map { item -> String in
-                let marker = item.provenance.isConfirmedByUser ? " (they said this)" : ""
-                return "- \(item.displayContent)\(marker)"
+            let ordered = rows.sorted { $0.createdAt > $1.createdAt }
+            let lines = ordered.prefix(perSectionLimit).map { item -> String in
+                var line = "- [\(entryDate(item.createdAt, now: date, calendar: calendar))] \(item.displayContent)"
+                if item.provenance.isStated {
+                    line += " (stated)"
+                } else if item.provenance == .coachNoted || item.provenance.yieldsToConfirmed {
+                    line += " (inferred)"
+                }
+                if section.isStateFile,
+                   let days = calendar.dateComponents([.day], from: item.createdAt, to: date).day,
+                   days > recentWindowDays {
+                    line += " (older)"
+                }
+                return line
             }
-            parts.append("\(section.label.uppercased()):\n" + lines.joined(separator: "\n"))
+            let header = section.isStateFile
+                ? "\(section.label.uppercased()) (newest first; entries marked older are background):"
+                : "\(section.label.uppercased()):"
+            parts.append(header + "\n" + lines.joined(separator: "\n"))
         }
         let awaiting = items.filter {
             !$0.isDeleted && $0.isTemporary && ($0.confirmation == .needsReview || ($0.expiresAt ?? .distantFuture) < date)
@@ -467,6 +592,24 @@ enum CoachMemoryLogic {
         }
         _ = tombstonesIgnored
         return parts.joined(separator: "\n")
+    }
+
+    /// "Sep 20" this year, "Sep 20, 2025" otherwise. Model-facing, so the
+    /// format is fixed rather than following the device locale.
+    static func entryDate(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
+        var style = Date.FormatStyle(locale: Locale(identifier: "en_US"), calendar: calendar, timeZone: calendar.timeZone)
+        style = sameYear ? style.month(.abbreviated).day() : style.month(.abbreviated).day().year()
+        return date.formatted(style)
+    }
+
+    /// Entries as a compact list for the on-device filing and review passes.
+    static func entryList(items: [CoachMemoryItem], at date: Date = Date(), calendar: Calendar = .current) -> String {
+        let live = itemsByOverridingContradictions(items, at: date).sorted { $0.createdAt > $1.createdAt }
+        if live.isEmpty { return "None." }
+        return live.map { item in
+            "\(item.id.uuidString.prefix(8)) | \(item.section.modelKey) | \(entryDate(item.createdAt, now: date, calendar: calendar)) | \(item.provenance.isStated ? "stated" : "inferred") | \(item.displayContent)"
+        }.joined(separator: "\n")
     }
 
     /// Finds the note a model update refers to. Exact text first, then containment,

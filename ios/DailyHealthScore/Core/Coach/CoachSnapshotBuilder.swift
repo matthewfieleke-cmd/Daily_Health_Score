@@ -8,7 +8,8 @@ enum CoachSnapshotBuilder {
         hrvSensitivity: HRVSensitivity = .balanced,
         phase: DayPhase = .current(),
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        bodyTrend: BodyTrend? = nil
     ) -> CoachSnapshot {
         let weekKeys = DateHelpers.rollingDateKeys(days: 7)
         let weekStats = RollingStatsCalculator.compute(records: records, windowKeys: weekKeys)
@@ -68,7 +69,8 @@ enum CoachSnapshotBuilder {
             weekAvgExercise: weekStats?.avgExerciseMinutes,
             fiberDaysLoggedInWeek: fiberDays,
             hrvSummary: hrvSummary,
-            smartGoals: CoachGoalSummarizer.lines(for: goals)
+            smartGoals: CoachGoalSummarizer.lines(for: goals),
+            bodyLine: bodyTrend?.promptBlock
         )
     }
 

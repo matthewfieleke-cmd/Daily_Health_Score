@@ -170,7 +170,7 @@ final class LifestyleMedicineKnowledgeTests: XCTestCase {
         let onDevice = CoachCharter.answerDepthGuidance(for: .onDevice)
         let server = CoachCharter.answerDepthGuidance(for: .privateCloud)
         XCTAssertTrue(onDevice.contains("3–6") || onDevice.contains("3-6"))
-        XCTAssertTrue(server.contains("large window") || server.contains("Teach fully"))
+        XCTAssertTrue(server.contains("Full window") || server.contains("Teach fully"))
         XCTAssertNotEqual(onDevice, server)
     }
 }
