@@ -85,9 +85,11 @@ final class FoundationModelsCoach {
                     .respond(to: prompt, generating: GenerableDailyCoachCard.self)
                     .content
             }
+            let line = content.whereYouAre.trimmedForCoach().endingOnSentence(maxCharacters: 220)
             return DailyCoachCardContent(
-                whereYouAre: content.whereYouAre.trimmedForCoach().endingOnSentence(maxCharacters: 340),
-                nextMove: content.nextMove.trimmedForCoach().endingOnSentence(maxCharacters: 240)
+                whereYouAre: line,
+                nextMove: content.nextMove.trimmedForCoach().endingOnSentence(maxCharacters: 160),
+                healthLine: line
             )
         }
         #endif
@@ -108,7 +110,10 @@ final class FoundationModelsCoach {
         planningGoal: Bool = false,
         focus: CoachFocusContext? = nil,
         memoryBlock: String = "",
-        activitiesByGoal: [UUID: [SMARTGoalActivity]] = [:]
+        activitiesByGoal: [UUID: [SMARTGoalActivity]] = [:],
+        room: CoachRoom = .inbox,
+        bridges: [CoachBridge] = [],
+        allowUnpromptedHealth: Bool = false
     ) async throws -> (message: String, profileUpdate: CoachUserProfile?, goalProposal: CoachGoalProposal?, proposalRejected: Bool) {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
@@ -183,6 +188,18 @@ final class FoundationModelsCoach {
                 \(snapshot?.coachingDirective ?? "No metric directives available.")
                 Speak like a person. At most two concrete options.
                 """
+            case .dataLookup, .education:
+                if allowUnpromptedHealth {
+                    nextStepPolicy = """
+                    You may mention today's Health in one sentence if it helps. Do not
+                    recap the dashboard. Never print status tokens.
+                    """
+                } else {
+                    nextStepPolicy = """
+                    NEXT STEP POLICY: This message did not ask for a plan. Do not offer a
+                    suggestion, a next step, or an activity idea. Answer only what was asked.
+                    """
+                }
             default:
                 nextStepPolicy = """
                 NEXT STEP POLICY: This message did not ask for a plan. Do not offer a
@@ -254,8 +271,17 @@ final class FoundationModelsCoach {
                     \($0.promptBlock.limitedToCoachBudget(budget.historyCharacters))
                     """
                 } ?? ""
+                let bridgeLines = bridges.prefix(compact ? 1 : 2).map(\.text).joined(separator: "\n")
+                let roomSection = """
+                DESK: \(room.label). This is a doorway, not a fence. Follow the person.
+                Unprompted Health this turn: \(allowUnpromptedHealth ? "allowed, one sentence max" : "not allowed").
+                CONNECTIONS (weave at most one sentence if it serves acceptance and wellness together):
+                \(bridgeLines.isEmpty ? "None." : bridgeLines)
+                """
                 return """
                 Continue the DHS Lifestyle Coach conversation.
+
+                \(roomSection)
 
                 USER MESSAGE:
                 \(userMessage)
@@ -484,7 +510,7 @@ final class FoundationModelsCoach {
 @available(iOS 26.0, *)
 @Generable
 struct GenerableDailyCoachCard {
-    @Guide(description: "2-3 complete sentences summarizing today's score and sleep, fiber, and exercise versus goals. Use exact status words. No ellipses.")
+    @Guide(description: "One complete spoken sentence about today. No status tokens (BELOW GOAL, GOAL MET, NO DATA). No ellipses.")
     var whereYouAre: String
 
     @Guide(description: "1-2 complete sentences. One concrete action still possible from the current clock time. No ellipses. Do not suggest a window that has already passed.")

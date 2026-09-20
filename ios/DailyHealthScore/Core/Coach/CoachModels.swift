@@ -2,16 +2,26 @@ import Foundation
 
 /// Structured daily card content shown on Today: where you are, then one move.
 struct DailyCoachCardContent: Equatable, Codable, Sendable {
+    /// One human sentence about today. Never status tokens.
     var whereYouAre: String
     var nextMove: String
+    var healthLine: String
+    var continueTitle: String
 
-    init(whereYouAre: String, nextMove: String) {
+    init(
+        whereYouAre: String,
+        nextMove: String,
+        healthLine: String = "",
+        continueTitle: String = ""
+    ) {
         self.whereYouAre = whereYouAre
         self.nextMove = nextMove
+        self.healthLine = healthLine.isEmpty ? whereYouAre : healthLine
+        self.continueTitle = continueTitle
     }
 
     enum CodingKeys: String, CodingKey {
-        case whereYouAre, nextMove
+        case whereYouAre, nextMove, healthLine, continueTitle
         case acknowledgment, whyItMatters, nextStep
     }
 
@@ -22,18 +32,24 @@ struct DailyCoachCardContent: Equatable, Codable, Sendable {
            !whereYouAre.isEmpty {
             self.whereYouAre = whereYouAre
             self.nextMove = nextMove
+            healthLine = try container.decodeIfPresent(String.self, forKey: .healthLine) ?? whereYouAre
+            continueTitle = try container.decodeIfPresent(String.self, forKey: .continueTitle) ?? ""
             return
         }
         let acknowledgment = try container.decodeIfPresent(String.self, forKey: .acknowledgment) ?? ""
         let why = try container.decodeIfPresent(String.self, forKey: .whyItMatters) ?? ""
         whereYouAre = [acknowledgment, why].filter { !$0.isEmpty }.joined(separator: " ")
         nextMove = try container.decodeIfPresent(String.self, forKey: .nextStep) ?? ""
+        healthLine = whereYouAre
+        continueTitle = ""
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(whereYouAre, forKey: .whereYouAre)
         try container.encode(nextMove, forKey: .nextMove)
+        try container.encode(healthLine, forKey: .healthLine)
+        try container.encode(continueTitle, forKey: .continueTitle)
     }
 }
 
@@ -119,12 +135,20 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
     var role: Role
     var text: String
     var createdAt: Date
+    var threadId: UUID?
 
-    init(id: UUID = UUID(), role: Role, text: String, createdAt: Date = Date()) {
+    init(
+        id: UUID = UUID(),
+        role: Role,
+        text: String,
+        createdAt: Date = Date(),
+        threadId: UUID? = nil
+    ) {
         self.id = id
         self.role = role
         self.text = text
         self.createdAt = createdAt
+        self.threadId = threadId
     }
 }
 

@@ -7,17 +7,103 @@ final class CoachChatMessageEntity {
     var roleRaw: String
     var text: String
     var createdAt: Date
+    var threadId: UUID?
 
     init(turn: CoachChatTurn) {
         id = turn.id
         roleRaw = turn.role.rawValue
         text = turn.text
         createdAt = turn.createdAt
+        threadId = turn.threadId
     }
 
     func toTurn() -> CoachChatTurn? {
         guard let role = CoachChatTurn.Role(rawValue: roleRaw) else { return nil }
-        return CoachChatTurn(id: id, role: role, text: text, createdAt: createdAt)
+        return CoachChatTurn(id: id, role: role, text: text, createdAt: createdAt, threadId: threadId)
+    }
+}
+
+@Model
+final class CoachThreadEntity {
+    @Attribute(.unique) var id: UUID
+    var roomRaw: String
+    var title: String
+    var statusRaw: String
+    var createdAt: Date
+    var updatedAt: Date
+    var lastMessageAt: Date
+    var healthMentionWindowKey: String
+    var summary: String
+
+    init(thread: CoachThread) {
+        id = thread.id
+        roomRaw = thread.room.rawValue
+        title = thread.title
+        statusRaw = thread.status.rawValue
+        createdAt = thread.createdAt
+        updatedAt = thread.updatedAt
+        lastMessageAt = thread.lastMessageAt
+        healthMentionWindowKey = thread.healthMentionWindowKey
+        summary = thread.summary
+    }
+
+    func apply(_ thread: CoachThread) {
+        roomRaw = thread.room.rawValue
+        title = thread.title
+        statusRaw = thread.status.rawValue
+        createdAt = thread.createdAt
+        updatedAt = thread.updatedAt
+        lastMessageAt = thread.lastMessageAt
+        healthMentionWindowKey = thread.healthMentionWindowKey
+        summary = thread.summary
+    }
+
+    func toThread() -> CoachThread? {
+        guard let room = CoachRoom(rawValue: roomRaw),
+              let status = CoachThreadStatus(rawValue: statusRaw) else { return nil }
+        return CoachThread(
+            id: id,
+            room: room,
+            title: title,
+            status: status,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            lastMessageAt: lastMessageAt,
+            healthMentionWindowKey: healthMentionWindowKey,
+            summary: summary
+        )
+    }
+}
+
+@Model
+final class CoachBridgeEntity {
+    @Attribute(.unique) var id: UUID
+    var text: String
+    var fromRoomRaw: String
+    var toRoomRaw: String
+    var createdAt: Date
+    var sourceThreadId: UUID
+
+    init(bridge: CoachBridge) {
+        id = bridge.id
+        text = bridge.text
+        fromRoomRaw = bridge.fromRoom.rawValue
+        toRoomRaw = bridge.toRoom.rawValue
+        createdAt = bridge.createdAt
+        sourceThreadId = bridge.sourceThreadId
+    }
+
+    func toBridge() -> CoachBridge? {
+        guard let from = CoachRoom(rawValue: fromRoomRaw),
+              let to = CoachRoom(rawValue: toRoomRaw) else { return nil }
+        return CoachBridge(
+            id: id,
+            text: text,
+            fromRoom: from,
+            toRoom: to,
+            createdAt: createdAt,
+            sourceThreadId: sourceThreadId
+        )
     }
 }
 
