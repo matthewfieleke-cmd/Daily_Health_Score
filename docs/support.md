@@ -12,13 +12,14 @@ For support, feedback, or privacy questions:
 
 **Email:** [matthew.fieleke@gmail.com](mailto:matthew.fieleke@gmail.com)
 
-Please include your iOS version (e.g. iOS 18.x) and a short description of the issue. Screenshots help when something looks wrong on the Today screen.
+Please include your iOS version (e.g. iOS 27.x) and a short description of the issue. Screenshots help when something looks wrong on the Today screen.
 
 ---
 
 ## Requirements
 
-- iPhone running **iOS 26 or later** with **Apple Intelligence** enabled (required for DHS Lifestyle Coach)
+- iPhone running **iOS 27 or later** (every iPhone that ran iOS 26 can update)
+- **Apple Intelligence** enabled, on an iPhone 15 Pro or later (required for DHS Lifestyle Coach)
 - **Apple Health** with permission to read:
   - Sleep Analysis (asleep)
   - Dietary Fiber

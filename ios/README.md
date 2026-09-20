@@ -4,8 +4,8 @@ Native SwiftUI app with **HealthKit** — sleep, fiber, and exercise scoring wit
 
 ## Requirements
 
-- macOS with **Xcode 15+**
-- iPhone on **iOS 26+** with **Apple Intelligence**. The Lifestyle Coach uses on-device Foundation Models and, when the managed entitlement is present, Private Cloud Compute.
+- macOS with **Xcode 27+** (the project targets the iOS 27 SDK)
+- iPhone on **iOS 27** (the app's minimum; it runs on every iPhone that ran iOS 26). The Lifestyle Coach needs **Apple Intelligence** (iPhone 15 Pro or later) and answers on Private Cloud Compute when the managed entitlement is present, falling back to the on-device Foundation Model.
 - Apple Developer account (for device testing and App Store)
 
 ## Open the project
@@ -22,7 +22,7 @@ open DailyHealthScore.xcodeproj
 ### Option B — Manual Xcode project
 
 1. **File → New → Project → App** (SwiftUI, Swift, iOS 17).
-2. Product name: `DailyHealthScore`, bundle ID: `com.dailyhealthscore.app.mf`, iOS 26.
+2. Product name: `DailyHealthScore`, bundle ID: `com.dailyhealthscore.app.mf`, minimum deployment iOS 27.
 3. Drag the `DailyHealthScore/` source folder into the target.
 4. Add **HealthKit** capability (Signing & Capabilities).
 5. Set **Info.plist** `NSHealthShareUsageDescription` (included in this repo).

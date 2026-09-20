@@ -8,7 +8,6 @@ import FoundationModels
 /// Payloads are built in Swift from the same stores the rest of the app uses.
 enum CoachSessionTools {
     #if canImport(FoundationModels)
-    @available(iOS 26.0, *)
     static func make(
         snapshot: CoachSnapshot?,
         goals: [SMARTGoal],
@@ -47,7 +46,6 @@ enum CoachSessionTools {
 }
 
 #if canImport(FoundationModels)
-@available(iOS 26.0, *)
 struct CoachLookupTodayTool: Tool {
     let name = "lookupTodayHealth"
     let description = "Today's Daily Health Score, sleep, fiber, exercise, HRV, and computed goal status. Use only when the person asked about their numbers or a plan that needs them."
@@ -65,7 +63,6 @@ struct CoachLookupTodayTool: Tool {
     }
 }
 
-@available(iOS 26.0, *)
 struct CoachLookupGoalsTool: Tool {
     let name = "lookupSMARTGoals"
     let description = "Saved SMART goals, check-ins, deadlines, and cues. Use when the person asks how a goal is going or wants to change one."
@@ -83,7 +80,6 @@ struct CoachLookupGoalsTool: Tool {
     }
 }
 
-@available(iOS 26.0, *)
 struct CoachLookupPersonTool: Tool {
     let name = "lookupWhatWeRemember"
     let description = "What this person has told us that exercise science, nutrition, and behavioral psychology would keep: triggers, relationships, recovery, identity, constraints, and what helps."
@@ -101,7 +97,6 @@ struct CoachLookupPersonTool: Tool {
     }
 }
 
-@available(iOS 26.0, *)
 struct CoachSearchLifestyleTool: Tool {
     let name = "searchLifestyleMedicine"
     let description = "Guideline-aligned Lifestyle Medicine facts (nutrition, activity, sleep, stress, connection, substances, behavior change). Search before inventing a number or a protocol."

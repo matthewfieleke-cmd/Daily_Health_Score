@@ -4,7 +4,7 @@ A native iOS app that scores each day on three pillars — **sleep**, **dietary 
 
 All metrics are read directly from **Apple Health**. Data stays on the device (SwiftData, roughly 125-day retention). No server, no account, no Apple Shortcut required.
 
-**DHS Lifestyle Coach** (iOS 26 + Apple Intelligence) prefers Apple’s Private Cloud Compute model for the daily card and Ask-the-coach chat, and falls back on-device if that model is unavailable. Chat memory stays on the device; clear it anytime in Settings.
+**DHS Lifestyle Coach** (iOS 27 + Apple Intelligence) answers on Apple’s Private Cloud Compute model, with reasoning and live lookup tools, and falls back to the on-device model when the server model is unavailable or its daily allowance is spent. Chat memory stays on the device; clear it anytime in Settings.
 
 See **[ios/README.md](ios/README.md)** for Xcode setup and run instructions.
 

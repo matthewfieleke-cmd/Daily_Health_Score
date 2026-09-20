@@ -5,7 +5,6 @@ import FoundationModels
 
 /// Tools the server model can call mid-reply. The framework runs `call` when
 /// the model asks; the app performs the request and hands the text back.
-@available(iOS 26.0, *)
 struct CoachFoodLookupTool: Tool {
     let name = "lookupFood"
     let description = "Nutrition facts for a food or branded product from USDA FoodData Central and Open Food Facts: calories, protein, fiber, sugars, added sugars per serving. Call once per food or product the person named before estimating anything."
@@ -21,7 +20,6 @@ struct CoachFoodLookupTool: Tool {
     }
 }
 
-@available(iOS 26.0, *)
 struct CoachEvidenceSearchTool: Tool {
     let name = "searchEvidence"
     let description = "PubMed search returning real studies with title, journal, year, PMID, and abstract. Use when a claim deserves a source; cite only what comes back."
@@ -37,7 +35,6 @@ struct CoachEvidenceSearchTool: Tool {
     }
 }
 
-@available(iOS 26.0, *)
 struct CoachCalculatorTool: Tool {
     let name = "calculate"
     let description = "Exact arithmetic. Use for any total, difference, percentage, or per-kilogram figure instead of computing in prose, e.g. '250 + 230 + 100' or '20 / 50 * 100' or '1.4 * 84'."
@@ -53,7 +50,6 @@ struct CoachCalculatorTool: Tool {
     }
 }
 
-@available(iOS 26.0, *)
 struct CoachBodyTrendTool: Tool {
     let name = "lookupWeightTrend"
     let description = "The person's weight trend and BMI as shared from Apple Health: seven-day level, change over four and twelve weeks, BMI as a screening number. Use when weight, protein needs, or energy needs come up. Never for praise or judgment."
