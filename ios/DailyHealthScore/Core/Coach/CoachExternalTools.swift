@@ -49,21 +49,4 @@ struct CoachCalculatorTool: Tool {
         CoachCalculator.answer(arguments.expression)
     }
 }
-
-struct CoachBodyTrendTool: Tool {
-    let name = "lookupWeightTrend"
-    let description = "The person's weight trend, BMI, age, and sex as shared from Apple Health: seven-day level, change over four and twelve weeks, BMI as a screening number. Use when weight, age, protein needs, or energy needs come up. Never for praise or judgment; never guess an age instead of calling this."
-    let payload: String
-
-    @Generable
-    struct Arguments {
-        @Guide(description: "Why the trend is needed.")
-        var reason: String
-    }
-
-    func call(arguments: Arguments) async throws -> String {
-        _ = arguments
-        return payload
-    }
-}
 #endif
