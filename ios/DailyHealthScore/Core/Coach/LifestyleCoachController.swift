@@ -284,6 +284,7 @@ final class LifestyleCoachController: ObservableObject {
                 historyBlock: historyBlock,
                 profile: memory.compiledProfile,
                 memoryBlock: memory.promptMemoryBlock,
+                essentialMemoryBlock: memory.promptMemoryBlock(scope: .essentials),
                 recentTurns: memory.recentTurnsForPrompt(limit: CoachContextBudget.maxTranscriptTurns),
                 goals: goals,
                 focusedGoalID: focusedGoalID ?? thread.goalId,
@@ -295,7 +296,10 @@ final class LifestyleCoachController: ObservableObject {
                 context: context
             )
             guard chatGenerationID == generationID else { return }
-            memory.append(CoachChatTurn(role: .coach, text: result.message, modelTier: result.tier))
+            let reason = result.tier == .onDevice
+                ? (result.fallbackReason ?? (CoachModelProvider.isServerQuotaExhausted ? "today’s Private Cloud Compute limit is reached" : nil))
+                : nil
+            memory.append(CoachChatTurn(role: .coach, text: result.message, modelTier: result.tier, fallbackReason: reason))
             // The reply is on screen; the composer reopens now, while filing
             // and profile work continue on-device behind it.
             isChatBusy = false
@@ -308,12 +312,16 @@ final class LifestyleCoachController: ObservableObject {
                 chatError = "The draft needs clarification before it can be saved. Ask the coach to clarify the action, target, or deadline, or create the goal manually."
             }
             if memory.memoryRevision == memoryRevisionAtStart {
+                // A note has to come from the person's words in this exchange or
+                // the recent transcript, never from the Coach's own suggestions.
+                let spoken = ([trimmed] + memory.turns.filter { $0.role == .user }.suffix(6).map(\.text)).joined(separator: " ")
+                let grounded = result.memoryUpdates.filter { CoachMemoryLogic.isGrounded($0, inPersonsWords: spoken) }
                 let applied = memory.applyCoachUpdates(
-                    result.memoryUpdates,
+                    grounded,
                     threadID: thread.id,
                     generationRevision: memoryRevisionAtStart
                 )
-                if applied.isEmpty, result.memoryUpdates.isEmpty {
+                if applied.isEmpty, grounded.isEmpty {
                     // Deterministic safety net when the model kept no notes.
                     memory.ingestUserStatedFacts(from: trimmed)
                 }
@@ -448,20 +456,29 @@ final class LifestyleCoachController: ObservableObject {
                 historyBlock: nil,
                 profile: memory.compiledProfile,
                 memoryBlock: memory.promptMemoryBlock,
+                essentialMemoryBlock: memory.promptMemoryBlock(scope: .essentials),
                 recentTurns: [],
                 goals: goals,
                 activitiesByGoal: Dictionary(grouping: activities, by: \.goalId),
                 bodyTrend: bodyTrend,
                 context: context
             )
+            let notes = result.memoryUpdates.map { update -> String in
+                let line = "\(update.operation.rawValue) · \(update.section.label) · \(update.basis.rawValue): \(update.text.isEmpty ? update.replaces : update.text)"
+                return CoachMemoryLogic.isGrounded(update, inPersonsWords: prompt) ? line : "DROPPED (not in the person's words) · " + line
+            }
+            let draft = result.goalProposal.map { proposal in
+                "\(proposal.isUpdate ? "update" : "create"): \(proposal.edit.specificText) × \(proposal.edit.targetCount)"
+            }
             return CoachEvalResult(
                 promptID: promptID,
                 reply: result.message,
                 tier: result.tier,
                 shape: result.shape,
-                memoryNotes: result.memoryUpdates.map { "\($0.operation.rawValue) · \($0.section.label) · \($0.basis.rawValue): \($0.text.isEmpty ? $0.replaces : $0.text)" },
+                memoryNotes: notes,
                 seconds: Date().timeIntervalSince(started),
-                fallbackReason: result.fallbackReason
+                fallbackReason: result.fallbackReason,
+                draft: draft ?? (result.proposalRejected ? "rejected (needs clarification)" : nil)
             )
         } catch {
             let reason = model.lastFailureReason ?? error.localizedDescription

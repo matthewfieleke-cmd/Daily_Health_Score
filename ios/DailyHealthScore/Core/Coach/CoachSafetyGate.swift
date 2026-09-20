@@ -175,19 +175,27 @@ enum CoachSafetyGate {
         parts.append("I want to answer it well, and the model I write with wouldn't process this message. Your words are kept in this chat, and I'll come back to them as we go.")
         switch concern {
         case .eating:
-            parts.append("One thing I can say now: eating that follows a hard moment is a stress response looking for the fastest relief, not a character flaw. When it becomes a pattern, it's worth bringing to your clinician or a therapist who works with eating — not because something is wrong with you, because it's the kind of thing that eases faster with help.")
+            parts.append("""
+            Here is what I can say now. Eating that follows a hard moment is a stress response looking for the fastest relief, not a character flaw — the urge is real, it peaks and passes within about twenty minutes, and the food does briefly work, which is why the loop holds. What the people who study this find helps most: eat regular meals so hunger isn't stacked on top of the stress; when the urge hits, put ten minutes between the feeling and the food — name the feeling, step outside, text someone — and then decide; keep the foods you reach for out of arm's reach rather than out of the house; and track what happens without judgment, because seeing the pattern is what loosens it. Skills-based approaches for emotional eating, including the DBT-based ones, have real evidence behind them. When it becomes a pattern, bring it to your clinician or a therapist who works with eating — not because something is wrong with you, because it eases faster with help.
+            """)
         case .substance:
-            parts.append("One thing I can say now: leaning harder on alcohol or drugs under strain is common and it's worth a conversation with your clinician. In the US, SAMHSA's helpline at 1-800-662-4357 is free, confidential, and open around the clock.")
+            parts.append("""
+            Here is what I can say now. Leaning harder on alcohol or drugs under strain is common, and it usually says more about the strain than about you. What tends to help: count what you actually use for a week before changing anything; build in drink-free days rather than smaller drinks; never use alcohol to fall asleep — it fragments the second half of the night and leaves the next day harder; and tell one person. This is worth a conversation with your clinician. In the US, SAMHSA's helpline at 1-800-662-4357 is free, confidential, and open around the clock — and if stopping brings shaking, sweating, or a racing heart, that needs medical help the same day.
+            """)
         case .mood:
-            parts.append("One thing I can say now: what you're describing deserves more than a coach. In the US, 988 reaches the Suicide & Crisis Lifeline any time, and a clinician or therapist is a reasonable next step, not a last resort. How are you doing right this minute?")
+            parts.append("""
+            Here is what I can say now. What you're describing deserves more than a coach, and it also has levers a coach can name: daylight in the first hour of the day, movement of any kind, regular sleep and meals, and contact with one person a day carry the most evidence for low mood — alongside a clinician or therapist when it lasts more than a couple of weeks, not instead of one. In the US, 988 reaches the Suicide & Crisis Lifeline any time. How are you doing right this minute?
+            """)
         case .strain:
-            parts.append("One thing I can say now: feeling overwhelmed and reaching for whatever relieves it fastest is a stress response, not a weakness. The way out is usually smaller than it looks — one real, physical thing done.")
+            parts.append("""
+            Here is what I can say now. Overwhelm narrows the field of view to whatever relieves it fastest, so reaching for the quick thing is a stress response, not a weakness. What tends to help: one physical task finished start to end, a hard stop on the workday even when the list isn't done, sleep protected before anything else gets fixed, and saying the load out loud to one person. If it has been building for weeks, a clinician or a therapist is a reasonable next step.
+            """)
         case nil:
             break
         }
         if concern != .mood {
             parts.append("How are you doing right now? Or tell me one part of what you wrote and we'll start there.")
         }
-        return parts.joined(separator: "\n\n")
+        return parts.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.joined(separator: "\n\n")
     }
 }

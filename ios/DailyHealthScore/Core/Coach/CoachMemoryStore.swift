@@ -120,6 +120,15 @@ final class CoachMemoryStore: ObservableObject {
         CoachMemoryLogic.promptBlock(items: memories)
     }
 
+    /// The files a given scope may see; empty for `.none`.
+    func promptMemoryBlock(scope: CoachMemoryScope) -> String {
+        switch scope {
+        case .none: return ""
+        case .full: return promptMemoryBlock
+        case .essentials: return CoachMemoryLogic.promptBlock(items: memories, sections: scope.sections)
+        }
+    }
+
     var effectiveMemories: [CoachMemoryItem] {
         CoachMemoryLogic.itemsByOverridingContradictions(memories)
     }

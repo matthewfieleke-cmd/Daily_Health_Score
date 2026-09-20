@@ -152,6 +152,7 @@ final class FoundationModelsCoach {
         historyBlock: String?,
         profile: String,
         memoryBlock: String,
+        essentialMemoryBlock: String = "",
         recentTurns: [CoachChatTurn],
         goals: [SMARTGoal] = [],
         focusedGoalID: UUID? = nil,
@@ -180,11 +181,19 @@ final class FoundationModelsCoach {
             instructionCharacters: instructions.count
         )
         lastTierUsed = tier
-        // The files reach the model only where they can be relevant; the intake
-        // always sees them, since it is filling them. HRV rides along only when
-        // the message is about it.
-        let memoryAllowed = shape.usesMemoryFiles || context.isAcquaintance
+        // Relevance is decided here, before the prompt exists: the model receives
+        // only what this message needs, and everything else stays one tool call
+        // away. The intake sees every file, since it is filling them; a goal
+        // conversation sees the essentials plus the goals themselves.
         let loweredMessage = userMessage.lowercased()
+        let memoryScope: CoachMemoryScope = context.isAcquaintance ? .full : (isGoalConversation ? .essentials : shape.memoryScope)
+        let mentionsOwnData = [
+            "today", "my score", "my numbers", "my data", "my sleep", "my fiber", "my exercise", "my steps",
+            "how am i doing", "how did i", "this week", "last week", "yesterday", "last night", "this morning",
+            "my week", "my day", "my goal", "my weight", "am i on track"
+        ].contains { loweredMessage.contains($0) }
+        let healthRelevant = shape == .data || focus != nil || context.thread?.kind == .checkInReply
+            || isGoalConversation || mentionsOwnData || intent == .dataLookup
         let asksAboutHRV = ["hrv", "heart rate variability", "variability", "recover", "resting heart", "rested", "sleep quality", "how well did i sleep"]
             .contains { loweredMessage.contains($0) }
         var snapshot = snapshot
@@ -222,14 +231,16 @@ final class FoundationModelsCoach {
             TODAY (only if the user asks about today; do not substitute it for the selected period):
             \(snapshot?.minimalBlock ?? "No live daily record is available right now.")
             """
-        } else if let snapshot {
-            if tier == .privateCloud {
-                healthBlock = snapshot.promptBlock + "\nThese are here for when they matter. Do not recite them unprompted."
-            } else if intent.usesFullMetrics || context.allowUnpromptedHealth {
+        } else if let snapshot, healthRelevant {
+            if tier == .privateCloud || intent.usesFullMetrics {
                 healthBlock = snapshot.promptBlock + "\nNever print the status tokens; speak like a person."
             } else {
                 healthBlock = snapshot.minimalBlock
             }
+        } else if let snapshot, context.allowUnpromptedHealth {
+            healthBlock = snapshot.minimalBlock + "\nOne sentence about today is allowed if it genuinely helps this answer; otherwise leave it out."
+        } else if snapshot != nil {
+            healthBlock = "Not loaded for this message: it is not about their day or their numbers. If they ask about today or their data, use lookupTodayHealth."
         } else {
             healthBlock = "No live daily record is available right now. Do not invent personal metrics; answer from general knowledge."
         }
@@ -260,21 +271,31 @@ final class FoundationModelsCoach {
             let profileSection: String
             let memorySection: String
             let recentSection: String
-            if !memoryAllowed {
+            switch memoryScope {
+            case .none:
                 profileSection = notLoaded
                 memorySection = notLoaded
                 recentSection = notLoaded
-            } else if compact {
-                profileSection = "Omitted."
-                memorySection = "Omitted."
-                recentSection = "Omitted."
-            } else {
-                profileSection = profile.isEmpty ? "None yet." : profile.limitedToCoachBudget(budget.profileCharacters)
-                let thin = context.memoryNoteCount < 6
-                    ? "\nFILES ARE THIN (\(context.memoryNoteCount) notes): you know a few facts about this person, not their life. Do not stretch them across replies."
-                    : ""
-                memorySection = memoryBlock.limitedToCoachBudget(budget.profileCharacters) + thin
-                recentSection = context.recentConversations.limitedToCoachBudget(budget.summaryCharacters)
+            case .essentials:
+                profileSection = "Only the essentials are loaded (below)."
+                memorySection = compact
+                    ? "Omitted."
+                    : (essentialMemoryBlock.isEmpty ? "No notes in these files yet." : essentialMemoryBlock.limitedToCoachBudget(budget.profileCharacters))
+                        + "\nThese are the facts that shape advice for anyone: how they eat, their body, their staples. Their relationships, patterns, and recent state are not loaded; if the question turns personal, use lookupWhatWeRemember."
+                recentSection = notLoaded
+            case .full:
+                if compact {
+                    profileSection = "Omitted."
+                    memorySection = "Omitted."
+                    recentSection = "Omitted."
+                } else {
+                    profileSection = profile.isEmpty ? "None yet." : profile.limitedToCoachBudget(budget.profileCharacters)
+                    let thin = context.memoryNoteCount < 6
+                        ? "\nFILES ARE THIN (\(context.memoryNoteCount) notes): you know a few facts about this person, not their life. Do not stretch them across replies."
+                        : ""
+                    memorySection = memoryBlock.limitedToCoachBudget(budget.profileCharacters) + thin
+                    recentSection = context.recentConversations.limitedToCoachBudget(budget.summaryCharacters)
+                }
             }
             let acquaintance = context.isAcquaintance
                 ? CoachCharter.acquaintanceContract(emptyFiles: context.emptyMemorySections)
@@ -294,7 +315,7 @@ final class FoundationModelsCoach {
                 )
                 return """
                 \(chatLine)
-                \(shape.hint)
+                Shape: goal shaping. When the plan is mostly clear, propose a draft with sensible defaults and ask the one question whose answer most changes it; never a numbered list of levers.
                 \(care)
                 USER MESSAGE: \(userMessage.limitedToCoachBudget(1200))
                 \(CoachGoalPlanning.contract)
@@ -354,8 +375,6 @@ final class FoundationModelsCoach {
             \(chatLine)
             \(opening)
             \(shape.hint)
-            Attention: this chat has mostly been about \(context.pillar.label.lowercased()). \(context.pillar.leadsWithNumbers ? "Their numbers are welcome here when they help." : "Lead with the person; numbers only if they ask.")
-            Unprompted Health this turn: \(context.allowUnpromptedHealth ? "allowed, one sentence max" : "not allowed").
             \(acquaintance)
             \(care)
 
@@ -364,7 +383,7 @@ final class FoundationModelsCoach {
 
             \(CoachCharter.answerDepthGuidance(for: answeringTier))
 
-            HEALTH SNAPSHOT (authoritative numbers):
+            HEALTH SNAPSHOT (authoritative numbers, loaded only when the message is about them):
             \(healthBlock)\(historySection)\(focusSection)
             \(goalPaceDirective ?? "")
 
@@ -455,6 +474,25 @@ final class FoundationModelsCoach {
                 } catch {
                     lastRetryError = error
                     guard Self.isContextOverflow(error) else { break }
+                }
+            }
+            // The content itself was refused: one more on-device attempt with the
+            // input classifier relaxed for the person's own words. Sensitive topics
+            // deserve a real answer, and this is the framework's sanctioned way in.
+            if retried == nil, Self.isContentDecline(lastRetryError ?? firstError) || Self.isContentDecline(firstError) {
+                let permissive = CoachModelProvider.makeSession(
+                    tier: .onDevice,
+                    instructions: retryInstructions,
+                    tools: [],
+                    permissiveGuardrails: true
+                )
+                do {
+                    retried = try await permissive.respond(
+                        to: makePrompt(compact: true, budget: retryBudget, answeringTier: .onDevice),
+                        generating: GenerableCoachReply.self
+                    ).content
+                } catch {
+                    lastRetryError = error
                 }
             }
             guard let retried else {

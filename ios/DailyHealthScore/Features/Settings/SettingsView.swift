@@ -89,6 +89,9 @@ struct SettingsView: View {
                     Text("Deleting chats keeps what your coach has learned about you. Clearing memory removes the notes too.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Text(CoachModelProvider.serverQuotaSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     NavigationLink {
                         CoachEvalView()
                             .environmentObject(appState)

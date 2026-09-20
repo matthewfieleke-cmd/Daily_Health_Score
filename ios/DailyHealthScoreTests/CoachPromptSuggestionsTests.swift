@@ -106,7 +106,36 @@ final class CoachPromptSuggestionsTests: XCTestCase {
         )
 
         XCTAssertFalse(suggestions.isEmpty)
-        XCTAssertTrue(suggestions.contains("What's worth protecting tomorrow?"))
+        XCTAssertNil(CoachPromptSuggestions.metricQuestion(record: record(sleep: 8, fiber: 45, exercise: 45), evening: false))
+        XCTAssertFalse(suggestions.contains { $0.contains("grams") || $0.contains("minutes") }, "A good day gets no numbers question")
+    }
+
+    /// The chips set the tone: at most one question about the numbers, and the
+    /// rest about the person's day, people, learning, or words.
+    func test_chipsAreVariedAndCarryAtMostOneMetricQuestion() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Chicago")!
+        var metricCounts: [Int] = []
+        var allChips = Set<String>()
+        for day in 1...12 {
+            let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: day, hour: 9))!
+            let chips = CoachPromptSuggestions.build(
+                record: record(sleep: 5, fiber: 10, exercise: 0),
+                goals: [goal(filled: 1, target: 5)],
+                phase: .day,
+                now: now,
+                calendar: calendar
+            )
+            let metric = chips.filter { $0.contains("grams") || $0.contains("minutes") || $0.contains("short sleep") }.count
+            metricCounts.append(metric)
+            allChips.formUnion(chips)
+            XCTAssertLessThanOrEqual(chips.count, CoachPromptSuggestions.maximum)
+            XCTAssertTrue(chips.contains("How am I doing on my SMART goals?"))
+        }
+        XCTAssertTrue(metricCounts.allSatisfy { $0 <= 1 })
+        XCTAssertGreaterThanOrEqual(allChips.count, 8, "Twelve days should not show the same four chips")
+        XCTAssertTrue(allChips.contains("Help me word a message I've been putting off"))
+        XCTAssertTrue(allChips.contains { CoachPromptSuggestions.learning.contains($0) })
     }
 
     func test_brandNewUserWithNoRecordStillGetsStarters() {
