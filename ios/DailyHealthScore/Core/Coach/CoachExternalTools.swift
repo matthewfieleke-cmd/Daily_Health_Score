@@ -52,7 +52,7 @@ struct CoachCalculatorTool: Tool {
 
 struct CoachBodyTrendTool: Tool {
     let name = "lookupWeightTrend"
-    let description = "The person's weight trend and BMI as shared from Apple Health: seven-day level, change over four and twelve weeks, BMI as a screening number. Use when weight, protein needs, or energy needs come up. Never for praise or judgment."
+    let description = "The person's weight trend, BMI, age, and sex as shared from Apple Health: seven-day level, change over four and twelve weeks, BMI as a screening number. Use when weight, age, protein needs, or energy needs come up. Never for praise or judgment; never guess an age instead of calling this."
     let payload: String
 
     @Generable

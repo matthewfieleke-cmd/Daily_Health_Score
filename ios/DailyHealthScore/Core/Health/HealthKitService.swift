@@ -47,9 +47,15 @@ final class HealthKitService {
             throw HealthKitError.unavailable
         }
         var readTypes: Set<HKObjectType> = [sleep, fiber, exercise, hrv, HKObjectType.workoutType()]
-        // Weight, height, and BMI feed the Coach only; the score never sees them.
+        // Weight, height, BMI, age, and sex feed the Coach only; the score never
+        // sees them. Age and sex keep the Coach from guessing either.
         for identifier in [HKQuantityTypeIdentifier.bodyMass, .height, .bodyMassIndex] {
             if let type = HKObjectType.quantityType(forIdentifier: identifier) {
+                readTypes.insert(type)
+            }
+        }
+        for identifier in [HKCharacteristicTypeIdentifier.dateOfBirth, .biologicalSex] {
+            if let type = HKObjectType.characteristicType(forIdentifier: identifier) {
                 readTypes.insert(type)
             }
         }
