@@ -149,7 +149,7 @@ final class CoachMemoryStore: ObservableObject {
     @discardableResult
     func startInbox(now: Date = Date()) -> CoachThread {
         persistParked(CoachThreadLogic.parkActive(in: .inbox, threads: threads, now: now))
-        let thread = CoachThread(room: .inbox, title: CoachRoom.inbox.label, lastMessageAt: now, updatedAt: now, createdAt: now)
+        let thread = CoachThread(room: .inbox, title: CoachRoom.inbox.label, createdAt: now, updatedAt: now, lastMessageAt: now)
         upsertThread(thread)
         openThreadID = thread.id
         reload()
@@ -163,7 +163,7 @@ final class CoachMemoryStore: ObservableObject {
             return openThread(active.id) ?? active
         }
         persistParked(CoachThreadLogic.parkActive(in: room, threads: threads, now: now))
-        let thread = CoachThread(room: room, title: room.label, lastMessageAt: now, updatedAt: now, createdAt: now)
+        let thread = CoachThread(room: room, title: room.label, createdAt: now, updatedAt: now, lastMessageAt: now)
         upsertThread(thread)
         openThreadID = thread.id
         reload()
