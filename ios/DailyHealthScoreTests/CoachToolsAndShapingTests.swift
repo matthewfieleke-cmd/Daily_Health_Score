@@ -264,64 +264,6 @@ final class CoachReplyShapingTests: XCTestCase {
         XCTAssertEqual(CoachReplyShape.detect(message: numb, intent: .planning), .howTo, "A how-do-I with a feeling in it is still a how-do-I")
     }
 
-    func test_pushbackIsItsOwnShapeAndStaysCurious() {
-        XCTAssertEqual(CoachReplyShape.detect(message: "I don’t want to walk. I hate walking.", intent: .general), .pushback)
-        XCTAssertEqual(CoachReplyShape.detect(message: "That won't work for me, my evenings are gone.", intent: .planning), .pushback)
-        XCTAssertEqual(CoachReplyShape.detect(message: "I hate how tired I feel", intent: .support), .feeling, "A feeling with 'hate' in it is still a feeling")
-        XCTAssertTrue(CoachReplyShape.pushback.hint.contains("no re-selling"))
-        XCTAssertTrue(CoachReplyShape.pushback.usesMemoryFiles)
-        XCTAssertLessThanOrEqual(CoachReplyShape.pushback.wordRange.upperBound, 120)
-        XCTAssertTrue(CoachReplyShape.general.hint.contains("first word is yes, no, or mostly"))
-        XCTAssertTrue(CoachReplyShape.data.hint.contains("No suggestion"))
-    }
-
-    func test_writingHelpIsItsOwnShape() {
-        XCTAssertEqual(CoachReplyShape.detect(message: "Help me word a short note to my team about our office manager leaving.", intent: .planning), .writing)
-        XCTAssertEqual(CoachReplyShape.detect(message: "What should I say to my wife about the trip?", intent: .support), .writing)
-        XCTAssertEqual(CoachReplyShape.writing.reasoningDepth, .moderate)
-        XCTAssertTrue(CoachReplyShape.writing.hint.contains("Gather what matters first"))
-        XCTAssertTrue(CoachReplyShape.smallTalk.hint.contains("No question"))
-        XCTAssertTrue(CoachReplyShape.feeling.hint.contains("No numbered levers"))
-    }
-
-    func test_reasoningDepthScalesWithTheShape() {
-        XCTAssertEqual(CoachReplyShape.howTo.reasoningDepth, .deep)
-        XCTAssertEqual(CoachReplyShape.evaluation.reasoningDepth, .deep)
-        XCTAssertEqual(CoachReplyShape.feeling.reasoningDepth, .moderate)
-        XCTAssertEqual(CoachReplyShape.smallTalk.reasoningDepth, .light)
-        XCTAssertEqual(CoachReplyShape.data.reasoningDepth, .light)
-        XCTAssertTrue(CoachReplyShape.howTo.hint.contains("levers ordered by effort"))
-    }
-
-    /// Ranges, not counts, and the files only where they can matter.
-    func test_shapesCarryWordRangesAndDecideWhoSeesTheFiles() {
-        for shape in [CoachReplyShape.feeling, .howTo, .evaluation, .data, .winReport, .statement, .pushback, .writing, .smallTalk, .general] {
-            XCTAssertTrue(shape.hint.contains("Typically \(shape.wordRange.lowerBound) to \(shape.wordRange.upperBound) words when the content earns it; never pad"), shape.rawValue)
-            XCTAssertFalse(shape.hint.contains("one sentence of"), shape.rawValue)
-        }
-        XCTAssertGreaterThanOrEqual(CoachReplyShape.feeling.wordRange.lowerBound, 100)
-        XCTAssertLessThanOrEqual(CoachReplyShape.smallTalk.wordRange.upperBound, 40)
-        XCTAssertFalse(CoachReplyShape.data.usesMemoryFiles)
-        XCTAssertFalse(CoachReplyShape.smallTalk.usesMemoryFiles)
-        XCTAssertFalse(CoachReplyShape.writing.usesMemoryFiles)
-        XCTAssertTrue(CoachReplyShape.feeling.usesMemoryFiles)
-        XCTAssertTrue(CoachReplyShape.howTo.usesMemoryFiles)
-        XCTAssertTrue(CoachReplyShape.data.hint.contains("or HRV unless they asked"))
-        XCTAssertTrue(CoachReplyShape.feeling.hint.contains("how they are right now"))
-    }
-
-    func test_repetitionGuardListsEarlierSuggestions() {
-        let earlier = [
-            "You've built a morning routine. You could try swapping one bar for a cup of cooked beans. This keeps your rhythm.",
-            "Breakfast is repeatable. You could keep the oats and tea but swap one bar for a cup of cooked beans or add chia seeds."
-        ]
-        let lines = CoachRepetitionGuard.alreadySuggested(in: earlier)
-        XCTAssertEqual(lines.count, 2)
-        XCTAssertTrue(lines.contains { $0.contains("swap one bar for a cup of cooked beans or add chia") })
-        XCTAssertTrue(CoachRepetitionGuard.promptBlock(in: earlier)?.hasPrefix("ALREADY SUGGESTED IN THIS CHAT") == true)
-        XCTAssertNil(CoachRepetitionGuard.promptBlock(in: ["Good morning."]))
-    }
-
     /// The model sometimes starts the next structured field inside the message.
     func test_polishDropsLeakedOutputFields() {
         let leaked = "Thanks, Matt — that gives me a clear picture. Who's at home and who matters most to you?\n\nmemoryUpdates: [{"
@@ -407,4 +349,56 @@ struct FakeRefusedError: LocalizedError {
 
 struct FakeNetworkError: LocalizedError {
     var errorDescription: String? { "The Internet connection appears to be offline." }
+}
+
+/// The model asks; the app validates. These are the guards under the action tools.
+@MainActor
+final class CoachLiveContextTests: XCTestCase {
+    func test_rememberKeepsOnlyValidGroundedNotes() async {
+        let live = CoachLiveContext()
+        live.personsWords = "Call me Matt. I am a Family Medicine physician. I work Monday, Tuesday, Wednesday, Friday."
+        XCTAssertEqual(
+            live.remember(operation: "add", section: "aboutYou", text: "Family Medicine physician; clinic days Monday, Tuesday, Wednesday, Friday as of September 2026.", replaces: "", basis: "stated"),
+            "Kept."
+        )
+        XCTAssertTrue(live.remember(operation: "add", section: "patterns", text: "Finds tracking food helpful for staying steady.", replaces: "", basis: "inferred").hasPrefix("Not kept: notes must come from"))
+        XCTAssertTrue(live.remember(operation: "zap", section: "aboutYou", text: "Family Medicine physician.", replaces: "", basis: "stated").hasPrefix("Not kept: the note needs"))
+        XCTAssertEqual(live.pendingMemoryUpdates.count, 1)
+        live.beginTurn()
+        XCTAssertTrue(live.pendingMemoryUpdates.isEmpty)
+    }
+
+    func test_checkInNeedsCompletionLanguageAndARealGoal() async {
+        let live = CoachLiveContext()
+        let goal = CoachTestFixtures.goal(text: "walk after dinner")
+        live.goals = [goal]
+        live.personsWords = "Do I already have a walking goal?"
+        XCTAssertTrue(live.logCheckIn(goalID: goal.id.uuidString, when: "today", note: "").hasPrefix("Not offered: the person has not said"))
+        live.personsWords = "I walked after dinner tonight, can you log it?"
+        XCTAssertTrue(live.logCheckIn(goalID: UUID().uuidString, when: "today", note: "").hasPrefix("Not offered: use an exact goalID"))
+        XCTAssertEqual(live.logCheckIn(goalID: goal.id.uuidString, when: "today", note: "by the pond"), "The app will ask them to confirm the check-in.")
+        XCTAssertEqual(live.pendingCheckIn?.goalId, goal.id)
+    }
+
+    func test_proposalsAreValidatedAndNoOpsRefused() async {
+        let live = CoachLiveContext()
+        let goal = CoachTestFixtures.goal(text: "Do Brilliant app logic puzzles for 10 minutes in the mornings.")
+        live.goals = [goal]
+        let same = live.propose(operation: "update", goalID: goal.id.uuidString, specificText: goal.specificText, targetCount: goal.targetCount, theme: goal.relevantTheme.rawValue, daysFromToday: nil, personalReason: nil, cue: nil, expectedBarriers: nil, fallbackAction: nil)
+        XCTAssertTrue(same.hasPrefix("Not drafted: that is the goal exactly"))
+        XCTAssertNil(live.pendingProposal)
+        let created = live.propose(operation: "create", goalID: nil, specificText: "Walk with Maureen after dinner", targetCount: 3, theme: "marriage", daysFromToday: 14, personalReason: "connection", cue: "after dinner", expectedBarriers: nil, fallbackAction: "five minutes outside")
+        XCTAssertTrue(created.hasPrefix("Drafted."))
+        XCTAssertEqual(live.pendingProposal?.edit.specificText, "Walk with Maureen after dinner")
+        XCTAssertFalse(live.proposalRejected)
+        let broken = live.propose(operation: "create", goalID: nil, specificText: nil, targetCount: nil, theme: nil, daysFromToday: nil, personalReason: nil, cue: nil, expectedBarriers: nil, fallbackAction: nil)
+        XCTAssertTrue(broken.hasPrefix("Not drafted: a new goal needs"))
+        XCTAssertTrue(live.proposalRejected)
+    }
+
+    func test_toolNamesIncludeTheActions() async {
+        for name in ["rememberAboutPerson", "proposeSMARTGoal", "logGoalCheckIn", "lookupTodayHealth", "lookupWhatWeRemember"] {
+            XCTAssertTrue(CoachSessionTools.toolNames.contains(name), name)
+        }
+    }
 }

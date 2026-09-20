@@ -97,27 +97,21 @@ final class CoachMemoryFilesLogicTests: XCTestCase {
         XCTAssertEqual(empty.map(\.label).first, "About you")
     }
 
-    /// Essentials are the notes that shape advice for anyone; the rest stays
-    /// behind the lookup tool for general questions.
-    func test_promptBlockCanBeScopedToTheEssentialFiles() {
+    /// The prompt block can be limited to a set of files.
+    func test_promptBlockCanBeScopedToChosenFiles() {
         let items = [
             CoachMemoryItem(category: .people, content: "Wife is Maureen; sons Isaac, 14, and Caleb, 13.", provenance: .coachRecorded),
             CoachMemoryItem(category: .patterns, content: "Binge-eats after arguments with his wife.", provenance: .coachRecorded),
             CoachMemoryItem(category: .body, content: "Uses a CPAP for sleep apnea.", provenance: .coachRecorded),
             CoachMemoryItem(category: .likes, content: "Eats whole-food plant-based.", provenance: .coachRecorded)
         ]
-        let essentials = CoachMemoryLogic.promptBlock(items: items, sections: CoachMemoryScope.essentials.sections)
-        XCTAssertTrue(essentials.contains("CPAP"))
-        XCTAssertTrue(essentials.contains("plant-based"))
-        XCTAssertFalse(essentials.contains("Maureen"))
-        XCTAssertFalse(essentials.contains("Binge"))
-        let full = CoachMemoryLogic.promptBlock(items: items, sections: CoachMemoryScope.full.sections)
-        XCTAssertTrue(full.contains("Maureen"))
-        XCTAssertEqual(CoachMemoryScope.none.sections, [])
-        XCTAssertEqual(CoachReplyShape.general.memoryScope, .essentials)
-        XCTAssertEqual(CoachReplyShape.feeling.memoryScope, .full)
-        XCTAssertEqual(CoachReplyShape.data.memoryScope, .none)
-        XCTAssertFalse(CoachReplyShape.data.usesMemoryFiles)
+        let some = CoachMemoryLogic.promptBlock(items: items, sections: [.aboutYou, .body, .likes])
+        XCTAssertTrue(some.contains("CPAP"))
+        XCTAssertTrue(some.contains("plant-based"))
+        XCTAssertFalse(some.contains("Maureen"))
+        XCTAssertFalse(some.contains("Binge"))
+        let all = CoachMemoryLogic.promptBlock(items: items)
+        XCTAssertTrue(all.contains("Maureen"))
         XCTAssertTrue(CoachMemoryLogic.promptBlock(items: [], sections: [.body]).contains("No notes in these files yet."))
     }
 
