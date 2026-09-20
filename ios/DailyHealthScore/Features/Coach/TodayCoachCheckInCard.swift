@@ -19,8 +19,11 @@ struct TodayCoachCheckInCard: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let kind = CoachCheckInLogic.kind(for: context.date)
+            // The shape of the day is part of the id, so a Health sync that
+            // lands the first numbers or crosses a goal re-evaluates the card.
+            let signature = record.map { CoachCheckInLogic.statusSignature(for: $0) } ?? ""
             cardStack(kind: kind, now: context.date)
-                .task(id: "\(record?.date ?? "")#\(kind.rawValue)#\(appState.smartGoalsRevision)#\(coach.memory.memoryRevision)") {
+                .task(id: "\(record?.date ?? "")#\(kind.rawValue)#\(signature)#\(appState.smartGoalsRevision)#\(coach.memory.memoryRevision)") {
                     guard let record else { return }
                     await coach.ensureCheckIn(
                         for: record,
