@@ -280,6 +280,9 @@ final class LifestyleCoachController: ObservableObject {
             )
             guard chatGenerationID == generationID else { return }
             memory.append(CoachChatTurn(role: .coach, text: result.message, modelTier: result.tier))
+            // The reply is on screen; the composer reopens now, while filing
+            // and profile work continue on-device behind it.
+            isChatBusy = false
             if allowHealth {
                 memory.markHealthMentioned()
             }
