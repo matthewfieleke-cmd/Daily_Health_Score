@@ -40,7 +40,7 @@ private struct AppRootContent: View {
             set: { appState.pendingCoachFocus = $0 }
         )) { focus in
             NavigationStack {
-                LifestyleCoachChatView(focus: focus)
+                LifestyleCoachChatView(launch: .focus(focus))
                     .environmentObject(appState)
                     .environmentObject(appState.coach)
             }

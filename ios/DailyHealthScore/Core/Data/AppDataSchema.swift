@@ -8,9 +8,9 @@ enum AppDataSchema {
         SMARTGoalActivityEntity.self,
         CoachChatMessageEntity.self,
         CoachThreadEntity.self,
-        CoachBridgeEntity.self,
         CoachMemoryStateEntity.self,
         CoachMemoryItemEntity.self,
+        CoachMemoryChangeEntity.self,
         CoachFollowThroughStateEntity.self,
         CoachLocalFeedbackEntity.self
     ]

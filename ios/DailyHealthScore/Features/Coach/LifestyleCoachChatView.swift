@@ -20,11 +20,36 @@ struct LifestyleCoachChatView: View {
         focusedGoalID: UUID? = nil,
         launch: CoachChatLaunch? = nil
     ) {
-        _draft = State(initialValue: initialMessage)
-        _focusedGoalID = State(initialValue: focusedGoalID ?? focus?.goalId)
-        _planningGoal = State(initialValue: focusedGoalID != nil || focus?.feature == .goal || initialMessage.lowercased().contains("smart goal"))
+        let resolved: CoachChatLaunch
+        if let launch {
+            resolved = launch
+        } else if let focusedGoalID {
+            resolved = .goal(focusedGoalID)
+        } else if let focus {
+            resolved = .focus(focus)
+        } else if !initialMessage.isEmpty {
+            resolved = .compose(initialMessage)
+        } else {
+            resolved = .newChat
+        }
+        var goalID = focusedGoalID ?? focus?.goalId
+        var prefill = initialMessage
+        var isPlanning = focusedGoalID != nil || focus?.feature == .goal || initialMessage.lowercased().contains("smart goal")
+        switch resolved {
+        case .goal(let id):
+            goalID = id
+            isPlanning = true
+        case .compose(let text):
+            prefill = text
+            isPlanning = isPlanning || text.lowercased().contains("smart goal")
+        default:
+            break
+        }
+        _draft = State(initialValue: prefill)
+        _focusedGoalID = State(initialValue: goalID)
+        _planningGoal = State(initialValue: isPlanning)
         _focus = State(initialValue: focus)
-        _launch = State(initialValue: launch ?? focus.map { .focus($0) } ?? .inbox)
+        _launch = State(initialValue: resolved)
     }
 
     private var selectedGoal: SMARTGoal? {
@@ -35,6 +60,14 @@ struct LifestyleCoachChatView: View {
     private var todayRecord: DailyRecord? {
         appState.recordStore.records.first { $0.date == todayKey }
     }
+
+    private var title: String {
+        if let thread = coach.memory.openThread { return thread.title }
+        if let seed = coach.memory.pendingSeed, !seed.provisionalTitle.isEmpty { return seed.provisionalTitle }
+        return "New chat"
+    }
+
+    private var visibleTurns: [CoachChatTurn] { coach.memory.visibleTurns }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,8 +82,10 @@ struct LifestyleCoachChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
-                        introCard
-                        ForEach(coach.memory.turns) { turn in
+                        if visibleTurns.isEmpty {
+                            emptyIntro
+                        }
+                        ForEach(visibleTurns) { turn in
                             bubble(for: turn)
                                 .id(turn.id)
                         }
@@ -64,12 +99,16 @@ struct LifestyleCoachChatView: View {
                             .padding(.horizontal, 4)
                             .id("pending")
                         }
+                        if let request = coach.pendingGoalCheckIn, !coach.isChatBusy {
+                            goalCheckInCard(request)
+                                .id("goal-check-in")
+                        }
                         if let proposal = coach.goalProposal, !coach.isChatBusy {
                             goalProposalCard(proposal)
                                 .id("goal-proposal")
                         }
                         if let error = coach.chatError, !coach.isChatBusy,
-                           coach.memory.turns.last?.role != .coach {
+                           visibleTurns.last?.role != .coach {
                             Text(error)
                                 .font(.footnote)
                                 .foregroundStyle(.red)
@@ -78,13 +117,16 @@ struct LifestyleCoachChatView: View {
                     }
                     .padding(16)
                 }
-                .onChange(of: coach.memory.turns.count) { _, _ in
+                .onChange(of: visibleTurns.count) { _, _ in
                     scrollToEnd(proxy)
                 }
-                .onChange(of: coach.isChatBusy) { _, busy in
+                .onChange(of: coach.isChatBusy) { _, _ in
                     scrollToEnd(proxy)
                 }
                 .onChange(of: coach.goalProposal?.id) { _, _ in
+                    scrollToEnd(proxy)
+                }
+                .onChange(of: coach.pendingGoalCheckIn?.id) { _, _ in
                     scrollToEnd(proxy)
                 }
             }
@@ -101,7 +143,7 @@ struct LifestyleCoachChatView: View {
             composer
         }
         .background(AppTheme.screenBackground.ignoresSafeArea())
-        .navigationTitle(coach.memory.openThread?.title ?? "DHS Lifestyle Coach")
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -114,10 +156,17 @@ struct LifestyleCoachChatView: View {
                         Button("Edit this goal") { goalEdit = SMARTGoalEdit(goal: selectedGoal) }
                     }
                     Button("What your coach remembers") { showMemory = true }
+                    if let thread = coach.memory.openThread {
+                        Divider()
+                        Button("Delete this chat", role: .destructive) {
+                            coach.memory.deleteThread(thread.id)
+                            dismiss()
+                        }
+                    }
                 } label: {
-                    Image(systemName: "target")
+                    Image(systemName: "ellipsis.circle")
                 }
-                .accessibilityLabel("SMART goal and memory actions")
+                .accessibilityLabel("Chat actions")
                 .disabled(coach.isChatBusy)
             }
         }
@@ -138,22 +187,31 @@ struct LifestyleCoachChatView: View {
         }
         .onAppear {
             coach.refreshAvailability()
-            _ = coach.memory.open(launch)
+            coach.memory.open(launch)
         }
     }
 
-    private var introCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
+    /// A new chat before anything is said: the coach, the philosophy, an invitation.
+    private var emptyIntro: some View {
+        VStack(alignment: .center, spacing: 10) {
+            Image("DHSLifestyleCoach")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityHidden(true)
             Text(CoachCharter.philosophy)
                 .font(.subheadline.weight(.medium))
-            Text(coach.memory.openThread.map { "\( $0.room.label). Same coach — follow what matters. Lifestyle Medicine, one mind." } ?? "Talk through what matters. Same coach in every room.")
+                .multilineTextAlignment(.center)
+            Text(focus != nil
+                 ? "Ask about this, or anything else on your mind."
+                 : "What’s on your mind? Ask anything, or start with a question below.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.cardSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
     }
 
     private var goalFocusBanner: some View {
@@ -211,7 +269,7 @@ struct LifestyleCoachChatView: View {
                         .foregroundStyle(.secondary)
                 }
                 if !focus.valueSummary.isEmpty {
-                    Text(focus.valueSummary)
+                    Text(CoachFocusPresentation.spoken(focus.valueSummary))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
@@ -226,6 +284,34 @@ struct LifestyleCoachChatView: View {
         }
         .padding(12)
         .background(AppTheme.leaf.opacity(0.10))
+    }
+
+    private func goalCheckInCard(_ request: CoachGoalCheckInRequest) -> some View {
+        let when = Calendar.current.isDateInToday(request.occurredAt) ? "today" : "yesterday"
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("Log a check-in?")
+                .font(.headline)
+            Text("“\(request.goalTitle)” — \(when)")
+                .font(.subheadline)
+            if !request.note.isEmpty {
+                Text(request.note)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Button("Log it") {
+                    coach.confirmGoalCheckIn(request, goals: appState.smartGoalStore)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.primary)
+                Button("Not now") { coach.dismissGoalCheckIn() }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.leaf.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     private func goalProposalCard(_ proposal: CoachGoalProposal) -> some View {
@@ -275,12 +361,14 @@ struct LifestyleCoachChatView: View {
     private var suggestionRow: some View {
         let suggestions = planningGoal ? CoachGoalPlanning.starterQuestions(for: selectedGoal) : CoachPromptSuggestions.build(
             record: todayRecord,
-            goals: appState.smartGoalStore.goals
+            goals: appState.smartGoalStore.goals,
+            focus: focus
         )
         if coach.availability == .available,
            !coach.isChatBusy,
            draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           !suggestions.isEmpty {
+           !suggestions.isEmpty,
+           coach.memory.openThread?.kind != .acquaintance {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(suggestions, id: \.self) { suggestion in
@@ -329,7 +417,7 @@ struct LifestyleCoachChatView: View {
 
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            TextField("Ask your coach…", text: $draft, axis: .vertical)
+            TextField("Message your coach…", text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -358,20 +446,32 @@ struct LifestyleCoachChatView: View {
     }
 
     private func bubble(for turn: CoachChatTurn) -> some View {
-        HStack {
-            if turn.role == .user { Spacer(minLength: 40) }
-            Text(turn.text)
-                .font(.body)
-                .foregroundStyle(turn.role == .user ? Color.white : Color.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(
-                    turn.role == .user
-                        ? AppTheme.primary
-                        : AppTheme.cardSurface
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            if turn.role == .coach { Spacer(minLength: 40) }
+        HStack(alignment: .bottom, spacing: 8) {
+            if turn.role == .user {
+                Spacer(minLength: 40)
+                Text(turn.text)
+                    .font(.body)
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(AppTheme.primary)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            } else {
+                Image("DHSLifestyleCoach")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 26, height: 26)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .accessibilityHidden(true)
+                CoachMarkdownText(text: turn.text)
+                    .foregroundStyle(Color.primary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(AppTheme.cardSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .textSelection(.enabled)
+                Spacer(minLength: 24)
+            }
         }
     }
 
@@ -379,11 +479,27 @@ struct LifestyleCoachChatView: View {
         DispatchQueue.main.async {
             if coach.isChatBusy {
                 withAnimation { proxy.scrollTo("pending", anchor: .bottom) }
+            } else if coach.pendingGoalCheckIn != nil {
+                withAnimation { proxy.scrollTo("goal-check-in", anchor: .bottom) }
             } else if coach.goalProposal != nil {
                 withAnimation { proxy.scrollTo("goal-proposal", anchor: .bottom) }
-            } else if let last = coach.memory.turns.last {
+            } else if let last = visibleTurns.last {
                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
             }
         }
+    }
+}
+
+/// The metric sentence the app builds for the model carries status tokens;
+/// people should see the same fact in plain words.
+enum CoachFocusPresentation {
+    static func spoken(_ sentence: String) -> String {
+        sentence
+            .replacingOccurrences(of: "Status: NO DATA — unlogged, not necessarily zero behavior.", with: "Unlogged so far.")
+            .replacingOccurrences(of: "— BELOW GOAL by", with: "— short by")
+            .replacingOccurrences(of: "— GOAL EXCEEDED by", with: "— over by")
+            .replacingOccurrences(of: "— GOAL MET", with: "— goal met")
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

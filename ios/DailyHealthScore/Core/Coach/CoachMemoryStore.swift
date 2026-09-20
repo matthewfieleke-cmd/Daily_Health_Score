@@ -2,26 +2,56 @@ import Combine
 import Foundation
 import SwiftData
 
+/// What a new chat will become once the person sends something. Held in memory
+/// only, so opening a chat and backing out never leaves an empty row.
+struct CoachThreadSeed: Equatable, Sendable {
+    var kind: CoachThreadKind = .conversation
+    var pillar: CoachPillar = .general
+    var provisionalTitle: String = ""
+    var contextNote: String = ""
+    var goalId: UUID?
+    /// Coach messages the chat opens with (the check-in text, the intake opener).
+    var coachOpeners: [String] = []
+    /// True when the created thread should be linked to the current check-in.
+    var linksCheckIn: Bool = false
+}
+
 @MainActor
 final class CoachMemoryStore: ObservableObject {
     static let recentTurnLimit = 10
 
     private let modelContext: ModelContext
 
+    /// Turns of the open chat. Empty for a chat that has not started yet.
     @Published private(set) var turns: [CoachChatTurn] = []
     @Published private(set) var allTurns: [CoachChatTurn] = []
     @Published private(set) var threads: [CoachThread] = []
-    @Published private(set) var bridges: [CoachBridge] = []
     @Published private(set) var openThreadID: UUID?
+    @Published private(set) var pendingSeed: CoachThreadSeed?
     @Published private(set) var runningSummary: String = ""
     @Published private(set) var profile: CoachUserProfile = CoachUserProfile()
     @Published private(set) var memories: [CoachMemoryItem] = []
+    @Published private(set) var changes: [CoachMemoryChange] = []
     @Published private(set) var memoryRevision: Int = 0
-    @Published private(set) var cachedDailyCard: DailyCoachCardContent?
-    @Published private(set) var cachedDailyCardDateKey: String = ""
+    @Published private(set) var cachedCheckIn: CoachCheckIn?
+    @Published private(set) var cachedCheckInKey: String = ""
 
     var openThread: CoachThread? {
         threads.first { $0.id == openThreadID }
+    }
+
+    /// What the chat screen shows: the open chat, or the openers of a chat about to start.
+    var visibleTurns: [CoachChatTurn] {
+        if openThreadID != nil { return turns }
+        guard let seed = pendingSeed else { return [] }
+        return seed.coachOpeners.enumerated().map { index, text in
+            CoachChatTurn(
+                id: seedTurnID(index: index),
+                role: .coach,
+                text: text,
+                createdAt: Date(timeIntervalSince1970: Double(index))
+            )
+        }
     }
 
     init(modelContext: ModelContext) {
@@ -38,21 +68,22 @@ final class CoachMemoryStore: ObservableObject {
         allTurns = entities.compactMap { $0.toTurn() }
         migrateLegacyTurnsIfNeeded()
         let threadEntities = (try? modelContext.fetch(FetchDescriptor<CoachThreadEntity>())) ?? []
-        threads = threadEntities.compactMap { $0.toThread() }.sorted { $0.lastMessageAt > $1.lastMessageAt }
-        let bridgeEntities = (try? modelContext.fetch(FetchDescriptor<CoachBridgeEntity>())) ?? []
-        bridges = bridgeEntities.compactMap { $0.toBridge() }.sorted { $0.createdAt > $1.createdAt }
-        if let openThreadID {
+        let liveEntities = backfillThreadRows(threadEntities)
+        threads = CoachThreadLogic.sorted(liveEntities.map { $0.toThread() })
+        if let openThreadID, threads.contains(where: { $0.id == openThreadID }) {
             turns = allTurns.filter { $0.threadId == openThreadID }
         } else {
-            turns = allTurns
+            turns = []
         }
 
         let memoryEntities = (try? modelContext.fetch(FetchDescriptor<CoachMemoryItemEntity>())) ?? []
         memories = memoryEntities.compactMap { $0.toItem() }
+        let changeEntities = (try? modelContext.fetch(FetchDescriptor<CoachMemoryChangeEntity>())) ?? []
+        changes = changeEntities.compactMap { $0.toChange() }.sorted { $0.createdAt > $1.createdAt }
 
         let state = fetchOrCreateState()
         runningSummary = state.runningSummary
-        cachedDailyCardDateKey = state.dailyCardDateKey
+        cachedCheckInKey = state.dailyCardDateKey
         if state.memoryRevision != memoryRevision {
             memoryRevision = state.memoryRevision
         }
@@ -67,12 +98,14 @@ final class CoachMemoryStore: ObservableObject {
             profile = storedProfile
         }
         if let data = state.dailyCardJSON.data(using: .utf8),
-           let card = try? JSONDecoder().decode(DailyCoachCardContent.self, from: data) {
-            cachedDailyCard = card
+           let checkIn = try? JSONDecoder().decode(CoachCheckIn.self, from: data) {
+            cachedCheckIn = checkIn
         } else {
-            cachedDailyCard = nil
+            cachedCheckIn = nil
         }
     }
+
+    // MARK: - Memory reads
 
     var tombstones: Set<String> {
         let state = fetchOrCreateState()
@@ -91,129 +124,181 @@ final class CoachMemoryStore: ObservableObject {
         CoachMemoryLogic.itemsByOverridingContradictions(memories)
     }
 
-    func append(_ turn: CoachChatTurn) {
-        var stored = turn
-        if stored.threadId == nil {
-            stored.threadId = openThreadID ?? ensureInboxThread().id
-            openThreadID = stored.threadId
-        }
-        modelContext.insert(CoachChatMessageEntity(turn: stored))
-        if let threadId = stored.threadId, var thread = threads.first(where: { $0.id == threadId }) {
-            thread.lastMessageAt = stored.createdAt
-            thread.updatedAt = stored.createdAt
-            thread.status = .active
-            upsertThread(thread)
-        }
-        try? modelContext.save()
-        reload()
-        trimTurnsIfNeeded()
+    var liveMemoryCount: Int { effectiveMemories.count }
+
+    var needsAcquaintance: Bool {
+        CoachAcquaintance.isNeeded(threads: threads, liveMemoryCount: liveMemoryCount)
     }
 
-    func parkStaleThreads(now: Date = Date()) {
-        persistParked(CoachThreadLogic.parkStale(threads, now: now))
-        reload()
+    /// Coach edits the person has not undone, newest first.
+    var recentChanges: [CoachMemoryChange] {
+        let cutoff = Date().addingTimeInterval(-14 * 86_400)
+        return changes
+            .filter { !$0.isUndone && $0.createdAt >= cutoff }
+            .prefix(20)
+            .map { $0 }
     }
+
+    func recentConversationsBlock(now: Date = Date()) -> String {
+        CoachThreadLogic.recentConversationsBlock(threads, excluding: openThreadID, now: now)
+    }
+
+    // MARK: - Chats
 
     @discardableResult
-    func open(_ launch: CoachChatLaunch, now: Date = Date()) -> CoachThread? {
-        persistParked(CoachThreadLogic.parkStale(threads, now: now))
+    func open(_ launch: CoachChatLaunch) -> CoachThread? {
         switch launch {
-        case .recents:
+        case .chats:
             openThreadID = nil
-            reload()
-            return nil
-        case .inbox:
-            return startInbox(now: now)
-        case .continueThread:
-            if let existing = CoachThreadLogic.continueThread(in: threads) {
-                return openThread(existing.id)
+            pendingSeed = nil
+        case .newChat, .compose:
+            openThreadID = nil
+            pendingSeed = CoachThreadSeed()
+        case .acquaint:
+            if let existing = CoachAcquaintance.existingThread(in: threads) {
+                openThreadID = existing.id
+                pendingSeed = nil
+            } else {
+                openThreadID = nil
+                pendingSeed = CoachThreadSeed(
+                    kind: .acquaintance,
+                    pillar: .general,
+                    provisionalTitle: "Getting acquainted",
+                    contextNote: "The first getting-acquainted conversation.",
+                    coachOpeners: [CoachAcquaintance.opener]
+                )
             }
-            return startInbox(now: now)
-        case .room(let room):
-            return resumeOrStart(room: room, now: now)
-        case .thread(let id):
-            return openThread(id)
+        case .replyToCheckIn:
+            if let checkIn = cachedCheckIn,
+               let replyID = checkIn.replyThreadID,
+               threads.contains(where: { $0.id == replyID }) {
+                openThreadID = replyID
+                pendingSeed = nil
+            } else if let checkIn = cachedCheckIn {
+                openThreadID = nil
+                pendingSeed = CoachThreadSeed(
+                    kind: .checkInReply,
+                    pillar: .general,
+                    provisionalTitle: "\(checkIn.kind.title) · \(shortDate(checkIn.dateKey))",
+                    contextNote: "Reply to the \(checkIn.kind.title.lowercased()) for \(DateHelpers.formatDisplayDate(checkIn.dateKey)). The card said: \(checkIn.spokenText)",
+                    coachOpeners: [checkIn.spokenText],
+                    linksCheckIn: true
+                )
+            } else {
+                openThreadID = nil
+                pendingSeed = CoachThreadSeed()
+            }
         case .focus(let focus):
-            return resumeOrStart(room: CoachRoom.from(focus: focus), now: now)
+            openThreadID = nil
+            pendingSeed = CoachThreadSeed(
+                kind: .conversation,
+                pillar: CoachPillar.from(focus: focus),
+                provisionalTitle: focus.title,
+                contextNote: "Started from the \(focus.title) card. \(focus.valueSummary)".limitedToCoachBudget(400),
+                goalId: focus.goalId
+            )
+        case .goal(let goalId):
+            openThreadID = nil
+            pendingSeed = CoachThreadSeed(
+                kind: .goal,
+                pillar: .general,
+                provisionalTitle: "SMART goal",
+                contextNote: "Started from a saved SMART goal.",
+                goalId: goalId
+            )
+        case .thread(let id):
+            if threads.contains(where: { $0.id == id }) {
+                openThreadID = id
+                pendingSeed = nil
+            } else {
+                openThreadID = nil
+                pendingSeed = CoachThreadSeed()
+            }
         }
-    }
-
-    @discardableResult
-    func openThread(_ id: UUID) -> CoachThread? {
-        guard threads.contains(where: { $0.id == id }) else { return nil }
-        openThreadID = id
         reload()
         return openThread
     }
 
-    @discardableResult
-    func startInbox(now: Date = Date()) -> CoachThread {
-        persistParked(CoachThreadLogic.parkActive(in: .inbox, threads: threads, now: now))
-        let thread = CoachThread(room: .inbox, title: CoachRoom.inbox.label, createdAt: now, updatedAt: now, lastMessageAt: now)
-        upsertThread(thread)
-        openThreadID = thread.id
-        reload()
-        return thread
-    }
-
-    @discardableResult
-    func resumeOrStart(room: CoachRoom, now: Date = Date()) -> CoachThread {
-        persistParked(CoachThreadLogic.parkStale(threads, now: now))
-        if let active = CoachThreadLogic.active(in: room, threads: threads) {
-            return openThread(active.id) ?? active
+    /// Saves a message into the open chat, creating the chat on the first one.
+    func append(_ turn: CoachChatTurn) {
+        var stored = turn
+        let threadID: UUID
+        if let open = openThreadID, threads.contains(where: { $0.id == open }) {
+            threadID = open
+        } else {
+            threadID = createThread(
+                from: pendingSeed ?? CoachThreadSeed(),
+                firstUserText: turn.role == .user ? turn.text : nil,
+                at: turn.createdAt
+            )
+            pendingSeed = nil
         }
-        persistParked(CoachThreadLogic.parkActive(in: room, threads: threads, now: now))
-        let thread = CoachThread(room: room, title: room.label, createdAt: now, updatedAt: now, lastMessageAt: now)
-        upsertThread(thread)
-        openThreadID = thread.id
-        reload()
-        return thread
-    }
-
-    /// After a user turn: file inbox or refile+rename when the talk moved.
-    func classifyOpenThreadIfNeeded(latestUserText: String, now: Date = Date()) {
-        guard var thread = openThread else { return }
-        let userTexts = allTurns
-            .filter { $0.threadId == thread.id && $0.role == .user }
-            .sorted { $0.createdAt < $1.createdAt }
-            .map(\.text)
-        guard let destination = CoachThreadLogic.filingDecision(
-            room: thread.room,
-            userTexts: userTexts,
-            latestUserText: latestUserText
-        ) else {
-            if thread.room == .inbox, userTexts.count == 1 {
-                thread.title = CoachThreadLogic.title(from: userTexts, room: .inbox)
-                upsertThread(thread)
-                reload()
-            }
-            return
-        }
-        refile(threadID: thread.id, to: destination, now: now)
-    }
-
-    func refile(threadID: UUID, to room: CoachRoom, now: Date = Date()) {
-        guard var thread = threads.first(where: { $0.id == threadID }), thread.room != room else { return }
-        let from = thread.room
-        persistParked(CoachThreadLogic.parkActive(in: room, except: threadID, threads: threads, now: now))
-        let userTexts = allTurns
-            .filter { $0.threadId == threadID && $0.role == .user }
-            .sorted { $0.createdAt < $1.createdAt }
-            .map(\.text)
-        thread.room = room
-        thread.title = CoachThreadLogic.title(from: userTexts, room: room)
-        thread.status = .active
-        thread.updatedAt = now
-        upsertThread(thread)
-        let bridge = CoachBridge(
-            text: CoachThreadLogic.bridgeText(from: from, to: room, title: thread.title),
-            fromRoom: from,
-            toRoom: room,
-            createdAt: now,
-            sourceThreadId: threadID
-        )
-        modelContext.insert(CoachBridgeEntity(bridge: bridge))
+        stored.threadId = threadID
+        openThreadID = threadID
+        modelContext.insert(CoachChatMessageEntity(turn: stored))
         try? modelContext.save()
+        touchThread(threadID, with: stored)
+        reload()
+    }
+
+    /// Title, summary, and pillar the Coach returned with its reply.
+    func applyReplyMetadata(threadID: UUID, title: String, summary: String, pillar: CoachPillar) {
+        guard var thread = threads.first(where: { $0.id == threadID }) else { return }
+        let pillarChanged = thread.pillar != pillar
+        if let clean = CoachThreadLogic.sanitizedTitle(title), thread.titleIsProvisional || pillarChanged {
+            thread.title = clean
+            thread.titleIsProvisional = false
+        }
+        let cleanSummary = summary
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanSummary.isEmpty {
+            thread.summary = String(cleanSummary.prefix(220))
+        }
+        thread.pillar = pillar
+        thread.updatedAt = Date()
+        upsertThread(thread)
+        reload()
+    }
+
+    func deleteThread(_ id: UUID) {
+        let messages = (try? modelContext.fetch(FetchDescriptor<CoachChatMessageEntity>())) ?? []
+        for message in messages where message.threadId == id {
+            modelContext.delete(message)
+        }
+        let descriptor = FetchDescriptor<CoachThreadEntity>(predicate: #Predicate { $0.id == id })
+        if let entity = try? modelContext.fetch(descriptor).first {
+            modelContext.delete(entity)
+        }
+        if cachedCheckIn?.replyThreadID == id {
+            var checkIn = cachedCheckIn
+            checkIn?.replyThreadID = nil
+            writeCheckIn(checkIn, key: cachedCheckInKey)
+        }
+        try? modelContext.save()
+        if openThreadID == id {
+            openThreadID = nil
+            pendingSeed = CoachThreadSeed()
+        }
+        reload()
+    }
+
+    /// Every chat goes; the memory files stay.
+    func deleteAllChats() {
+        let messages = (try? modelContext.fetch(FetchDescriptor<CoachChatMessageEntity>())) ?? []
+        for message in messages { modelContext.delete(message) }
+        let rows = (try? modelContext.fetch(FetchDescriptor<CoachThreadEntity>())) ?? []
+        for row in rows { modelContext.delete(row) }
+        if var checkIn = cachedCheckIn, checkIn.replyThreadID != nil {
+            checkIn.replyThreadID = nil
+            writeCheckIn(checkIn, key: cachedCheckInKey)
+        }
+        try? modelContext.save()
+        openThreadID = nil
+        pendingSeed = nil
+        turns = []
+        allTurns = []
+        threads = []
         reload()
     }
 
@@ -229,65 +314,30 @@ final class CoachMemoryStore: ObservableObject {
         return thread.healthMentionWindowKey == CoachThreadLogic.healthWindowKey(now: now, calendar: calendar)
     }
 
-    func recentBridges(limit: Int = 2) -> [CoachBridge] {
-        Array(bridges.prefix(limit))
+    func recentTurnsForPrompt(limit: Int = CoachMemoryStore.recentTurnLimit) -> [CoachChatTurn] {
+        Array(turns.suffix(limit))
     }
 
-    private func ensureInboxThread() -> CoachThread {
-        if let open = openThread { return open }
-        if let existing = CoachThreadLogic.continueThread(in: threads) { return existing }
-        return startInbox()
+    func userTexts(in threadID: UUID) -> [String] {
+        allTurns
+            .filter { $0.threadId == threadID && $0.role == .user }
+            .sorted { $0.createdAt < $1.createdAt }
+            .map(\.text)
     }
 
-    private func persistParked(_ updated: [CoachThread]) {
-        for thread in updated where threads.first(where: { $0.id == thread.id })?.status != thread.status {
-            upsertThread(thread)
-        }
+    // MARK: - Check-in
+
+    func saveCheckIn(_ checkIn: CoachCheckIn, key: String) {
+        writeCheckIn(checkIn, key: key)
     }
 
-    private func upsertThread(_ thread: CoachThread) {
-        let id = thread.id
-        let descriptor = FetchDescriptor<CoachThreadEntity>(predicate: #Predicate { $0.id == id })
-        if let existing = try? modelContext.fetch(descriptor).first {
-            existing.apply(thread)
-        } else {
-            modelContext.insert(CoachThreadEntity(thread: thread))
-        }
-        try? modelContext.save()
-        if let index = threads.firstIndex(where: { $0.id == thread.id }) {
-            threads[index] = thread
-        } else {
-            threads.append(thread)
-        }
+    func linkCheckInReply(threadID: UUID) {
+        guard var checkIn = cachedCheckIn else { return }
+        checkIn.replyThreadID = threadID
+        writeCheckIn(checkIn, key: cachedCheckInKey)
     }
 
-    private func migrateLegacyTurnsIfNeeded() {
-        let orphans = allTurns.filter { $0.threadId == nil }
-        guard !orphans.isEmpty else { return }
-        let existing = ((try? modelContext.fetch(FetchDescriptor<CoachThreadEntity>())) ?? [])
-            .compactMap { $0.toThread() }
-        let thread: CoachThread
-        if let legacy = existing.first(where: { $0.title == "Earlier conversation" }) {
-            thread = legacy
-        } else {
-            let created = CoachThread(
-                room: .inbox,
-                title: "Earlier conversation",
-                status: .parked,
-                createdAt: orphans.first?.createdAt ?? Date(),
-                updatedAt: orphans.last?.createdAt ?? Date(),
-                lastMessageAt: orphans.last?.createdAt ?? Date()
-            )
-            upsertThread(created)
-            thread = created
-        }
-        let messages = (try? modelContext.fetch(FetchDescriptor<CoachChatMessageEntity>())) ?? []
-        for message in messages where message.threadId == nil {
-            message.threadId = thread.id
-        }
-        try? modelContext.save()
-        allTurns = messages.compactMap { $0.toTurn() }
-    }
+    // MARK: - Memory writes
 
     func replaceSummary(_ summary: String) {
         let state = fetchOrCreateState()
@@ -315,9 +365,7 @@ final class CoachMemoryStore: ObservableObject {
         var added = false
         for item in CoachPhDMemoryExtractor.items(from: message) {
             if CoachMemoryLogic.isTombstoned(content: item.content, tombstones: blocked) { continue }
-            if memories.contains(where: {
-                !$0.isDeleted && $0.contentFingerprint == item.contentFingerprint
-            }) { continue }
+            if CoachMemoryLogic.hasEquivalent(item.content, in: memories) { continue }
             upsert(item)
             added = true
         }
@@ -325,6 +373,136 @@ final class CoachMemoryStore: ObservableObject {
             persistDerivedProfile()
             reload()
         }
+    }
+
+    /// Coach edits to the files, applied only if the person did not edit memory
+    /// while the reply was generating. Returns what changed, for Undo.
+    @discardableResult
+    func applyCoachUpdates(
+        _ updates: [CoachMemoryUpdate],
+        threadID: UUID?,
+        generationRevision: Int,
+        now: Date = Date()
+    ) -> [CoachMemoryChange] {
+        guard generationRevision == memoryRevision else { return [] }
+        let blocked = tombstones
+        var applied: [CoachMemoryChange] = []
+
+        func add(_ update: CoachMemoryUpdate) {
+            guard !CoachMemoryLogic.isTombstoned(content: update.text, tombstones: blocked) else { return }
+            guard !CoachMemoryLogic.hasEquivalent(update.text, in: memories, at: now) else { return }
+            let item = CoachMemoryItem(
+                category: CoachMemoryCategory(section: update.section),
+                content: update.text,
+                provenance: .coachNoted,
+                createdAt: now,
+                confirmation: .unconfirmed
+            )
+            upsert(item)
+            applied.append(record(CoachMemoryChange(
+                kind: .added,
+                section: update.section,
+                itemId: item.id,
+                newContent: update.text,
+                createdAt: now,
+                threadId: threadID
+            )))
+        }
+
+        for update in updates.prefix(6) {
+            switch update.operation {
+            case .add:
+                add(update)
+            case .update:
+                guard let target = CoachMemoryLogic.match(update.replaces, in: memories, section: update.section, at: now) else {
+                    add(update)
+                    continue
+                }
+                if CoachMemoryFingerprint.normalize(target.content) == CoachMemoryFingerprint.normalize(update.text) { continue }
+                guard !CoachMemoryLogic.isTombstoned(content: update.text, tombstones: blocked) else { continue }
+                let replacement = CoachMemoryItem(
+                    category: CoachMemoryCategory(section: update.section),
+                    content: update.text,
+                    provenance: .coachNoted,
+                    createdAt: now,
+                    associatedGoalId: target.associatedGoalId,
+                    confirmation: .unconfirmed
+                )
+                var previous = target
+                previous.supersededById = replacement.id
+                upsert(previous)
+                upsert(replacement)
+                applied.append(record(CoachMemoryChange(
+                    kind: .updated,
+                    section: update.section,
+                    itemId: replacement.id,
+                    previousItemId: target.id,
+                    previousContent: target.content,
+                    newContent: update.text,
+                    createdAt: now,
+                    threadId: threadID
+                )))
+            case .remove:
+                guard let target = CoachMemoryLogic.match(update.replaces, in: memories, section: update.section, at: now) else { continue }
+                var deleted = target
+                deleted.isDeleted = true
+                upsert(deleted)
+                addTombstone(target.contentFingerprint)
+                applied.append(record(CoachMemoryChange(
+                    kind: .removed,
+                    section: update.section,
+                    itemId: target.id,
+                    previousContent: target.content,
+                    createdAt: now,
+                    threadId: threadID
+                )))
+            }
+        }
+        if !applied.isEmpty {
+            persistDerivedProfile()
+            reload()
+        }
+        return applied
+    }
+
+    /// Reverses one Coach edit. Undoing an add or an update tombstones the
+    /// rejected text so the Coach does not write it again.
+    func undo(_ change: CoachMemoryChange) {
+        guard var stored = changes.first(where: { $0.id == change.id }), !stored.isUndone else { return }
+        switch stored.kind {
+        case .added:
+            if let item = memories.first(where: { $0.id == stored.itemId }) {
+                var deleted = item
+                deleted.isDeleted = true
+                upsert(deleted)
+                addTombstone(item.contentFingerprint)
+            }
+        case .updated:
+            if let item = memories.first(where: { $0.id == stored.itemId }) {
+                var deleted = item
+                deleted.isDeleted = true
+                upsert(deleted)
+                addTombstone(item.contentFingerprint)
+            }
+            if let previousID = stored.previousItemId,
+               let previous = memories.first(where: { $0.id == previousID }) {
+                var restored = previous
+                restored.supersededById = nil
+                upsert(restored)
+            }
+        case .removed:
+            if let item = memories.first(where: { $0.id == stored.itemId }) {
+                var restored = item
+                restored.isDeleted = false
+                upsert(restored)
+                removeTombstone(item.contentFingerprint)
+            }
+        }
+        stored.isUndone = true
+        upsertChange(stored)
+        persistDerivedProfile()
+        bumpRevision(removing: stored.newContent.isEmpty ? [] : [stored.newContent])
+        reload()
     }
 
     /// Model-extracted notes stay unconfirmed interpretations. Tombstones win.
@@ -349,6 +527,21 @@ final class CoachMemoryStore: ObservableObject {
 
     func mergeProfile(_ incoming: CoachUserProfile) {
         _ = ingestModelProfileUpdate(incoming, generationRevision: memoryRevision)
+    }
+
+    /// A note the person typed themselves.
+    func addNote(section: CoachMemorySection, content: String) {
+        let text = CoachMemoryUpdate.cleaned(content)
+        guard !text.isEmpty else { return }
+        let item = CoachMemoryItem(
+            category: CoachMemoryCategory(section: section),
+            content: text,
+            provenance: .userStated,
+            createdAt: Date(),
+            lastConfirmedAt: Date(),
+            confirmation: .confirmed
+        )
+        save(item)
     }
 
     func save(_ item: CoachMemoryItem) {
@@ -378,7 +571,7 @@ final class CoachMemoryStore: ObservableObject {
     func correct(item: CoachMemoryItem, content: String, category: CoachMemoryCategory) {
         var replacement = CoachMemoryItem(
             category: category,
-            content: content,
+            content: CoachMemoryUpdate.cleaned(content),
             provenance: .userStated,
             createdAt: Date(),
             lastConfirmedAt: Date(),
@@ -408,64 +601,192 @@ final class CoachMemoryStore: ObservableObject {
         reload()
     }
 
-    func saveDailyCard(_ card: DailyCoachCardContent, dateKey: String) {
-        let state = fetchOrCreateState()
-        state.dailyCardDateKey = dateKey
-        if let data = try? JSONEncoder().encode(card),
-           let json = String(data: data, encoding: .utf8) {
-            state.dailyCardJSON = json
-        }
-        state.updatedAt = Date()
-        try? modelContext.save()
-        cachedDailyCardDateKey = dateKey
-        cachedDailyCard = card
-    }
-
     func recordFeedback(target: String, useful: Bool, goalId: UUID? = nil) {
         modelContext.insert(CoachLocalFeedbackEntity(target: target, useful: useful, goalId: goalId))
         try? modelContext.save()
     }
 
+    /// Chats, files, and the card. Health records and SMART goals are untouched.
     func clearAllMemory() {
         let messages = (try? modelContext.fetch(FetchDescriptor<CoachChatMessageEntity>())) ?? []
-        for message in messages {
-            modelContext.delete(message)
-        }
+        for message in messages { modelContext.delete(message) }
         let states = (try? modelContext.fetch(FetchDescriptor<CoachMemoryStateEntity>())) ?? []
-        for state in states {
-            modelContext.delete(state)
-        }
+        for state in states { modelContext.delete(state) }
         let items = (try? modelContext.fetch(FetchDescriptor<CoachMemoryItemEntity>())) ?? []
-        for item in items {
-            modelContext.delete(item)
-        }
+        for item in items { modelContext.delete(item) }
         let threadRows = (try? modelContext.fetch(FetchDescriptor<CoachThreadEntity>())) ?? []
         for row in threadRows { modelContext.delete(row) }
-        let bridgeRows = (try? modelContext.fetch(FetchDescriptor<CoachBridgeEntity>())) ?? []
-        for row in bridgeRows { modelContext.delete(row) }
+        let changeRows = (try? modelContext.fetch(FetchDescriptor<CoachMemoryChangeEntity>())) ?? []
+        for row in changeRows { modelContext.delete(row) }
         try? modelContext.save()
         turns = []
         allTurns = []
         threads = []
-        bridges = []
+        changes = []
         openThreadID = nil
+        pendingSeed = nil
         runningSummary = ""
         profile = CoachUserProfile()
         memories = []
         memoryRevision = 0
-        cachedDailyCard = nil
-        cachedDailyCardDateKey = ""
+        cachedCheckIn = nil
+        cachedCheckInKey = ""
     }
 
-    func recentTurnsForPrompt(limit: Int = CoachMemoryStore.recentTurnLimit) -> [CoachChatTurn] {
-        Array(turns.suffix(limit))
+    // MARK: - Private: chats
+
+    private func seedTurnID(index: Int) -> UUID {
+        UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", index)) ?? UUID()
     }
 
-    func userTexts(in threadID: UUID) -> [String] {
-        allTurns
-            .filter { $0.threadId == threadID && $0.role == .user }
-            .sorted { $0.createdAt < $1.createdAt }
-            .map(\.text)
+    private func shortDate(_ dateKey: String) -> String {
+        guard let date = DateHelpers.date(from: dateKey) else { return dateKey }
+        return date.formatted(.dateTime.weekday(.abbreviated))
+    }
+
+    private func createThread(from seed: CoachThreadSeed, firstUserText: String?, at date: Date) -> UUID {
+        let title: String
+        if !seed.provisionalTitle.isEmpty {
+            title = seed.provisionalTitle
+        } else if let firstUserText {
+            title = CoachThreadLogic.provisionalTitle(from: firstUserText)
+        } else {
+            title = "New chat"
+        }
+        let openerStart = date.addingTimeInterval(-Double(seed.coachOpeners.count))
+        var thread = CoachThread(
+            pillar: seed.pillar,
+            kind: seed.kind,
+            title: title,
+            titleIsProvisional: true,
+            createdAt: openerStart,
+            updatedAt: date,
+            lastMessageAt: date,
+            contextNote: seed.contextNote,
+            goalId: seed.goalId
+        )
+        for (index, opener) in seed.coachOpeners.enumerated() {
+            let turn = CoachChatTurn(
+                role: .coach,
+                text: opener,
+                createdAt: openerStart.addingTimeInterval(Double(index)),
+                threadId: thread.id
+            )
+            modelContext.insert(CoachChatMessageEntity(turn: turn))
+            thread.messageCount += 1
+            thread.preview = CoachThreadLogic.preview(from: opener)
+        }
+        modelContext.insert(CoachThreadEntity(thread: thread))
+        try? modelContext.save()
+        threads.append(thread)
+        if seed.linksCheckIn, var checkIn = cachedCheckIn {
+            checkIn.replyThreadID = thread.id
+            writeCheckIn(checkIn, key: cachedCheckInKey)
+        }
+        return thread.id
+    }
+
+    private func touchThread(_ threadID: UUID, with turn: CoachChatTurn) {
+        guard var thread = threads.first(where: { $0.id == threadID }) else { return }
+        thread.lastMessageAt = max(turn.createdAt, thread.lastMessageAt)
+        thread.updatedAt = turn.createdAt
+        thread.messageCount += 1
+        thread.preview = CoachThreadLogic.preview(from: turn.text)
+        upsertThread(thread)
+    }
+
+    private func upsertThread(_ thread: CoachThread) {
+        let id = thread.id
+        let descriptor = FetchDescriptor<CoachThreadEntity>(predicate: #Predicate { $0.id == id })
+        if let existing = try? modelContext.fetch(descriptor).first {
+            existing.apply(thread)
+        } else {
+            modelContext.insert(CoachThreadEntity(thread: thread))
+        }
+        try? modelContext.save()
+        if let index = threads.firstIndex(where: { $0.id == thread.id }) {
+            threads[index] = thread
+        } else {
+            threads.append(thread)
+        }
+    }
+
+    /// Build-19 rows have no counts or previews; earlier builds left empty
+    /// chats behind. Fill the first, drop the second. Returns the rows kept.
+    private func backfillThreadRows(_ entities: [CoachThreadEntity]) -> [CoachThreadEntity] {
+        var changed = false
+        var kept: [CoachThreadEntity] = []
+        for entity in entities {
+            guard entity.messageCount == 0 else {
+                kept.append(entity)
+                continue
+            }
+            let messages = allTurns.filter { $0.threadId == entity.id }.sorted { $0.createdAt < $1.createdAt }
+            if messages.isEmpty {
+                modelContext.delete(entity)
+                changed = true
+                continue
+            }
+            entity.messageCount = messages.count
+            if let last = messages.last {
+                entity.preview = CoachThreadLogic.preview(from: last.text)
+                entity.lastMessageAt = max(entity.lastMessageAt, last.createdAt)
+            }
+            entity.titleIsProvisional = true
+            changed = true
+            kept.append(entity)
+        }
+        if changed {
+            try? modelContext.save()
+        }
+        return kept
+    }
+
+    private func migrateLegacyTurnsIfNeeded() {
+        let orphans = allTurns.filter { $0.threadId == nil }
+        guard !orphans.isEmpty else { return }
+        let existing = ((try? modelContext.fetch(FetchDescriptor<CoachThreadEntity>())) ?? [])
+            .map { $0.toThread() }
+        let thread: CoachThread
+        if let legacy = existing.first(where: { $0.title == "Earlier conversation" }) {
+            thread = legacy
+        } else {
+            let created = CoachThread(
+                title: "Earlier conversation",
+                titleIsProvisional: false,
+                preview: CoachThreadLogic.preview(from: orphans.last?.text ?? ""),
+                messageCount: orphans.count,
+                createdAt: orphans.first?.createdAt ?? Date(),
+                updatedAt: orphans.last?.createdAt ?? Date(),
+                lastMessageAt: orphans.last?.createdAt ?? Date()
+            )
+            modelContext.insert(CoachThreadEntity(thread: created))
+            thread = created
+        }
+        let messages = (try? modelContext.fetch(FetchDescriptor<CoachChatMessageEntity>())) ?? []
+        for message in messages where message.threadId == nil {
+            message.threadId = thread.id
+        }
+        try? modelContext.save()
+        allTurns = messages.compactMap { $0.toTurn() }.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    // MARK: - Private: memory
+
+    private func writeCheckIn(_ checkIn: CoachCheckIn?, key: String) {
+        let state = fetchOrCreateState()
+        state.dailyCardDateKey = key
+        if let checkIn,
+           let data = try? JSONEncoder().encode(checkIn),
+           let json = String(data: data, encoding: .utf8) {
+            state.dailyCardJSON = json
+        } else {
+            state.dailyCardJSON = ""
+        }
+        state.updatedAt = Date()
+        try? modelContext.save()
+        cachedCheckInKey = key
+        cachedCheckIn = checkIn
     }
 
     private func migrateLegacyProfileNotesIfNeeded() {
@@ -507,44 +828,66 @@ final class CoachMemoryStore: ObservableObject {
         }
     }
 
+    @discardableResult
+    private func record(_ change: CoachMemoryChange) -> CoachMemoryChange {
+        modelContext.insert(CoachMemoryChangeEntity(change: change))
+        try? modelContext.save()
+        changes.insert(change, at: 0)
+        return change
+    }
+
+    private func upsertChange(_ change: CoachMemoryChange) {
+        let id = change.id
+        let descriptor = FetchDescriptor<CoachMemoryChangeEntity>(
+            predicate: #Predicate { $0.id == id }
+        )
+        if let existing = try? modelContext.fetch(descriptor).first {
+            existing.apply(change)
+        } else {
+            modelContext.insert(CoachMemoryChangeEntity(change: change))
+        }
+        try? modelContext.save()
+        if let index = changes.firstIndex(where: { $0.id == change.id }) {
+            changes[index] = change
+        } else {
+            changes.insert(change, at: 0)
+        }
+    }
+
     private func addTombstone(_ fingerprint: String) {
         var stamps = tombstones
         stamps.insert(fingerprint)
+        writeTombstones(stamps)
+    }
+
+    private func removeTombstone(_ fingerprint: String) {
+        var stamps = tombstones
+        stamps.remove(fingerprint)
+        writeTombstones(stamps)
+    }
+
+    private func writeTombstones(_ stamps: Set<String>) {
         let state = fetchOrCreateState()
-        if let data = try? JSONEncoder().encode(Array(stamps)),
+        if let data = try? JSONEncoder().encode(Array(stamps).sorted()),
            let json = String(data: data, encoding: .utf8) {
             state.deletedFingerprintsJSON = json
         }
         try? modelContext.save()
     }
 
+    /// A person edited memory by hand: cancel in-flight model output and make
+    /// the next Home visit rewrite the card. The card itself stays so its reply
+    /// link survives the rewrite.
     private func bumpRevision(removing contents: [String]) {
         let state = fetchOrCreateState()
         state.memoryRevision += 1
         state.runningSummary = CoachMemoryLogic.sanitizeSummary(state.runningSummary, removing: contents)
-        state.dailyCardJSON = ""
         state.dailyCardDateKey = ""
         state.updatedAt = Date()
         try? modelContext.save()
         memoryRevision = state.memoryRevision
         runningSummary = state.runningSummary
-        cachedDailyCard = nil
-        cachedDailyCardDateKey = ""
-    }
-
-    private func trimTurnsIfNeeded() {
-        let keep = 80
-        guard turns.count > keep else { return }
-        let extras = turns.count - keep
-        let descriptor = FetchDescriptor<CoachChatMessageEntity>(
-            sortBy: [SortDescriptor(\.createdAt, order: .forward)]
-        )
-        guard let entities = try? modelContext.fetch(descriptor) else { return }
-        for entity in entities.prefix(extras) {
-            modelContext.delete(entity)
-        }
-        try? modelContext.save()
-        reload()
+        cachedCheckInKey = ""
     }
 
     private func fetchOrCreateState() -> CoachMemoryStateEntity {

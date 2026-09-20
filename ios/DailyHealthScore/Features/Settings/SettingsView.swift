@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var showEditDay = false
     @State private var showClearConfirm = false
     @State private var showClearCoachConfirm = false
+    @State private var showDeleteChatsConfirm = false
     @State private var showSleepDiagnostic = false
     @State private var exportText = ""
     @State private var selectedSleepGoal: SleepGoalHours = .sevenHalf
@@ -76,10 +77,18 @@ struct SettingsView: View {
                         Label("What your coach remembers", systemImage: "brain.head.profile")
                     }
                     Button(role: .destructive) {
+                        showDeleteChatsConfirm = true
+                    } label: {
+                        Label("Delete all chats", systemImage: "bubble.left.and.bubble.right")
+                    }
+                    Button(role: .destructive) {
                         showClearCoachConfirm = true
                     } label: {
-                        Label("Clear coach chat & memory", systemImage: "bubble.left.and.bubble.right")
+                        Label("Clear chats and memory", systemImage: "trash")
                     }
+                    Text("Deleting chats keeps what your coach has learned about you. Clearing memory removes the notes too.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Follow-through quiet hours") {
@@ -154,13 +163,21 @@ struct SettingsView: View {
             } message: {
                 Text("This removes all saved daily records and coach memory on this device. It cannot be undone.")
             }
-            .alert("Clear coach memory?", isPresented: $showClearCoachConfirm) {
+            .alert("Delete all chats?", isPresented: $showDeleteChatsConfirm) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    appState.coach.deleteAllChats()
+                }
+            } message: {
+                Text("Every conversation with your coach is removed from this device. What your coach remembers about you stays. Health scores and SMART goals are not affected.")
+            }
+            .alert("Clear chats and memory?", isPresented: $showClearCoachConfirm) {
                 Button("Cancel", role: .cancel) {}
                 Button("Clear", role: .destructive) {
                     appState.coach.clearMemory()
                 }
             } message: {
-                Text("This clears your coach conversations and what the coach has learned about your preferences. Health scores and SMART goals are not affected.")
+                Text("This clears your coach conversations and every note your coach keeps about you. Health scores and SMART goals are not affected.")
             }
         }
     }

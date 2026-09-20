@@ -26,9 +26,11 @@ enum CoachPhDMemoryExtractor {
             items.append(stated(.stress, trimmed, now: now))
         }
 
+        // One sentence can belong in two files (a trigger and a relationship);
+        // dedupe per file, not per sentence.
         var unique: [CoachMemoryItem] = []
         var seen = Set<String>()
-        for item in items where seen.insert(item.contentFingerprint).inserted {
+        for item in items where seen.insert("\(item.category.rawValue)#\(item.contentFingerprint)").inserted {
             unique.append(item)
         }
         return unique

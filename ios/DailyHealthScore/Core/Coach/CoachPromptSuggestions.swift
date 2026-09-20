@@ -12,7 +12,8 @@ enum CoachPromptSuggestions {
     static func build(
         record: DailyRecord?,
         goals: [SMARTGoal] = [],
-        phase: DayPhase = .current()
+        phase: DayPhase = .current(),
+        focus: CoachFocusContext? = nil
     ) -> [String] {
         guard let record else {
             return [
@@ -23,6 +24,19 @@ enum CoachPromptSuggestions {
         }
 
         var suggestions: [String] = []
+
+        // A chat opened from a metric card leads with that metric.
+        switch focus?.feature {
+        case .sleep?:
+            suggestions.append("What does last night's sleep mean for today?")
+            suggestions.append("Help me protect tonight's sleep")
+        case .fiber?:
+            suggestions.append("What's the easiest fiber I can add today?")
+        case .exercise?:
+            suggestions.append(phase == .day ? "Where does movement fit today?" : "How should I plan tomorrow's movement?")
+        default:
+            break
+        }
 
         let fiberGap = Double(record.fiberGoal.rawValue) - record.fiberGrams
         if record.fiberGrams > 0, fiberGap > 0 {

@@ -88,7 +88,7 @@ final class AppState: ObservableObject {
         smartGoalStore.onChange = { [weak self] in
             guard let self else { return }
             self.smartGoalsRevision &+= 1
-            self.coach.invalidateDailyCard()
+            self.coach.invalidateCheckIn()
             self.watchSync.publish(kind: .foreground)
             Task { await self.refreshFollowThrough() }
         }
