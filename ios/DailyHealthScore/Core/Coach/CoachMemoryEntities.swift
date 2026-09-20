@@ -23,86 +23,131 @@ final class CoachChatMessageEntity {
     }
 }
 
+/// `roomRaw` keeps its build-19 storage name so existing rows stay readable;
+/// it holds the pillar. New columns carry defaults for lightweight migration.
 @Model
 final class CoachThreadEntity {
     @Attribute(.unique) var id: UUID
     var roomRaw: String
     var title: String
-    var statusRaw: String
     var createdAt: Date
     var updatedAt: Date
     var lastMessageAt: Date
     var healthMentionWindowKey: String
     var summary: String
+    var kindRaw: String = "conversation"
+    var titleIsProvisional: Bool = true
+    var preview: String = ""
+    var messageCount: Int = 0
+    var contextNote: String = ""
+    var goalId: UUID?
 
     init(thread: CoachThread) {
         id = thread.id
-        roomRaw = thread.room.rawValue
+        roomRaw = thread.pillar.rawValue
         title = thread.title
-        statusRaw = thread.status.rawValue
         createdAt = thread.createdAt
         updatedAt = thread.updatedAt
         lastMessageAt = thread.lastMessageAt
         healthMentionWindowKey = thread.healthMentionWindowKey
         summary = thread.summary
+        kindRaw = thread.kind.rawValue
+        titleIsProvisional = thread.titleIsProvisional
+        preview = thread.preview
+        messageCount = thread.messageCount
+        contextNote = thread.contextNote
+        goalId = thread.goalId
     }
 
     func apply(_ thread: CoachThread) {
-        roomRaw = thread.room.rawValue
+        roomRaw = thread.pillar.rawValue
         title = thread.title
-        statusRaw = thread.status.rawValue
         createdAt = thread.createdAt
         updatedAt = thread.updatedAt
         lastMessageAt = thread.lastMessageAt
         healthMentionWindowKey = thread.healthMentionWindowKey
         summary = thread.summary
+        kindRaw = thread.kind.rawValue
+        titleIsProvisional = thread.titleIsProvisional
+        preview = thread.preview
+        messageCount = thread.messageCount
+        contextNote = thread.contextNote
+        goalId = thread.goalId
     }
 
-    func toThread() -> CoachThread? {
-        guard let room = CoachRoom(rawValue: roomRaw),
-              let status = CoachThreadStatus(rawValue: statusRaw) else { return nil }
-        return CoachThread(
+    func toThread() -> CoachThread {
+        CoachThread(
             id: id,
-            room: room,
+            pillar: CoachPillar(storageValue: roomRaw),
+            kind: CoachThreadKind(rawValue: kindRaw) ?? .conversation,
             title: title,
-            status: status,
+            titleIsProvisional: titleIsProvisional,
+            preview: preview,
+            messageCount: messageCount,
             createdAt: createdAt,
             updatedAt: updatedAt,
             lastMessageAt: lastMessageAt,
             healthMentionWindowKey: healthMentionWindowKey,
-            summary: summary
+            summary: summary,
+            contextNote: contextNote,
+            goalId: goalId
         )
     }
 }
 
+/// One Coach edit to the memory files, kept so the person can undo it.
 @Model
-final class CoachBridgeEntity {
+final class CoachMemoryChangeEntity {
     @Attribute(.unique) var id: UUID
-    var text: String
-    var fromRoomRaw: String
-    var toRoomRaw: String
+    var kindRaw: String
+    var sectionRaw: String
+    var itemId: UUID
+    var previousItemId: UUID?
+    var previousContent: String
+    var newContent: String
     var createdAt: Date
-    var sourceThreadId: UUID
+    var threadId: UUID?
+    var isUndone: Bool
 
-    init(bridge: CoachBridge) {
-        id = bridge.id
-        text = bridge.text
-        fromRoomRaw = bridge.fromRoom.rawValue
-        toRoomRaw = bridge.toRoom.rawValue
-        createdAt = bridge.createdAt
-        sourceThreadId = bridge.sourceThreadId
+    init(change: CoachMemoryChange) {
+        id = change.id
+        kindRaw = change.kind.rawValue
+        sectionRaw = change.section.rawValue
+        itemId = change.itemId
+        previousItemId = change.previousItemId
+        previousContent = change.previousContent
+        newContent = change.newContent
+        createdAt = change.createdAt
+        threadId = change.threadId
+        isUndone = change.isUndone
     }
 
-    func toBridge() -> CoachBridge? {
-        guard let from = CoachRoom(rawValue: fromRoomRaw),
-              let to = CoachRoom(rawValue: toRoomRaw) else { return nil }
-        return CoachBridge(
+    func apply(_ change: CoachMemoryChange) {
+        kindRaw = change.kind.rawValue
+        sectionRaw = change.section.rawValue
+        itemId = change.itemId
+        previousItemId = change.previousItemId
+        previousContent = change.previousContent
+        newContent = change.newContent
+        createdAt = change.createdAt
+        threadId = change.threadId
+        isUndone = change.isUndone
+    }
+
+    func toChange() -> CoachMemoryChange? {
+        guard let kind = CoachMemoryChangeKind(rawValue: kindRaw),
+              let section = CoachMemorySection(rawValue: sectionRaw) else { return nil }
+        return CoachMemoryChange(
             id: id,
-            text: text,
-            fromRoom: from,
-            toRoom: to,
+            kind: kind,
+            section: section,
+            itemId: itemId,
+            previousItemId: previousItemId,
+            previousContent: previousContent,
+            newContent: newContent,
             createdAt: createdAt,
-            sourceThreadId: sourceThreadId
+            threadId: threadId,
+            isUndone: isUndone
         )
     }
 }

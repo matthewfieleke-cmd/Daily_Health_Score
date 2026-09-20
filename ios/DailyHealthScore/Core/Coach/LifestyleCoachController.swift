@@ -2,7 +2,7 @@ import Combine
 import Foundation
 import SwiftData
 
-/// Coordinates availability, daily cards, chat, summary, and profile memory.
+/// Coordinates availability, the Home check-in, chat, and the memory files.
 @MainActor
 final class LifestyleCoachController: ObservableObject {
     let memory: CoachMemoryStore
@@ -10,27 +10,50 @@ final class LifestyleCoachController: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     @Published private(set) var availability: CoachAvailabilityStatus = .unavailable
-    @Published private(set) var dailyCard: DailyCoachCardContent?
-    @Published private(set) var isGeneratingDailyCard = false
-    @Published private(set) var dailyCardError: String?
+    @Published private(set) var checkIn: CoachCheckIn?
+    @Published private(set) var isGeneratingCheckIn = false
+    @Published private(set) var checkInError: String?
     @Published var isChatBusy = false
     @Published var chatError: String?
     @Published private(set) var goalProposal: CoachGoalProposal?
-    private var dailyGenerationID = UUID()
+    /// The Coach heard "I did it"; the person confirms before anything is logged.
+    @Published private(set) var pendingGoalCheckIn: CoachGoalCheckInRequest?
+    private var checkInGenerationID = UUID()
     private var chatGenerationID = UUID()
 
-    func invalidateDailyCard() {
-        dailyGenerationID = UUID()
-        dailyCard = nil
-        isGeneratingDailyCard = false
+    /// Goals changed: re-evaluate the card on the next Home visit without
+    /// dropping what is on screen. The cache key ignores progress, so a Done
+    /// tap on the card never costs a rewrite.
+    func invalidateCheckIn() {
+        checkInGenerationID = UUID()
+        isGeneratingCheckIn = false
     }
 
     func dismissGoalProposal() { goalProposal = nil }
+
+    func dismissGoalCheckIn() { pendingGoalCheckIn = nil }
 
     func recordGoalSaved(_ goal: SMARTGoal) {
         goalProposal = nil
         memory.append(CoachChatTurn(role: .coach, text:
             "Saved your SMART goal: \(goal.generatedSummary) Your \(goal.filledCount) recorded check-ins are preserved."
+        ))
+    }
+
+    /// Logs the check-in the Coach heard, then says so in the chat.
+    func confirmGoalCheckIn(_ request: CoachGoalCheckInRequest, goals: SMARTGoalStore) {
+        let logged = goals.recordCheckIn(
+            goalId: request.goalId,
+            source: .iPhone,
+            occurredAt: request.occurredAt,
+            note: request.note
+        )
+        pendingGoalCheckIn = nil
+        guard logged, let goal = goals.goals.first(where: { $0.id == request.goalId }) else { return }
+        let title = goal.specificText.trimmingCharacters(in: .whitespacesAndNewlines)
+        memory.append(CoachChatTurn(
+            role: .coach,
+            text: "Logged — **\(goal.filledCount) of \(goal.targetCount)** for “\(title)”."
         ))
     }
 
@@ -45,51 +68,64 @@ final class LifestyleCoachController: ObservableObject {
             }
             .store(in: &cancellables)
         refreshAvailability()
-        dailyCard = memory.cachedDailyCard
+        checkIn = memory.cachedCheckIn
     }
 
     func refreshAvailability() {
         availability = model.availability
     }
 
-    func ensureDailyCard(
+    // MARK: - Home check-in
+
+    func ensureCheckIn(
         for record: DailyRecord,
         records: [DailyRecord],
         goals: [SMARTGoal] = [],
+        activities: [SMARTGoalActivity] = [],
         hrvSensitivity: HRVSensitivity = .balanced,
         force: Bool = false,
         now: Date = Date(),
         calendar: Calendar = .current
     ) async {
         refreshAvailability()
-        let timeOfDay = CoachTimeOfDay.current(from: now, calendar: calendar)
-        // Keyed by clock window as well as day: a morning card must not still
-        // sit on Home at 6pm suggesting lunch.
-        let cacheKey = "\(record.date)#\(timeOfDay.rawValue)#rooms1#\(CoachGoalPlanning.cacheKey(goals: goals))"
+        let kind = CoachCheckInLogic.kind(for: now, calendar: calendar)
+        let key = CoachCheckInLogic.cacheKey(dateKey: record.date, kind: kind, goals: goals)
         if !force,
-           memory.cachedDailyCardDateKey == cacheKey,
-           let cached = memory.cachedDailyCard {
-            dailyCard = cached
-            dailyCardError = nil
+           memory.cachedCheckInKey == key,
+           let cached = memory.cachedCheckIn,
+           cached.kind == kind,
+           cached.dateKey == record.date {
+            checkIn = cached
+            checkInError = nil
             return
         }
+
+        let trend = kind == .morning && CoachCheckInLogic.isMonday(now, calendar: calendar)
+            ? CoachTrendDigest.build(records: records, goals: goals, activities: activities, now: now, calendar: calendar)
+            : nil
+        let rows = CoachCheckInLogic.goalRows(goals: goals, activities: activities, todayKey: record.date)
 
         guard availability == .available else {
-            dailyCard = HomeCoachCardCopy.fallbackCard(for: record, now: now, calendar: calendar)
-            dailyCardError = nil
+            let fallback = carryingReplyLink(
+                HomeCoachCardCopy.fallbackCheckIn(for: record, kind: kind, trend: trend, now: now, calendar: calendar)
+            )
+            // A fallback is saved so Reply can quote it, under a key that never
+            // matches: the next visit tries the model again.
+            memory.saveCheckIn(fallback, key: key + "#fallback")
+            checkIn = fallback
+            checkInError = nil
             return
         }
 
-        isGeneratingDailyCard = true
+        isGeneratingCheckIn = true
         let generationID = UUID()
-        dailyGenerationID = generationID
-        dailyCardError = nil
-        if memory.cachedDailyCardDateKey != cacheKey {
-            // Drop a morning card before the evening rewrite, so Home never
-            // keeps showing "after lunch" while the new note generates.
-            dailyCard = nil
+        checkInGenerationID = generationID
+        checkInError = nil
+        if memory.cachedCheckIn?.kind != kind || memory.cachedCheckIn?.dateKey != record.date {
+            // A morning card must not sit on Home while the evening one generates.
+            checkIn = nil
         }
-        defer { if dailyGenerationID == generationID { isGeneratingDailyCard = false } }
+        defer { if checkInGenerationID == generationID { isGeneratingCheckIn = false } }
 
         do {
             let snapshot = CoachSnapshotBuilder.build(
@@ -101,25 +137,41 @@ final class LifestyleCoachController: ObservableObject {
                 now: now,
                 calendar: calendar
             )
-            var card = try await model.generateDailyCard(
+            let generated = try await model.generateCheckIn(
+                kind: kind,
                 snapshot: snapshot,
-                profile: memory.profile,
-                summary: memory.runningSummary,
-                memoryBlock: memory.promptMemoryBlock
+                memoryBlock: memory.promptMemoryBlock,
+                recentConversations: memory.recentConversationsBlock(now: now),
+                goalRows: rows,
+                trend: trend,
+                goalPaceDirective: SMARTGoalPace.directive(goals: goals, now: now, calendar: calendar),
+                now: now
             )
-            memory.parkStaleThreads()
-            if let continued = CoachThreadLogic.continueThread(in: memory.threads) {
-                card.continueTitle = continued.title
-            }
-            guard dailyGenerationID == generationID else { return }
-            memory.saveDailyCard(card, dateKey: cacheKey)
-            dailyCard = card
+            guard checkInGenerationID == generationID else { return }
+            let fresh = carryingReplyLink(generated)
+            memory.saveCheckIn(fresh, key: key)
+            checkIn = fresh
         } catch {
-            guard dailyGenerationID == generationID else { return }
-            dailyCard = HomeCoachCardCopy.fallbackCard(for: record, now: now, calendar: calendar)
-            dailyCardError = error.localizedDescription
+            guard checkInGenerationID == generationID else { return }
+            let fallback = carryingReplyLink(
+                HomeCoachCardCopy.fallbackCheckIn(for: record, kind: kind, trend: trend, now: now, calendar: calendar)
+            )
+            memory.saveCheckIn(fallback, key: key + "#fallback")
+            checkIn = fallback
+            checkInError = error.localizedDescription
         }
     }
+
+    /// A rewrite of the same card keeps the chat its Reply already opened.
+    private func carryingReplyLink(_ fresh: CoachCheckIn) -> CoachCheckIn {
+        var card = fresh
+        if let old = memory.cachedCheckIn, old.dateKey == fresh.dateKey, old.kind == fresh.kind {
+            card.replyThreadID = old.replyThreadID
+        }
+        return card
+    }
+
+    // MARK: - Chat
 
     func sendChatMessage(
         _ text: String,
@@ -142,8 +194,9 @@ final class LifestyleCoachController: ObservableObject {
         // Acute risk is answered deterministically, before availability or the model.
         if case .escalate(let message) = CoachSafetyGate.evaluate(trimmed) {
             goalProposal = nil
-            memory.append(CoachChatTurn(role: .user, text: trimmed, threadId: memory.openThreadID))
-            memory.append(CoachChatTurn(role: .coach, text: message, threadId: memory.openThreadID))
+            pendingGoalCheckIn = nil
+            memory.append(CoachChatTurn(role: .user, text: trimmed))
+            memory.append(CoachChatTurn(role: .coach, text: message))
             chatError = nil
             if chatGenerationID == generationID { isChatBusy = false }
             return
@@ -158,16 +211,35 @@ final class LifestyleCoachController: ObservableObject {
 
         let memoryRevisionAtStart = memory.memoryRevision
         chatError = nil
+        pendingGoalCheckIn = nil
         defer { if chatGenerationID == generationID { isChatBusy = false } }
 
-        memory.append(CoachChatTurn(role: .user, text: trimmed, threadId: memory.openThreadID))
-        memory.ingestUserStatedFacts(from: trimmed)
-        memory.classifyOpenThreadIfNeeded(latestUserText: trimmed)
-        let room = memory.openThread?.room ?? .inbox
+        let isFirstReply = !memory.turns.contains { $0.role == .user }
+        memory.append(CoachChatTurn(role: .user, text: trimmed))
+        guard let thread = memory.openThread else { return }
+
+        let todayKey = todayRecord?.date ?? DateHelpers.localDateKey()
+        // Past-day questions are resolved and compared in Swift, so the model
+        // never does date arithmetic.
+        let historyBlock = focusHistoryBlock(
+            message: trimmed,
+            records: records,
+            todayKey: todayKey,
+            focus: focus
+        )
+        let intent = CoachIntentClassifier.classify(trimmed, hasHistoryReference: historyBlock != nil)
         let allowHealth = CoachThreadLogic.shouldMentionHealth(
-            room: room,
+            pillar: thread.pillar,
             alreadyMentionedInWindow: memory.hasMentionedHealthThisWindow(),
-            userAskedAboutNumbers: CoachIntentClassifier.classify(trimmed).usesFullMetrics
+            userAskedAboutNumbers: intent.usesFullMetrics
+        )
+        let context = CoachReplyContext(
+            thread: thread,
+            isFirstReply: isFirstReply,
+            pillar: thread.pillar,
+            allowUnpromptedHealth: allowHealth,
+            recentConversations: memory.recentConversationsBlock(),
+            goalPaceDirective: SMARTGoalPace.directive(goals: goals)
         )
 
         do {
@@ -179,52 +251,47 @@ final class LifestyleCoachController: ObservableObject {
                     hrvSensitivity: hrvSensitivity
                 )
             }
-            // Past-day questions are resolved and compared in Swift, so the model
-            // never does date arithmetic.
-            let historyBlock = focusHistoryBlock(
-                message: trimmed,
-                records: records,
-                todayKey: todayRecord?.date ?? DateHelpers.localDateKey(),
-                focus: focus
-            )
-            // Both blocks are built at their ceiling and trimmed by the coach once
-            // it knows which model is answering.
             let result = try await model.reply(
                 to: trimmed,
-                intent: CoachIntentClassifier.classify(
-                    trimmed,
-                    hasHistoryReference: historyBlock != nil
-                ),
+                intent: intent,
                 snapshot: snapshot,
                 historyBlock: historyBlock,
-                profile: memory.profile,
-                summary: memory.runningSummary,
+                memoryBlock: memory.promptMemoryBlock,
                 recentTurns: memory.recentTurnsForPrompt(limit: CoachContextBudget.maxTranscriptTurns),
                 goals: goals,
-                focusedGoalID: focusedGoalID,
+                focusedGoalID: focusedGoalID ?? thread.goalId,
                 previousProposal: goalProposal,
                 planningGoal: planningGoal,
                 focus: focus,
-                memoryBlock: memory.promptMemoryBlock,
                 activitiesByGoal: Dictionary(grouping: activities, by: \.goalId),
-                room: room,
-                bridges: memory.recentBridges(),
-                allowUnpromptedHealth: allowHealth
+                context: context
             )
             guard chatGenerationID == generationID else { return }
-            memory.append(CoachChatTurn(role: .coach, text: result.message, threadId: memory.openThreadID))
+            memory.append(CoachChatTurn(role: .coach, text: result.message))
+            memory.applyReplyMetadata(
+                threadID: thread.id,
+                title: result.title,
+                summary: result.summary,
+                pillar: result.pillar
+            )
             if allowHealth {
                 memory.markHealthMentioned()
             }
             goalProposal = result.goalProposal
+            pendingGoalCheckIn = result.goalCheckIn
             if result.proposalRejected {
                 chatError = "The draft needs clarification before it can be saved. Ask the coach to clarify the action, target, or deadline, or create the goal manually."
             }
-            if memory.memoryRevision == memoryRevisionAtStart, let profileUpdate = result.profileUpdate {
-                _ = memory.ingestModelProfileUpdate(profileUpdate, generationRevision: memoryRevisionAtStart)
-            }
             if memory.memoryRevision == memoryRevisionAtStart {
-                await refreshSummaryQuietly(generationID: generationID, memoryRevision: memoryRevisionAtStart)
+                let applied = memory.applyCoachUpdates(
+                    result.memoryUpdates,
+                    threadID: thread.id,
+                    generationRevision: memoryRevisionAtStart
+                )
+                if applied.isEmpty, result.memoryUpdates.isEmpty {
+                    // Deterministic safety net when the model kept no notes.
+                    memory.ingestUserStatedFacts(from: trimmed)
+                }
             }
         } catch {
             guard chatGenerationID == generationID else { return }
@@ -232,7 +299,7 @@ final class LifestyleCoachController: ObservableObject {
                 ? FoundationModelsCoach.friendlyFailureMessage
                 : error.localizedDescription
             chatError = message
-            memory.append(CoachChatTurn(role: .coach, text: message, threadId: memory.openThreadID))
+            memory.append(CoachChatTurn(role: .coach, text: message))
         }
     }
 
@@ -243,15 +310,28 @@ final class LifestyleCoachController: ObservableObject {
         chatGenerationID = UUID()
     }
 
+    /// Chats, files, and the card.
     func clearMemory() {
         chatGenerationID = UUID()
         isChatBusy = false
         goalProposal = nil
-        invalidateDailyCard()
+        pendingGoalCheckIn = nil
+        invalidateCheckIn()
         memory.clearAllMemory()
-        dailyCard = nil
-        dailyCardError = nil
+        checkIn = nil
+        checkInError = nil
         chatError = nil
+    }
+
+    /// Chats only; the memory files stay.
+    func deleteAllChats() {
+        chatGenerationID = UUID()
+        isChatBusy = false
+        goalProposal = nil
+        pendingGoalCheckIn = nil
+        chatError = nil
+        memory.deleteAllChats()
+        checkIn = memory.cachedCheckIn
     }
 
     func recordLocalFeedback(target: String, useful: Bool, goalId: UUID? = nil) {
@@ -292,24 +372,5 @@ final class LifestyleCoachController: ObservableObject {
             todayKey: todayKey,
             characterBudget: CoachContextBudget.maxHistoryCharacters
         )
-    }
-
-    private func refreshSummaryQuietly(generationID: UUID, memoryRevision: Int) async {
-        let turns = memory.recentTurnsForPrompt(limit: 12)
-        guard turns.count >= 2 else { return }
-        do {
-            let summary = try await model.refreshRunningSummary(
-                previousSummary: memory.runningSummary,
-                recentTurns: turns,
-                currentMemory: memory.promptMemoryBlock
-            )
-            if chatGenerationID == generationID,
-               self.memory.memoryRevision == memoryRevision,
-               !summary.isEmpty {
-                memory.replaceSummary(summary)
-            }
-        } catch {
-            // Summary refresh is best-effort; chat reply already succeeded.
-        }
     }
 }

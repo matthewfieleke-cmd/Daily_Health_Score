@@ -70,7 +70,7 @@ private struct SMARTGoalsListContent: View {
         }
         .sheet(isPresented: $showCoach) {
             NavigationStack {
-                LifestyleCoachChatView(initialMessage: "Help me formulate a SMART goal")
+                LifestyleCoachChatView(launch: .compose("Help me formulate a SMART goal"))
                     .environmentObject(appState)
                     .environmentObject(appState.coach)
             }

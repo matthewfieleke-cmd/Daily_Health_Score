@@ -1,58 +1,5 @@
 import Foundation
 
-/// Structured daily card content shown on Today: where you are, then one move.
-struct DailyCoachCardContent: Equatable, Codable, Sendable {
-    /// One human sentence about today. Never status tokens.
-    var whereYouAre: String
-    var nextMove: String
-    var healthLine: String
-    var continueTitle: String
-
-    init(
-        whereYouAre: String,
-        nextMove: String,
-        healthLine: String = "",
-        continueTitle: String = ""
-    ) {
-        self.whereYouAre = whereYouAre
-        self.nextMove = nextMove
-        self.healthLine = healthLine.isEmpty ? whereYouAre : healthLine
-        self.continueTitle = continueTitle
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case whereYouAre, nextMove, healthLine, continueTitle
-        case acknowledgment, whyItMatters, nextStep
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        if let whereYouAre = try container.decodeIfPresent(String.self, forKey: .whereYouAre),
-           let nextMove = try container.decodeIfPresent(String.self, forKey: .nextMove),
-           !whereYouAre.isEmpty {
-            self.whereYouAre = whereYouAre
-            self.nextMove = nextMove
-            healthLine = try container.decodeIfPresent(String.self, forKey: .healthLine) ?? whereYouAre
-            continueTitle = try container.decodeIfPresent(String.self, forKey: .continueTitle) ?? ""
-            return
-        }
-        let acknowledgment = try container.decodeIfPresent(String.self, forKey: .acknowledgment) ?? ""
-        let why = try container.decodeIfPresent(String.self, forKey: .whyItMatters) ?? ""
-        whereYouAre = [acknowledgment, why].filter { !$0.isEmpty }.joined(separator: " ")
-        nextMove = try container.decodeIfPresent(String.self, forKey: .nextStep) ?? ""
-        healthLine = whereYouAre
-        continueTitle = ""
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(whereYouAre, forKey: .whereYouAre)
-        try container.encode(nextMove, forKey: .nextMove)
-        try container.encode(healthLine, forKey: .healthLine)
-        try container.encode(continueTitle, forKey: .continueTitle)
-    }
-}
-
 /// Durable preferences/constraints that INFORM the coach; never override the charter.
 struct CoachUserProfile: Equatable, Codable, Sendable {
     var preferredStyle: String = ""

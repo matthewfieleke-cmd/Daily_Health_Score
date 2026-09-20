@@ -175,11 +175,20 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(CoachCharter.instructions.contains("lookupTodayHealth")
             || CoachCharter.instructions.contains("look up today's health"))
         XCTAssertTrue(CoachCharter.instructions.contains("TIPP"))
-        XCTAssertTrue(CoachCharter.chatHeartContract.contains("HEART OF COACHING"))
-        XCTAssertTrue(CoachCharter.dailyCardContract.contains("whereYouAre"))
-        XCTAssertTrue(CoachCharter.dailyCardContract.contains("nextMove"))
-        XCTAssertTrue(CoachCharter.dailyCardContract.contains("TIME RULES"))
-        XCTAssertTrue(CoachCharter.dailyCardContract.contains("ellipsis"))
+        XCTAssertTrue(CoachCharter.instructions.contains("MEMORY FILES"))
+        XCTAssertTrue(CoachCharter.instructions.contains("CALLBACK RULE"))
+        XCTAssertTrue(CoachCharter.outputContract.contains("threadTitle"))
+        XCTAssertTrue(CoachCharter.outputContract.contains("memoryUpdates"))
+        let morning = CoachCharter.checkInContract(kind: .morning, hasTrend: true)
+        XCTAssertTrue(morning.contains("healthLine"))
+        XCTAssertTrue(morning.contains("question"))
+        XCTAssertTrue(morning.contains("TIME RULES"))
+        XCTAssertTrue(morning.contains("TREND FACTS"))
+        let evening = CoachCharter.checkInContract(kind: .evening, hasTrend: false)
+        XCTAssertTrue(evening.contains("tomorrowLine"))
+        XCTAssertTrue(evening.contains("Tomorrow"))
+        XCTAssertTrue(CoachCharter.attentionContract(pillar: .relationships, isNewChat: true).contains("callback"))
+        XCTAssertTrue(CoachCharter.attentionContract(pillar: .sleep, isNewChat: false).contains("numbers"))
     }
 
     func test_promptBlockIncludesLocalClockAndEveningTimeRules() {
@@ -204,22 +213,23 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(snapshot.minimalBlock.contains("TIME RULES"))
     }
 
-    func test_dailyCard_decodesLegacyAcknowledgmentFields() throws {
-        let json = Data("""
-        {"acknowledgment":"You're at 6.2 of 10.","whyItMatters":"Sleep is still short.","nextStep":"Walk after dinner."}
-        """.utf8)
-        let card = try JSONDecoder().decode(DailyCoachCardContent.self, from: json)
-        XCTAssertEqual(card.whereYouAre, "You're at 6.2 of 10. Sleep is still short.")
-        XCTAssertEqual(card.nextMove, "Walk after dinner.")
-    }
-
-    func test_dailyCard_encodesNewKeysOnly() throws {
-        let card = DailyCoachCardContent(whereYouAre: "Here.", nextMove: "Walk.")
-        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(card)) as! [String: Any]
-        XCTAssertEqual(object["whereYouAre"] as? String, "Here.")
-        XCTAssertEqual(object["nextMove"] as? String, "Walk.")
-        XCTAssertNil(object["acknowledgment"])
-        XCTAssertNil(object["nextStep"])
+    func test_checkIn_roundTripsThroughJSONAndSpeaksInOrder() throws {
+        let replyID = UUID()
+        let card = CoachCheckIn(
+            kind: .evening,
+            dateKey: "2026-08-16",
+            healthLine: "Today landed at 6 of 10.",
+            question: "What got in the way?",
+            tomorrowLine: "Tomorrow, one thing: shoes by the door.",
+            replyThreadID: replyID
+        )
+        let decoded = try JSONDecoder().decode(CoachCheckIn.self, from: JSONEncoder().encode(card))
+        XCTAssertEqual(decoded, card)
+        XCTAssertEqual(
+            decoded.spokenText,
+            "Today landed at 6 of 10. Tomorrow, one thing: shoes by the door. What got in the way?"
+        )
+        XCTAssertTrue(decoded.hasReply)
     }
 
     private func chicagoCalendar() -> Calendar {

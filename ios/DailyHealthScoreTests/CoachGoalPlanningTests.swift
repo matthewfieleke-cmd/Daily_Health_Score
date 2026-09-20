@@ -124,7 +124,7 @@ final class CoachGoalPlanningTests: XCTestCase {
         XCTAssertTrue(context.contains("without Health data"))
     }
 
-    func test_dailyCardCacheChangesWithProgressAndPlanButNotInputOrder() {
+    func test_goalCacheKeyChangesWithProgressAndPlanButNotInputOrder() {
         let first = goal()
         let second = goal(text: "call a friend")
         let key = CoachGoalPlanning.cacheKey(goals: [first, second])

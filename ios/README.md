@@ -81,9 +81,9 @@ Then, on a **newly paired Ultra 4** (or any Watch that will not take the app):
 
 If the Ultra 4 shows **Unable to Install “Daily Health Score”** / **integrity could not be verified**, the new watch is not in the signing profile or Developer Mode is still off. Do steps 2–6 again, then on each of **DailyHealthScore**, **DailyHealthScoreWatch**, and **DailyHealthScoreWatchWidgets** toggle **Automatically manage signing** off and on.
 
-If the Watch **app** shows today’s score but a face slot still says **Today / Open iPhone**, pull this build (19), `xcodegen generate`, set Team, Clean, and Run **DailyHealthScore** to the iPhone. In Settings tap **Refresh Watch face** — it stays enabled and must show a result (Sent 3.3 / Watch is connecting / not paired). Raise the Ultra 4. The face now also reads the same Watch Connectivity feed the Watch app uses, and HealthKit if that feed is empty. You do not need to remove and re-add the slot.
+If the Watch **app** shows today’s score but a face slot still says **Today / Open iPhone**, pull the current build (20 or later), `xcodegen generate`, set Team, Clean, and Run **DailyHealthScore** to the iPhone. In Settings tap **Refresh Watch face** — it stays enabled and must show a result (Sent 3.3 / Watch is connecting / not paired). Raise the Ultra 4. The face now also reads the same Watch Connectivity feed the Watch app uses, and HealthKit if that feed is empty. You do not need to remove and re-add the slot.
 
-Lifestyle Coach (build 19): Home is one spoken health line plus **Continue**, **What’s on my mind**, and **All chats**. Six desks live one level down in Recents. The same coach follows you; a thread files after 1–2 turns and refiles (and renames) if the talk moves. Sleep / fiber / exercise “Ask Coach” resumes that desk’s Active thread only — it does not drag in another room.
+Lifestyle Coach (build 20): the Home card **is** the check-in — a morning note with one question before 5pm, an evening reflection with tonight’s SMART goals (tap **Done** to log) and one thing for tomorrow after. **Reply** opens a chat that starts with the card’s words. The Coach icon in the top bar opens **Chats**: one flat, Messages-style list (Coach-written title, last line, time, grouped Today / Yesterday / This Week / Earlier), swipe to delete, compose for a new chat. Rooms are gone; the six Lifestyle Medicine pillars are internal tags. A chat is created on its first message, so backing out never leaves an empty row. Tapping Sleep / Fiber / Exercise starts a new chat about that metric. **What your coach remembers** is eight memory files the Coach adds to, updates, and prunes as you talk, with **Undo** on every recent change. A fresh install starts with **Let’s get acquainted**. Settings has **Delete all chats** (memory stays) and **Clear chats and memory**.
 
 The iPhone app can still run if the Watch companion is waiting. A missing Watch app is a packaging/install issue, not a coach or SMART-goal issue.
 
@@ -93,7 +93,7 @@ The iPhone app can still run if the Watch companion is waiting. A missing Watch 
 |-----|-------------|
 | Today | Score, metrics, DHS Lifestyle Coach, SMART goals, HRV |
 | 7 / 30 / 90-Day | Rolling averages + daily list |
-| Settings | Goals, coach memory clear, manual day edit, export JSON, clear data |
+| Settings | Goals, coach memory, delete all chats, manual day edit, export JSON, clear data |
 
 ## Data
 
@@ -110,5 +110,5 @@ Tune `HealthKitService.swift` if your sleep totals differ from the Health app.
 
 ## Content
 
-- **DHS Lifestyle Coach** — one coach, six Lifestyle Medicine desks (Relationships, Nutrition, Sleep, Physical Activity, Stress, Hobbies), plus What’s on my mind. Home is one PCC health line and doors into Continue / inbox / Recents. Private Cloud Compute first, on-device fallback. Shared memory; rooms are doors, not fences.
+- **DHS Lifestyle Coach** — one coach (three doctorates, one voice, ABLM/ACLM Lifestyle Medicine). Home is a twice-daily check-in with Reply; Chats is a flat Messages-style list; every reply also names the chat, summarizes it, tags its pillar, and edits the memory files in the same Private Cloud Compute call (on-device when PCC is unavailable or at its daily limit). Callbacks to earlier chats and notes are part of the voice. Light Markdown in replies (bold, short lists).
 - Rotating suggestion libraries remain available to the record builder.

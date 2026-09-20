@@ -49,7 +49,7 @@ struct TodayView: View {
                     smartGoalAttentionCount: SMARTGoalLogic.attentionCount(
                         goals: appState.smartGoalStore.goals
                     ),
-                    onAskCoach: { coachLaunch = .recents },
+                    onAskCoach: { coachLaunch = .chats },
                     onOpenSMARTGoals: { showSMARTGoals = true },
                     onOpenHRVAnalysis: { showHRVAnalysis = true },
                     onRefresh: {
@@ -78,8 +78,8 @@ struct TodayView: View {
         .onDisappear { dialUpTask?.cancel() }
         .sheet(item: $coachLaunch) { launch in
             NavigationStack {
-                if launch == .recents {
-                    CoachRecentsView()
+                if launch == .chats {
+                    CoachChatsView()
                         .environmentObject(appState)
                         .environmentObject(appState.coach)
                 } else {
@@ -106,11 +106,11 @@ struct TodayView: View {
                 metricRow(for: record)
                     .animation(DialUpAnimation.timing, value: dialUpProgress)
 
-                TodayLifestyleCoachCard(
+                TodayCoachCheckInCard(
                     record: record,
-                    onContinue: { coachLaunch = .continueThread },
-                    onWhatsOnMyMind: { coachLaunch = .inbox },
-                    onRecents: { coachLaunch = .recents }
+                    onReply: { coachLaunch = .replyToCheckIn },
+                    onContinueReply: { coachLaunch = .thread($0) },
+                    onAcquaint: { coachLaunch = .acquaint }
                 )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     // Remaining height is the grouped screen, not empty card chrome.
@@ -209,10 +209,9 @@ struct TodayView: View {
                 systemImage: "moon.stars.fill",
                 tint: AppTheme.primary
             )
+            .onTapGesture { askCoach(about: .sleep, record: record) }
             .contextMenu {
-                Button("Ask Coach about this") {
-                    coachLaunch = .room(.sleep)
-                }
+                Button("Ask Coach about this") { askCoach(about: .sleep, record: record) }
             }
             CompactMetricCard(
                 title: "Fiber",
@@ -226,10 +225,9 @@ struct TodayView: View {
                 systemImage: "leaf.fill",
                 tint: AppTheme.leaf
             )
+            .onTapGesture { askCoach(about: .fiber, record: record) }
             .contextMenu {
-                Button("Ask Coach about this") {
-                    coachLaunch = .room(.nutrition)
-                }
+                Button("Ask Coach about this") { askCoach(about: .fiber, record: record) }
             }
             CompactMetricCard(
                 title: "Exercise",
@@ -243,12 +241,16 @@ struct TodayView: View {
                 systemImage: "figure.run",
                 tint: AppTheme.tint(for: PrimaryFocus.exercise)
             )
+            .onTapGesture { askCoach(about: .exercise, record: record) }
             .contextMenu {
-                Button("Ask Coach about this") {
-                    coachLaunch = .room(.activity)
-                }
+                Button("Ask Coach about this") { askCoach(about: .exercise, record: record) }
             }
         }
+    }
+
+    /// A metric tap starts a new chat that opens on that metric's numbers.
+    private func askCoach(about feature: CoachFocusFeature, record: DailyRecord) {
+        coachLaunch = .focus(CoachFocusContextBuilder.metric(feature, record: record))
     }
 
     // MARK: - Banners

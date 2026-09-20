@@ -36,7 +36,7 @@ struct SMARTGoalDetailView: View {
                     Button {
                         showCoach = true
                     } label: {
-                        Label("Work on this with Coach", systemImage: "bubble.left.and.text.bubble.right")
+                        Label("Talk to Coach about this goal", systemImage: "bubble.left.and.text.bubble.right")
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .buttonStyle(.bordered)
@@ -66,7 +66,7 @@ struct SMARTGoalDetailView: View {
         }
         .sheet(isPresented: $showCoach) {
             NavigationStack {
-                LifestyleCoachChatView(focusedGoalID: goalId)
+                LifestyleCoachChatView(launch: .goal(goalId))
                     .environmentObject(appState)
                     .environmentObject(appState.coach)
             }

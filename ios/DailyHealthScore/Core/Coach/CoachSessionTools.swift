@@ -13,7 +13,7 @@ enum CoachSessionTools {
         snapshot: CoachSnapshot?,
         goals: [SMARTGoal],
         memoryBlock: String,
-        summary: String,
+        recentConversations: String,
         activitiesByGoal: [UUID: [SMARTGoalActivity]]
     ) -> [any Tool] {
         let today = snapshot?.promptBlock ?? "No live daily record is available."
@@ -23,9 +23,10 @@ enum CoachSessionTools {
             previousProposal: nil,
             activitiesByGoal: activitiesByGoal
         )
+        let conversations = recentConversations.trimmingCharacters(in: .whitespacesAndNewlines)
         let person = [
-            memoryBlock.trimmingCharacters(in: .whitespacesAndNewlines),
-            summary.trimmingCharacters(in: .whitespacesAndNewlines)
+            "MEMORY FILES:\n" + memoryBlock.trimmingCharacters(in: .whitespacesAndNewlines),
+            conversations.isEmpty || conversations == "None yet." ? "" : "RECENT CONVERSATIONS:\n" + conversations
         ].filter { !$0.isEmpty }.joined(separator: "\n")
         return [
             CoachLookupTodayTool(payload: today),
