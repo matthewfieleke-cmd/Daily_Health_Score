@@ -9,6 +9,7 @@ struct CoachChatsView: View {
 
     @State private var opened: CoachChatLaunch?
     @State private var pendingDelete: CoachThread?
+    @State private var showMemory = false
 
     private var sections: [CoachThreadSection] {
         CoachThreadLogic.sections(coach.memory.threads)
@@ -65,7 +66,7 @@ struct CoachChatsView: View {
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
-                    appState.showCoachMemory = true
+                    showMemory = true
                 } label: {
                     Image(systemName: "brain.head.profile")
                 }
@@ -87,6 +88,12 @@ struct CoachChatsView: View {
                 LifestyleCoachChatView(launch: launch)
                     .environmentObject(appState)
                     .environmentObject(coach)
+            }
+        }
+        .sheet(isPresented: $showMemory) {
+            NavigationStack {
+                CoachMemoryListView()
+                    .environmentObject(appState)
             }
         }
         .alert(

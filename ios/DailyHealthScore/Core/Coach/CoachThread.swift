@@ -190,20 +190,12 @@ struct CoachThreadSection: Equatable, Identifiable {
 
 /// Pure list, naming, and timing rules. No SwiftData, no model calls.
 enum CoachThreadLogic {
-    /// A chat idle longer than this is still resumable, but Home stops offering it.
-    static let continueWindow: TimeInterval = 7 * 24 * 3600
     static let maxTitleCharacters = 40
     static let maxTitleWords = 7
     static let previewCharacters = 120
 
     static func sorted(_ threads: [CoachThread]) -> [CoachThread] {
         threads.sorted { $0.lastMessageAt > $1.lastMessageAt }
-    }
-
-    /// Most recent chat with something in it, if it is fresh enough to continue.
-    static func continueCandidate(in threads: [CoachThread], now: Date = Date()) -> CoachThread? {
-        guard let latest = sorted(threads).first(where: { $0.messageCount > 0 }) else { return nil }
-        return now.timeIntervalSince(latest.lastMessageAt) <= continueWindow ? latest : nil
     }
 
     static func group(

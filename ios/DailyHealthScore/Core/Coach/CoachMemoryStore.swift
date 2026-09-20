@@ -318,34 +318,13 @@ final class CoachMemoryStore: ObservableObject {
         Array(turns.suffix(limit))
     }
 
-    func userTexts(in threadID: UUID) -> [String] {
-        allTurns
-            .filter { $0.threadId == threadID && $0.role == .user }
-            .sorted { $0.createdAt < $1.createdAt }
-            .map(\.text)
-    }
-
     // MARK: - Check-in
 
     func saveCheckIn(_ checkIn: CoachCheckIn, key: String) {
         writeCheckIn(checkIn, key: key)
     }
 
-    func linkCheckInReply(threadID: UUID) {
-        guard var checkIn = cachedCheckIn else { return }
-        checkIn.replyThreadID = threadID
-        writeCheckIn(checkIn, key: cachedCheckInKey)
-    }
-
     // MARK: - Memory writes
-
-    func replaceSummary(_ summary: String) {
-        let state = fetchOrCreateState()
-        state.runningSummary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        state.updatedAt = Date()
-        try? modelContext.save()
-        runningSummary = state.runningSummary
-    }
 
     func updateProfile(_ profile: CoachUserProfile) {
         let state = fetchOrCreateState()

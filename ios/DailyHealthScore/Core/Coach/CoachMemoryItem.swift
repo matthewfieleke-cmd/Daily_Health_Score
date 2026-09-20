@@ -440,14 +440,6 @@ enum CoachMemoryLogic {
         }
     }
 
-    static func items(
-        in section: CoachMemorySection,
-        from items: [CoachMemoryItem],
-        at date: Date = Date()
-    ) -> [CoachMemoryItem] {
-        itemsByOverridingContradictions(items, at: date).filter { $0.section == section }
-    }
-
     /// The files as the model sees them: every live note, grouped by file.
     static func promptBlock(
         items: [CoachMemoryItem],

@@ -66,16 +66,7 @@ final class CoachThreadLogicTests: XCTestCase {
         XCTAssertLessThanOrEqual(long.count, CoachThreadLogic.previewCharacters + 1)
     }
 
-    // MARK: Continue, grouping, time labels
-
-    func test_continueCandidateIgnoresEmptyAndStaleChats() {
-        let empty = CoachThread(title: "Empty", messageCount: 0, lastMessageAt: now)
-        let stale = CoachThread(title: "Old", messageCount: 4, lastMessageAt: now.addingTimeInterval(-8 * 86_400))
-        let fresh = CoachThread(title: "Fresh", messageCount: 2, lastMessageAt: now.addingTimeInterval(-3 * 86_400))
-        XCTAssertEqual(CoachThreadLogic.continueCandidate(in: [empty, stale, fresh], now: now)?.title, "Fresh")
-        XCTAssertNil(CoachThreadLogic.continueCandidate(in: [empty, stale], now: now))
-        XCTAssertNil(CoachThreadLogic.continueCandidate(in: [], now: now))
-    }
+    // MARK: Grouping and time labels
 
     func test_groupsFollowCalendarDays() {
         func thread(daysAgo: Int, hour: Int = 9) -> CoachThread {

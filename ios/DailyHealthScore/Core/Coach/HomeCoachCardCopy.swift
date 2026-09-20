@@ -3,10 +3,6 @@ import Foundation
 /// Deterministic check-in copy for when the model is unavailable, and the
 /// health sentence every card can fall back to. Complete sentences, no tokens.
 enum HomeCoachCardCopy {
-    static func whereYouAre(for record: DailyRecord) -> String {
-        healthLine(for: record)
-    }
-
     /// One spoken sentence about today. Never prints status tokens.
     static func healthLine(for record: DailyRecord) -> String {
         let score = ScoreCalculator.formatDisplayScore(record.totalScore)
