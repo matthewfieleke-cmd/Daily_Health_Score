@@ -296,7 +296,7 @@ final class CoachReplyShapingTests: XCTestCase {
     /// Ranges, not counts, and the files only where they can matter.
     func test_shapesCarryWordRangesAndDecideWhoSeesTheFiles() {
         for shape in [CoachReplyShape.feeling, .howTo, .evaluation, .data, .winReport, .statement, .pushback, .writing, .smallTalk, .general] {
-            XCTAssertTrue(shape.hint.contains("About \(shape.wordRange.lowerBound) to \(shape.wordRange.upperBound) words"), shape.rawValue)
+            XCTAssertTrue(shape.hint.contains("Typically \(shape.wordRange.lowerBound) to \(shape.wordRange.upperBound) words when the content earns it; never pad"), shape.rawValue)
             XCTAssertFalse(shape.hint.contains("one sentence of"), shape.rawValue)
         }
         XCTAssertGreaterThanOrEqual(CoachReplyShape.feeling.wordRange.lowerBound, 100)
@@ -380,8 +380,9 @@ final class CoachReplyShapingTests: XCTestCase {
 
 final class CoachEvalPromptsTests: XCTestCase {
     func test_setCoversTheShapesAndExports() {
-        XCTAssertEqual(CoachEvalPrompts.all.count, 10)
-        XCTAssertEqual(Set(CoachEvalPrompts.all.map(\.id)).count, 10)
+        XCTAssertEqual(CoachEvalPrompts.all.count, 13)
+        XCTAssertEqual(Set(CoachEvalPrompts.all.map(\.id)).count, 13)
+        XCTAssertEqual(CoachEvalPrompts.all.filter { $0.id.hasPrefix("general-") }.count, 3, "General knowledge is measured, not noticed")
         XCTAssertTrue(CoachEvalPrompts.all.allSatisfy { !$0.rubric.isEmpty })
         let result = CoachEvalResult(promptID: "stress-numbing", reply: "**Yes.**", tier: .privateCloud, shape: .howTo, memoryNotes: ["add · Likes & staples · stated: Yoga"], seconds: 12.3)
         let export = CoachEvalPrompts.export(results: [result])
@@ -390,6 +391,8 @@ final class CoachEvalPromptsTests: XCTestCase {
         XCTAssertTrue(export.contains("- [ ] "))
         let fellBack = CoachEvalResult(promptID: "data-question", reply: "7.1", tier: .onDevice, shape: .data, memoryNotes: [], seconds: 9.9, fallbackReason: "GenerationError.rateLimited")
         XCTAssertTrue(CoachEvalPrompts.export(results: [fellBack]).contains("Fell back to on-device because: GenerationError.rateLimited"))
+        let drafted = CoachEvalResult(promptID: "goal-conversation", reply: "Here is a draft.", tier: .privateCloud, shape: .howTo, memoryNotes: [], seconds: 10, draft: "create: Walk with Maureen after dinner × 3")
+        XCTAssertTrue(CoachEvalPrompts.export(results: [drafted]).contains("Draft: create: Walk with Maureen after dinner × 3"))
         XCTAssertTrue(export.contains("- add · Likes & staples · stated: Yoga"))
     }
 }

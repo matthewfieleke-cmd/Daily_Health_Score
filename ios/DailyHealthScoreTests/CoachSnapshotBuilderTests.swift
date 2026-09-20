@@ -191,6 +191,10 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(charter.contains("not guess it; ask or leave it out"))
         XCTAssertTrue(charter.contains("never narrate it"))
         XCTAssertTrue(charter.contains("while driving"))
+        XCTAssertTrue(charter.contains("never as a report on today"))
+        XCTAssertTrue(charter.contains("room, not a quota"))
+        XCTAssertTrue(charter.contains("Sensitive topics"))
+        XCTAssertTrue(charter.contains("Recognize danger first and triage it, then help"))
         XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("never guess them"))
         XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("while driving"))
         // Principles, never scripts: no quoted example sentences a model could copy,

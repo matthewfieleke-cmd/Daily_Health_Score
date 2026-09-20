@@ -97,6 +97,52 @@ final class CoachMemoryFilesLogicTests: XCTestCase {
         XCTAssertEqual(empty.map(\.label).first, "About you")
     }
 
+    /// Essentials are the notes that shape advice for anyone; the rest stays
+    /// behind the lookup tool for general questions.
+    func test_promptBlockCanBeScopedToTheEssentialFiles() {
+        let items = [
+            CoachMemoryItem(category: .people, content: "Wife is Maureen; sons Isaac, 14, and Caleb, 13.", provenance: .coachRecorded),
+            CoachMemoryItem(category: .patterns, content: "Binge-eats after arguments with his wife.", provenance: .coachRecorded),
+            CoachMemoryItem(category: .body, content: "Uses a CPAP for sleep apnea.", provenance: .coachRecorded),
+            CoachMemoryItem(category: .likes, content: "Eats whole-food plant-based.", provenance: .coachRecorded)
+        ]
+        let essentials = CoachMemoryLogic.promptBlock(items: items, sections: CoachMemoryScope.essentials.sections)
+        XCTAssertTrue(essentials.contains("CPAP"))
+        XCTAssertTrue(essentials.contains("plant-based"))
+        XCTAssertFalse(essentials.contains("Maureen"))
+        XCTAssertFalse(essentials.contains("Binge"))
+        let full = CoachMemoryLogic.promptBlock(items: items, sections: CoachMemoryScope.full.sections)
+        XCTAssertTrue(full.contains("Maureen"))
+        XCTAssertEqual(CoachMemoryScope.none.sections, [])
+        XCTAssertEqual(CoachReplyShape.general.memoryScope, .essentials)
+        XCTAssertEqual(CoachReplyShape.feeling.memoryScope, .full)
+        XCTAssertEqual(CoachReplyShape.data.memoryScope, .none)
+        XCTAssertFalse(CoachReplyShape.data.usesMemoryFiles)
+        XCTAssertTrue(CoachMemoryLogic.promptBlock(items: [], sections: [.body]).contains("No notes in these files yet."))
+    }
+
+    /// A note comes from the person's words, never from the Coach's suggestion.
+    func test_newNotesMustBeGroundedInThePersonsWords() {
+        let spoken = "I've been doing better recently with not bringing work home. I'm using our AI scribe which is helping."
+        let real = CoachMemoryUpdate(operation: "add", section: "routines", text: "Uses an AI scribe to finish notes at work as of September 2026.", replaces: "", basis: "stated")!
+        let invented = CoachMemoryUpdate(operation: "add", section: "patterns", text: "Finds tracking food helpful for staying steady.", replaces: "", basis: "inferred")!
+        let removal = CoachMemoryUpdate(operation: "remove", section: "routines", text: "", replaces: "Works Saturdays.", basis: "stated")!
+        XCTAssertTrue(CoachMemoryLogic.isGrounded(real, inPersonsWords: spoken))
+        XCTAssertFalse(CoachMemoryLogic.isGrounded(invented, inPersonsWords: spoken))
+        XCTAssertTrue(CoachMemoryLogic.isGrounded(removal, inPersonsWords: spoken), "Removals need no grounding")
+        let kids = CoachMemoryUpdate(operation: "add", section: "people", text: "Sons Isaac, 14, and Caleb, 13, as of September 2026.", replaces: "", basis: "stated")!
+        XCTAssertTrue(CoachMemoryLogic.isGrounded(kids, inPersonsWords: "My two sons Isaac age 14 and Caleb age 13 live with us."))
+    }
+
+    /// A long disclosure is filed one sentence at a time.
+    func test_extractorFilesEachSentenceOnItsOwn() {
+        let message = "From a work standpoint, if I get a little behind, I tend to get a lot behind. From a healthy eating standpoint, I tend to binge-eat to deal with stress when my wife and I fight. My wife and I have started to try to pause and reflect rather than continuing to bicker."
+        let items = CoachPhDMemoryExtractor.items(from: message)
+        XCTAssertFalse(items.isEmpty)
+        XCTAssertTrue(items.allSatisfy { !$0.content.contains("work standpoint") || !$0.content.contains("bicker") }, "No note carries the whole paragraph")
+        XCTAssertTrue(items.contains { $0.content.contains("binge-eat") })
+    }
+
     func test_promptBlockDatesEntriesAndSeparatesStatedFromInferred() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/Chicago")!
