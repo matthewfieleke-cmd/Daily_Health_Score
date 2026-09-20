@@ -213,6 +213,48 @@ final class CoachSafetyGateTests: XCTestCase {
         XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
     }
 
+    /// Below an emergency there is still something to take care of: the model is
+    /// told, and the app can answer if the model declines.
+    func test_concernsAreRecognizedWithoutEscalating() {
+        XCTAssertEqual(
+            CoachSafetyGate.evaluate("Fighting with my wife often triggers binge-eating. I do it because I'm feeling overwhelmed."),
+            .concern(.eating),
+            "Eating outranks strain when both are present"
+        )
+        XCTAssertEqual(CoachSafetyGate.evaluate("I've been drinking too much since the move."), .concern(.substance))
+        XCTAssertEqual(CoachSafetyGate.evaluate("Honestly everything feels hopeless lately."), .concern(.mood))
+        XCTAssertEqual(CoachSafetyGate.evaluate("I'm completely overwhelmed at work."), .concern(.strain))
+        XCTAssertEqual(CoachSafetyGate.evaluate("We binge-watched the whole season last night."), .ordinary, "A TV binge is not a disclosure")
+        XCTAssertEqual(CoachSafetyGate.evaluate("I binge eat after we argue."), .concern(.eating))
+        XCTAssertEqual(CoachSafetyGate.evaluate("How do I add more fiber?"), .ordinary)
+    }
+
+    func test_careGuidanceKeepsCoachingAndNamesHelpOnce() {
+        for concern in [CoachSafetyGate.Concern.eating, .substance, .mood, .strain] {
+            let guidance = CoachSafetyGate.careGuidance(for: concern)
+            XCTAssertTrue(guidance.hasPrefix("CARE NOTE"), concern.rawValue)
+            XCTAssertFalse(guidance.contains(CoachSafetyGate.immediateHelpSentence), "Concern is not an emergency")
+        }
+        XCTAssertTrue(CoachSafetyGate.careGuidance(for: .eating).contains("therapist who works with eating"))
+        XCTAssertTrue(CoachSafetyGate.careGuidance(for: .mood).contains("988"))
+        XCTAssertTrue(CoachSafetyGate.careGuidance(for: .substance).contains("1-800-662-4357"))
+        XCTAssertFalse(CoachSafetyGate.careGuidance(for: .strain).contains("988"))
+    }
+
+    func test_declinedReplyIsHonestAndStillTakesCare() {
+        let eating = CoachSafetyGate.declinedReply(concern: .eating)
+        XCTAssertTrue(eating.contains("wouldn't process this message"))
+        XCTAssertTrue(eating.contains("clinician or a therapist"))
+        XCTAssertTrue(eating.contains("?"), "Ends with a way back in")
+        XCTAssertFalse(eating.lowercased().contains("rephras"))
+        let mood = CoachSafetyGate.declinedReply(concern: .mood)
+        XCTAssertTrue(mood.contains("988"))
+        XCTAssertTrue(mood.contains("right this minute?"))
+        let plain = CoachSafetyGate.declinedReply(concern: nil)
+        XCTAssertFalse(plain.contains("988"))
+        XCTAssertTrue(plain.contains("How are you doing right now?"))
+    }
+
     func test_escalationNeverHedgesAboutNotBeingAProfessional() {
         let crises = [
             "I want to kill myself",

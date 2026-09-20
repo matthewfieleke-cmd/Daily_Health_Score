@@ -266,6 +266,23 @@ final class CoachReplyShapingTests: XCTestCase {
         XCTAssertTrue(CoachReplyShape.howTo.hint.contains("levers ordered by effort"))
     }
 
+    /// Ranges, not counts, and the files only where they can matter.
+    func test_shapesCarryWordRangesAndDecideWhoSeesTheFiles() {
+        for shape in [CoachReplyShape.feeling, .howTo, .evaluation, .data, .winReport, .statement, .writing, .smallTalk, .general] {
+            XCTAssertTrue(shape.hint.contains("About \(shape.wordRange.lowerBound) to \(shape.wordRange.upperBound) words"), shape.rawValue)
+            XCTAssertFalse(shape.hint.contains("one sentence of"), shape.rawValue)
+        }
+        XCTAssertGreaterThanOrEqual(CoachReplyShape.feeling.wordRange.lowerBound, 100)
+        XCTAssertLessThanOrEqual(CoachReplyShape.smallTalk.wordRange.upperBound, 40)
+        XCTAssertFalse(CoachReplyShape.data.usesMemoryFiles)
+        XCTAssertFalse(CoachReplyShape.smallTalk.usesMemoryFiles)
+        XCTAssertFalse(CoachReplyShape.writing.usesMemoryFiles)
+        XCTAssertTrue(CoachReplyShape.feeling.usesMemoryFiles)
+        XCTAssertTrue(CoachReplyShape.howTo.usesMemoryFiles)
+        XCTAssertTrue(CoachReplyShape.data.hint.contains("no HRV unless they asked"))
+        XCTAssertTrue(CoachReplyShape.feeling.hint.contains("how they are right now"))
+    }
+
     func test_repetitionGuardListsEarlierSuggestions() {
         let earlier = [
             "You've built a morning routine. You could try swapping one bar for a cup of cooked beans. This keeps your rhythm.",
