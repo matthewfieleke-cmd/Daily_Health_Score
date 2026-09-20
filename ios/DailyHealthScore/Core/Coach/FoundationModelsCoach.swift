@@ -85,14 +85,13 @@ final class FoundationModelsCoach {
             let content: GenerableCoachCheckIn
             do {
                 lastTierUsed = tier
-                content = try await CoachModelProvider
-                    .makeSession(tier: tier, instructions: CoachCharter.instructions)
-                    .respond(
-                        to: makePrompt(budget: budget),
-                        generating: GenerableCoachCheckIn.self,
-                        contextOptions: CoachModelProvider.contextOptions(tier: tier, depth: .light)
-                    )
-                    .content
+                content = try await CoachModelProvider.respond(
+                    CoachModelProvider.makeSession(tier: tier, instructions: CoachCharter.instructions),
+                    to: makePrompt(budget: budget),
+                    generating: GenerableCoachCheckIn.self,
+                    tier: tier,
+                    depth: .light
+                )
             } catch where tier == .privateCloud {
                 // Network loss, quota, or a server hiccup should never cost the
                 // card; the on-device model can still write it.
@@ -335,11 +334,13 @@ final class FoundationModelsCoach {
 
             let content: GenerableCoachReply
             do {
-                content = try await session.respond(
+                content = try await CoachModelProvider.respond(
+                    session,
                     to: makePrompt(compact: false, budget: budget, answeringTier: tier),
                     generating: GenerableCoachReply.self,
-                    contextOptions: CoachModelProvider.contextOptions(tier: tier, depth: shape.reasoningDepth)
-                ).content
+                    tier: tier,
+                    depth: shape.reasoningDepth
+                )
             } catch {
                 // One fallback covers every failure mode that matters: no network,
                 // exhausted server quota, or context pressure. Retry on-device with

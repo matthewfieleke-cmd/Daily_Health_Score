@@ -82,10 +82,29 @@ extension CoachModelProvider {
         return false
     }
 
-    /// Reasoning is a server-model feature; the on-device model gets the defaults.
+    /// Reasoning rides on the iOS 27 `respond` overload and is a server-model
+    /// feature. Under the iOS 26 floor, and for the on-device model, the
+    /// framework defaults apply.
     @available(iOS 26.0, *)
-    static func contextOptions(tier: CoachModelTier, depth: CoachReasoningDepth) -> ContextOptions {
-        guard tier == .privateCloud, #available(iOS 27.0, *) else { return ContextOptions() }
+    static func respond<Content: Generable>(
+        _ session: LanguageModelSession,
+        to prompt: String,
+        generating type: Content.Type,
+        tier: CoachModelTier,
+        depth: CoachReasoningDepth
+    ) async throws -> Content {
+        if tier == .privateCloud, #available(iOS 27.0, *) {
+            return try await session.respond(
+                to: prompt,
+                generating: type,
+                contextOptions: contextOptions(for: depth)
+            ).content
+        }
+        return try await session.respond(to: prompt, generating: type).content
+    }
+
+    @available(iOS 27.0, *)
+    private static func contextOptions(for depth: CoachReasoningDepth) -> ContextOptions {
         switch depth {
         case .light: return ContextOptions(reasoningLevel: .light)
         case .moderate: return ContextOptions(reasoningLevel: .moderate)
@@ -135,11 +154,18 @@ extension CoachModelProvider {
     static let serverModelExists = false
 
     #if canImport(FoundationModels)
+    /// No server model in this SDK, so no reasoning level to pass.
     @available(iOS 26.0, *)
-    static func contextOptions(tier: CoachModelTier, depth: CoachReasoningDepth) -> ContextOptions {
+    static func respond<Content: Generable>(
+        _ session: LanguageModelSession,
+        to prompt: String,
+        generating type: Content.Type,
+        tier: CoachModelTier,
+        depth: CoachReasoningDepth
+    ) async throws -> Content {
         _ = tier
         _ = depth
-        return ContextOptions()
+        return try await session.respond(to: prompt, generating: type).content
     }
 
     @available(iOS 26.0, *)
