@@ -59,8 +59,9 @@ enum CoachGoalPlanning {
     static let contract = """
     SMART GOAL WORK:
     Help formulate or revise one Specific action, Measurable count, Achievable plan,
-    Relevant personal reason, and Time-bound deadline. Ask one useful question if the
-    action, count, cue, reason or timeframe is unclear. Explore barriers and a smaller
+    Relevant personal reason, and Time-bound deadline. When the plan is mostly clear, draft it
+    with sensible defaults filled in and ask only the one question whose answer most changes
+    it; never a list of questions. Explore barriers and a smaller
     fallback. A fallback is recorded separately and does not satisfy a larger accepted
     action unless the user reviews and saves a revised plan.
     For follow-through, use dated activity when dates exist. Migrated check-ins may have

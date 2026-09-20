@@ -12,6 +12,10 @@ final class FoundationModelsCoach {
     enum CoachError: LocalizedError {
         case unavailable(CoachAvailabilityStatus)
         case generationFailed(String)
+        /// Both models refused the content itself (guardrail or model refusal).
+        /// The app answers these, because the refusal lands on exactly the
+        /// messages where care matters most.
+        case declined(reason: String)
 
         var errorDescription: String? {
             switch self {
@@ -19,8 +23,17 @@ final class FoundationModelsCoach {
                 return status.guidance
             case .generationFailed(let message):
                 return message
+            case .declined(let reason):
+                return reason
             }
         }
+    }
+
+    /// A refusal is recognized by what the framework says about it, across the
+    /// error types iOS 26 and 27 use for it.
+    nonisolated static func isContentDecline(_ error: Error) -> Bool {
+        let text = (String(reflecting: error) + " " + error.localizedDescription).lowercased()
+        return text.contains("guardrail") || text.contains("refus") || text.contains("sensitive")
     }
 
     var availability: CoachAvailabilityStatus {
@@ -33,6 +46,10 @@ final class FoundationModelsCoach {
 
     /// Which model answered the last request, for the UI to surface.
     private(set) var lastTierUsed: CoachModelTier = .onDevice
+
+    /// The framework's own account of the last failure, for the line under a
+    /// failed reply and the eval screen. Nil after a success.
+    private(set) var lastFailureReason: String?
 
     // MARK: - Check-in card
 
@@ -84,7 +101,7 @@ final class FoundationModelsCoach {
         do {
             lastTierUsed = tier
             content = try await CoachModelProvider.respond(
-                CoachModelProvider.makeSession(tier: tier, instructions: CoachCharter.instructions),
+                CoachModelProvider.makeSession(tier: tier, instructions: CoachCharter.instructions(for: tier)),
                 to: makePrompt(budget: budget),
                 generating: GenerableCoachCheckIn.self,
                 tier: tier,
@@ -96,7 +113,7 @@ final class FoundationModelsCoach {
             lastTierUsed = .onDevice
             let retryBudget = await CoachModelProvider.contextBudget(for: .onDevice)
             content = try await CoachModelProvider
-                .makeSession(tier: .onDevice, instructions: CoachCharter.instructions)
+                .makeSession(tier: .onDevice, instructions: CoachCharter.instructions(for: .onDevice))
                 .respond(to: makePrompt(budget: retryBudget), generating: GenerableCoachCheckIn.self)
                 .content
         }
@@ -152,12 +169,26 @@ final class FoundationModelsCoach {
         let isGoalConversation = planningGoal || context.thread?.kind == .goal || CoachGoalPlanning.isGoalConversation(
             message: userMessage, focusedGoalID: focusedGoalID, hasProposal: previousProposal != nil
         )
-        let instructions = isGoalConversation ? CoachCharter.goalPlanningInstructions : CoachCharter.instructions
+        func instructions(for answeringTier: CoachModelTier) -> String {
+            isGoalConversation
+                ? CoachCharter.goalPlanningInstructions(for: answeringTier)
+                : CoachCharter.instructions(for: answeringTier)
+        }
+        let instructions = instructions(for: tier)
         let budget = CoachContextBudget.make(
             totalTokens: await CoachModelProvider.contextTokens(for: tier),
             instructionCharacters: instructions.count
         )
         lastTierUsed = tier
+        // The files reach the model only where they can be relevant; the intake
+        // always sees them, since it is filling them. HRV rides along only when
+        // the message is about it.
+        let memoryAllowed = shape.usesMemoryFiles || context.isAcquaintance
+        let loweredMessage = userMessage.lowercased()
+        let asksAboutHRV = ["hrv", "heart rate variability", "variability", "recover", "resting heart", "rested", "sleep quality", "how well did i sleep"]
+            .contains { loweredMessage.contains($0) }
+        var snapshot = snapshot
+        if !asksAboutHRV { snapshot?.hrvSummary = nil }
         let tools: [any Tool] = tier == .privateCloud
             ? CoachSessionTools.make(
                 snapshot: snapshot,
@@ -216,12 +247,30 @@ final class FoundationModelsCoach {
         // Every block is sized against whichever model is answering, so the
         // on-device retry re-trims rather than reusing server-sized text.
         func makePrompt(compact: Bool, budget: CoachContextBudget, answeringTier: CoachModelTier) -> String {
-            let profileSection = compact ? "Omitted." : (profile.isEmpty ? "None yet." : profile.limitedToCoachBudget(budget.profileCharacters))
-            let memorySection = compact ? "Omitted." : memoryBlock.limitedToCoachBudget(budget.profileCharacters)
-            let recentSection = compact ? "Omitted." : context.recentConversations.limitedToCoachBudget(budget.summaryCharacters)
+            let notLoaded = "Not loaded for this kind of message. If they refer to something personal, use lookupWhatWeRemember."
+            let profileSection: String
+            let memorySection: String
+            let recentSection: String
+            if !memoryAllowed {
+                profileSection = notLoaded
+                memorySection = notLoaded
+                recentSection = notLoaded
+            } else if compact {
+                profileSection = "Omitted."
+                memorySection = "Omitted."
+                recentSection = "Omitted."
+            } else {
+                profileSection = profile.isEmpty ? "None yet." : profile.limitedToCoachBudget(budget.profileCharacters)
+                let thin = context.memoryNoteCount < 6
+                    ? "\nFILES ARE THIN (\(context.memoryNoteCount) notes): you know a few facts about this person, not their life. Do not stretch them across replies."
+                    : ""
+                memorySection = memoryBlock.limitedToCoachBudget(budget.profileCharacters) + thin
+                recentSection = context.recentConversations.limitedToCoachBudget(budget.summaryCharacters)
+            }
             let acquaintance = context.isAcquaintance
                 ? CoachCharter.acquaintanceContract(emptyFiles: context.emptyMemorySections)
                 : ""
+            let care = context.safetyConcern.map { CoachSafetyGate.careGuidance(for: $0) } ?? ""
             let opening = context.isFirstReply
                 ? "This is the first exchange of a new chat. Most first replies need no callback to the files; use one only if a note genuinely bears on this message."
                 : "Stay with this conversation; do not restart it."
@@ -236,6 +285,8 @@ final class FoundationModelsCoach {
                 )
                 return """
                 \(chatLine)
+                \(shape.hint)
+                \(care)
                 USER MESSAGE: \(userMessage.limitedToCoachBudget(1200))
                 \(CoachGoalPlanning.contract)
                 \(goalContext)
@@ -297,6 +348,7 @@ final class FoundationModelsCoach {
             Attention: this chat has mostly been about \(context.pillar.label.lowercased()). \(context.pillar.leadsWithNumbers ? "Their numbers are welcome here when they help." : "Lead with the person; numbers only if they ask.")
             Unprompted Health this turn: \(context.allowUnpromptedHealth ? "allowed, one sentence max" : "not allowed").
             \(acquaintance)
+            \(care)
 
             USER MESSAGE:
             \(userMessage)
@@ -333,6 +385,7 @@ final class FoundationModelsCoach {
 
         let content: GenerableCoachReply
         var fallbackReason: String?
+        lastFailureReason = nil
         do {
             content = try await CoachModelProvider.respond(
                 session,
@@ -344,18 +397,19 @@ final class FoundationModelsCoach {
         } catch {
             // One fallback covers every failure mode that matters: no network,
             // exhausted server quota, or context pressure. Retry on-device with
-            // memory and reference material dropped. If that also fails the
-            // cause is not size or reachability, so say something human.
+            // the shorter charter and memory and reference material dropped.
+            let firstError = error
             if tier == .privateCloud {
                 fallbackReason = Self.describe(error)
             }
+            let retryInstructions = instructions(for: .onDevice)
             let retryBudget = CoachContextBudget.make(
                 totalTokens: await CoachModelProvider.contextTokens(for: .onDevice),
-                instructionCharacters: instructions.count
+                instructionCharacters: retryInstructions.count
             )
             let retrySession = CoachModelProvider.makeSession(
                 tier: .onDevice,
-                instructions: instructions,
+                instructions: retryInstructions,
                 tools: []
             )
             lastTierUsed = .onDevice
@@ -365,11 +419,18 @@ final class FoundationModelsCoach {
                     generating: GenerableCoachReply.self
                 ).content
             } catch {
+                // Both declined the content itself: the app answers, with care.
+                // Anything else is size or reachability, and gets the plain message.
+                lastFailureReason = "\(Self.describe(firstError)); on-device retry: \(Self.describe(error))"
+                if Self.isContentDecline(error) || Self.isContentDecline(firstError) {
+                    throw CoachError.declined(reason: Self.describe(error))
+                }
                 throw CoachError.generationFailed(Self.friendlyFailureMessage)
             }
         }
         let message = CoachReplyPolish.polish(content.message.trimmedForCoach())
         guard !message.isEmpty else {
+            lastFailureReason = "empty message from \(lastTierUsed.rawValue)"
             throw CoachError.generationFailed("The coach returned an empty reply.")
         }
         let memoryUpdates = content.memoryUpdates.compactMap {

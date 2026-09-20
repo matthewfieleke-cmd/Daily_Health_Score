@@ -207,7 +207,10 @@ final class LifestyleCoachController: ObservableObject {
         let generationID = chatGenerationID
 
         // Acute risk is answered deterministically, before availability or the model.
-        if case .escalate(let message) = CoachSafetyGate.evaluate(trimmed) {
+        // A concern short of that rides along so the model answers with care, and so
+        // the app can, if the model declines.
+        let disposition = CoachSafetyGate.evaluate(trimmed)
+        if case .escalate(let message) = disposition {
             goalProposal = nil
             pendingGoalCheckIn = nil
             memory.append(CoachChatTurn(role: .user, text: trimmed))
@@ -216,6 +219,8 @@ final class LifestyleCoachController: ObservableObject {
             if chatGenerationID == generationID { isChatBusy = false }
             return
         }
+        var safetyConcern: CoachSafetyGate.Concern?
+        if case .concern(let concern) = disposition { safetyConcern = concern }
 
         refreshAvailability()
         guard availability == .available else {
@@ -255,7 +260,9 @@ final class LifestyleCoachController: ObservableObject {
             allowUnpromptedHealth: allowHealth,
             recentConversations: memory.recentConversationsBlock(),
             goalPaceDirective: SMARTGoalPace.directive(goals: goals),
-            emptyMemorySections: memory.emptySectionLabels
+            emptyMemorySections: memory.emptySectionLabels,
+            memoryNoteCount: memory.liveMemoryCount,
+            safetyConcern: safetyConcern
         )
 
         await compileProfileIfNeeded()
@@ -316,11 +323,22 @@ final class LifestyleCoachController: ObservableObject {
             await compileProfileIfNeeded()
         } catch {
             guard chatGenerationID == generationID else { return }
+            if let coachError = error as? FoundationModelsCoach.CoachError,
+               case .declined(let reason) = coachError {
+                // Both models refused the content. The app answers with care,
+                // keeps whatever facts the message plainly stated, and names
+                // the refusal once, under the reply, so it is never a mystery.
+                memory.append(CoachChatTurn(role: .coach, text: CoachSafetyGate.declinedReply(concern: safetyConcern)))
+                memory.ingestUserStatedFacts(from: trimmed)
+                chatError = "The model declined this message: \(reason)"
+                return
+            }
             let message = error.localizedDescription.isEmpty
                 ? FoundationModelsCoach.friendlyFailureMessage
                 : error.localizedDescription
-            chatError = message
             memory.append(CoachChatTurn(role: .coach, text: message))
+            // The bubble carries the words; the line under it carries the cause.
+            chatError = model.lastFailureReason.map { "Model error: \($0)" }
         }
     }
 
@@ -404,6 +422,8 @@ final class LifestyleCoachController: ObservableObject {
             )
         }
         let intent = CoachIntentClassifier.classify(prompt)
+        var safetyConcern: CoachSafetyGate.Concern?
+        if case .concern(let concern) = CoachSafetyGate.evaluate(prompt) { safetyConcern = concern }
         let context = CoachReplyContext(
             thread: nil,
             isFirstReply: true,
@@ -411,7 +431,9 @@ final class LifestyleCoachController: ObservableObject {
             allowUnpromptedHealth: false,
             recentConversations: memory.recentConversationsBlock(),
             goalPaceDirective: SMARTGoalPace.directive(goals: goals),
-            emptyMemorySections: memory.emptySectionLabels
+            emptyMemorySections: memory.emptySectionLabels,
+            memoryNoteCount: memory.liveMemoryCount,
+            safetyConcern: safetyConcern
         )
         do {
             let snapshot = todayRecord.map {
@@ -442,9 +464,10 @@ final class LifestyleCoachController: ObservableObject {
                 fallbackReason: result.fallbackReason
             )
         } catch {
+            let reason = model.lastFailureReason ?? error.localizedDescription
             return CoachEvalResult(
                 promptID: promptID, reply: "", tier: .onDevice, shape: .general, memoryNotes: [],
-                seconds: Date().timeIntervalSince(started), error: error.localizedDescription
+                seconds: Date().timeIntervalSince(started), error: reason
             )
         }
     }

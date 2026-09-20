@@ -56,27 +56,54 @@ enum CoachReplyShape: String, Equatable, Sendable {
         return intent == .planning ? .howTo : .general
     }
 
-    /// One line for the prompt.
+    /// Word range the reply should land in. A range, not a count: "one sentence
+    /// of expertise" was read as a ceiling and produced forty-word replies.
+    var wordRange: ClosedRange<Int> {
+        switch self {
+        case .feeling: return 120...220
+        case .howTo: return 150...300
+        case .evaluation: return 120...250
+        case .data: return 30...90
+        case .winReport: return 90...170
+        case .statement: return 100...200
+        case .writing: return 60...200
+        case .smallTalk: return 10...40
+        case .general: return 100...220
+        }
+    }
+
+    /// Whether the profile and memory files belong in this prompt at all. Where
+    /// they cannot be relevant, leaving them out is the only reliable way to keep
+    /// them out of the reply; the lookup tool still answers a direct reference.
+    var usesMemoryFiles: Bool {
+        switch self {
+        case .data, .smallTalk, .writing: return false
+        case .feeling, .howTo, .evaluation, .winReport, .statement, .general: return true
+        }
+    }
+
+    /// One line for the prompt: the move, described, never scripted.
     var hint: String {
+        let range = "About \(wordRange.lowerBound) to \(wordRange.upperBound) words."
         switch self {
         case .feeling:
-            return "Likely shape: a feeling. Meet it like a wise friend: name the strain or loss in your own words (no paraphrase), one honest insight that reframes it, then a concrete next move or simply presence. No numbered levers. Advice only if they ask."
+            return "Likely shape: a feeling or a disclosure. Meet it as a wise friend would: a genuine reaction first, the strain or the loop they described named in your own words, one honest insight that reframes it as a human response rather than a flaw, the strengths and tools they have already told you about, then a small concrete move or simply presence, and a caring question about how they are right now. No numbered levers. Advice only if they ask. \(range)"
         case .howTo:
-            return "Likely shape: how-do-I. The need the behavior serves, the real levers ordered by effort (a short list is fine), the smallest first step, an offer to track it. Anchor cues to when the behavior actually happens for them."
+            return "Likely shape: how-do-I. The need the behavior serves, the real levers ordered by effort (a short list is fine), the smallest first step, an offer to track it. Anchor cues to when the behavior actually happens for them. \(range)"
         case .evaluation:
-            return "Likely shape: evaluation. Verdict first, what is working with numbers, the honest caveat, one upgrade that fits what they already eat."
+            return "Likely shape: evaluation. Verdict first, what is working with numbers, the honest caveat, one upgrade that fits what they already eat. \(range)"
         case .data:
-            return "Likely shape: a data question. The exact numbers from the snapshot or tools in one or two plain sentences, then stop. No memory callback, no question."
+            return "Likely shape: a data question. Open with the numbers, not a reaction: the exact figures from the snapshot or tools in plain sentences, then stop. Only the metrics they asked about; no HRV unless they asked. No memory callback, no question. \(range)"
         case .winReport:
-            return "Likely shape: a win report. React like you mean it, name the win specifically and what it makes possible, one sentence of real expertise made vivid, and one concrete question about how it is going. No plan."
+            return "Likely shape: a win report. A genuine reaction in your own words, the win named specifically and connected to what it makes possible, real expertise made vivid and specific, and one concrete question about how it is going. No plan. \(range)"
         case .statement:
-            return "Likely shape: a statement with no question. React, do not paraphrase; add what it implies and what you would try or watch for; no plan unless invited."
+            return "Likely shape: a statement with no question. React in your own words rather than restating it; add what it implies and what you would try or watch for; no plan unless invited. \(range)"
         case .writing:
-            return "Likely shape: writing help. Gather what matters first — who, what they meant to people, timing, tone — in one short set of questions unless the message already holds it; then draft in their voice. No levers, no health steer, none of your notes about them in someone else's message."
+            return "Likely shape: writing help. Gather what matters first — who, what they meant to people, timing, tone — in one short set of questions unless the message already holds it; then draft in their voice. No levers, no health steer, none of your notes about them in someone else's message. \(range)"
         case .smallTalk:
-            return "Likely shape: small talk. One or two warm sentences. No question, no memory callback."
+            return "Likely shape: small talk. One or two warm sentences. No question, no memory callback. \(range)"
         case .general:
-            return "Likely shape: a general question. Answer it directly with real substance; structure only if they asked how."
+            return "Likely shape: a general question. Answer it directly with real substance; structure only if they asked how. \(range)"
         }
     }
 
