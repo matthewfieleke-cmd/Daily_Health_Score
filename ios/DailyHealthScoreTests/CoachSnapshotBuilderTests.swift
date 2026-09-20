@@ -188,6 +188,11 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(charter.contains("therapist who works with"))
         XCTAssertTrue(charter.contains("Overwhelm and burnout"))
         XCTAssertTrue(charter.contains("HRV comes up only when they ask"))
+        XCTAssertTrue(charter.contains("not guess it; ask or leave it out"))
+        XCTAssertTrue(charter.contains("never narrate it"))
+        XCTAssertTrue(charter.contains("while driving"))
+        XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("never guess them"))
+        XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("while driving"))
         // Principles, never scripts: no quoted example sentences a model could copy,
         // except the one fixed crisis line and the philosophy.
         let quoted = charter.components(separatedBy: "\"").enumerated().filter { $0.offset % 2 == 1 }.map(\.element)
