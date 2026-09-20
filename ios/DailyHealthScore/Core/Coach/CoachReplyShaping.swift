@@ -10,6 +10,8 @@ enum CoachReplyShape: String, Equatable, Sendable {
     case data
     case winReport
     case statement
+    /// A refusal of a suggestion or a whole category of advice.
+    case pushback
     case writing
     case smallTalk
     case general
@@ -49,6 +51,8 @@ enum CoachReplyShape: String, Equatable, Sendable {
         }
 
         if !asksQuestion {
+            let pushbackCues = [" i don't want to ", " i dont want to ", " i hate ", " i'm not going to ", " im not going to ", " i won't ", " i wont ", " i refuse ", " not doing that ", " that won't work ", " that wont work ", " doesn't work for me ", " doesnt work for me ", " stop suggesting ", " no thanks "]
+            if has(pushbackCues) { return .pushback }
             let winCues = [" doing better ", " did better ", " i managed ", " finally ", " i've been able ", " i have been able ", " went well ", " i did it ", " proud ", " a win ", " succeeded ", " kept my ", " stuck to ", " i made it ", " i've been doing ", " i have been doing "]
             if has(winCues) { return .winReport }
             return .statement
@@ -66,6 +70,7 @@ enum CoachReplyShape: String, Equatable, Sendable {
         case .data: return 30...90
         case .winReport: return 90...170
         case .statement: return 100...200
+        case .pushback: return 40...110
         case .writing: return 60...200
         case .smallTalk: return 10...40
         case .general: return 100...220
@@ -78,7 +83,7 @@ enum CoachReplyShape: String, Equatable, Sendable {
     var usesMemoryFiles: Bool {
         switch self {
         case .data, .smallTalk, .writing: return false
-        case .feeling, .howTo, .evaluation, .winReport, .statement, .general: return true
+        case .feeling, .howTo, .evaluation, .winReport, .statement, .pushback, .general: return true
         }
     }
 
@@ -93,17 +98,19 @@ enum CoachReplyShape: String, Equatable, Sendable {
         case .evaluation:
             return "Likely shape: evaluation. Verdict first, what is working with numbers, the honest caveat, one upgrade that fits what they already eat. \(range)"
         case .data:
-            return "Likely shape: a data question. Open with the numbers, not a reaction: the exact figures from the snapshot or tools in plain sentences, then stop. Only the metrics they asked about; no HRV unless they asked. No memory callback, no question. \(range)"
+            return "Likely shape: a data question. Open with the numbers, not a reaction: the exact figures from the snapshot or tools in plain sentences, then stop. Only the metrics they asked about — no goals, weight, or HRV unless they asked. No suggestion, no memory callback, no question. \(range)"
         case .winReport:
             return "Likely shape: a win report. A genuine reaction in your own words, the win named specifically and connected to what it makes possible, real expertise made vivid and specific, and one concrete question about how it is going. No plan. \(range)"
         case .statement:
             return "Likely shape: a statement with no question. React in your own words rather than restating it; add what it implies and what you would try or watch for; no plan unless invited. \(range)"
+        case .pushback:
+            return "Likely shape: pushback. Take it at face value and get curious about what they do want or what has worked before; no alternatives and no re-selling until they answer. One easy question. \(range)"
         case .writing:
             return "Likely shape: writing help. Gather what matters first — who, what they meant to people, timing, tone — in one short set of questions unless the message already holds it; then draft in their voice. No levers, no health steer, none of your notes about them in someone else's message. \(range)"
         case .smallTalk:
             return "Likely shape: small talk. One or two warm sentences. No question, no memory callback. \(range)"
         case .general:
-            return "Likely shape: a general question. Answer it directly with real substance; structure only if they asked how. \(range)"
+            return "Likely shape: a general question. If it is a yes/no question, the first word is yes, no, or mostly. Then real substance; structure only if they asked how. \(range)"
         }
     }
 
@@ -111,7 +118,7 @@ enum CoachReplyShape: String, Equatable, Sendable {
     var reasoningDepth: CoachReasoningDepth {
         switch self {
         case .howTo, .evaluation: return .deep
-        case .feeling, .winReport, .statement, .writing, .general: return .moderate
+        case .feeling, .winReport, .statement, .pushback, .writing, .general: return .moderate
         case .data, .smallTalk: return .light
         }
     }
@@ -186,10 +193,41 @@ enum CoachReplyPolish {
         text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
     }
 
-    /// Strips status tokens the model was told never to print and caps runaway
-    /// length at a sentence boundary well past the charter ceiling.
-    static func polish(_ text: String, maxWords: Int = CoachCharter.maxReplyWords) -> String {
+    /// Field names from the structured reply. When the model starts writing the
+    /// next field inside the message string, everything from that name on is
+    /// noise to the person reading it.
+    private static let leakedFieldPattern = try? NSRegularExpression(
+        pattern: #"(^|\n)\s*(memoryUpdates|goalCheckIn|goalProposal|message|threadTitle|threadSummary|pillar)\s*:.*$"#,
+        options: [.dotMatchesLineSeparators]
+    )
+
+    /// Drops a leaked structured-output fragment and any dangling brackets left
+    /// where it started.
+    static func stripLeakedFields(_ text: String) -> String {
         var cleaned = text
+        // A label at the very start is just a label; drop it and keep the words.
+        for label in ["message:", "Message:"] where cleaned.hasPrefix(label) {
+            cleaned = String(cleaned.dropFirst(label.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let pattern = leakedFieldPattern {
+            let range = NSRange(cleaned.startIndex..., in: cleaned)
+            if let match = pattern.firstMatch(in: cleaned, range: range),
+               match.range.location > 0,
+               let cut = Range(match.range, in: cleaned) {
+                cleaned = String(cleaned[..<cut.lowerBound])
+            }
+        }
+        while let last = cleaned.last, "[{(:,".contains(last) || last.isWhitespace || last.isNewline {
+            cleaned.removeLast()
+        }
+        return cleaned
+    }
+
+    /// Strips status tokens the model was told never to print, removes leaked
+    /// output fields, and caps runaway length at a sentence boundary well past
+    /// the charter ceiling.
+    static func polish(_ text: String, maxWords: Int = CoachCharter.maxReplyWords) -> String {
+        var cleaned = stripLeakedFields(text)
         for token in statusTokens {
             cleaned = cleaned.replacingOccurrences(of: " — \(token)", with: "")
             cleaned = cleaned.replacingOccurrences(of: "— \(token)", with: "")
