@@ -6,6 +6,18 @@ struct CoachGoalProposal: Identifiable, Equatable {
     var edit: SMARTGoalEdit
     var isUpdate: Bool { edit.original != nil }
 
+    /// An update that changes nothing is a description of the goal, not a
+    /// proposal; showing it as "suggested changes" would confuse anyone.
+    var isNoOp: Bool {
+        guard let original = edit.original else { return false }
+        let trimmed = { (text: String) in text.trimmingCharacters(in: .whitespacesAndNewlines) }
+        return trimmed(edit.specificText) == trimmed(original.specificText)
+            && edit.targetCount == original.targetCount
+            && edit.relevantTheme == original.relevantTheme
+            && Calendar.current.isDate(edit.endDate, inSameDayAs: original.endDate)
+            && edit.plan == original.plan
+    }
+
     static func make(
         operation: String,
         goalID: String?,

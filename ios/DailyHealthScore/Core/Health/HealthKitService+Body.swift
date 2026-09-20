@@ -28,6 +28,20 @@ extension HealthKitService {
                 measurements.latestBMIDate = sample.startDate
             }
         }
+        // Characteristics are read directly; each throws when not authorized.
+        if let birth = try? store.dateOfBirthComponents(),
+           let birthDate = Calendar.current.date(from: birth) {
+            measurements.ageYears = Calendar.current.dateComponents([.year], from: birthDate, to: now).year
+        }
+        if let sex = try? store.biologicalSex().biologicalSex {
+            switch sex {
+            case .female: measurements.biologicalSex = "female"
+            case .male: measurements.biologicalSex = "male"
+            case .other: measurements.biologicalSex = "other"
+            case .notSet: break
+            @unknown default: break
+            }
+        }
         return measurements
     }
 

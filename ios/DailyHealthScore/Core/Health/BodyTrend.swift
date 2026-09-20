@@ -41,8 +41,13 @@ struct BodyMeasurements: Equatable, Sendable {
     var latestBMISample: Double?
     var latestBMIDate: Date?
     var unit: BodyMassUnit = .preferred()
+    /// From Health's characteristics, so the Coach never has to guess either.
+    var ageYears: Int?
+    var biologicalSex: String?
 
-    var isEmpty: Bool { weights.isEmpty && heightMeters == nil && latestBMISample == nil }
+    var isEmpty: Bool {
+        weights.isEmpty && heightMeters == nil && latestBMISample == nil && ageYears == nil && biologicalSex == nil
+    }
 }
 
 /// What the Coach is allowed to know about someone's weight: a smoothed
@@ -70,6 +75,8 @@ struct BodyTrend: Equatable, Sendable {
     var daysSinceLatest: Int?
     var readingCount: Int
     var unit: BodyMassUnit = .kilograms
+    var ageYears: Int?
+    var biologicalSex: String?
 
     var direction4w: Direction? { changeOverFourWeeks.map(Self.direction) }
     var direction12w: Direction? { changeOverTwelveWeeks.map(Self.direction) }
@@ -101,6 +108,8 @@ struct BodyTrend: Equatable, Sendable {
         var trend = BodyTrend(readingCount: weights.count)
         trend.heightMeters = measurements.heightMeters
         trend.unit = measurements.unit
+        trend.ageYears = measurements.ageYears
+        trend.biologicalSex = measurements.biologicalSex
 
         if let latest = weights.last {
             trend.latestKilograms = round1(latest.kilograms)
@@ -127,7 +136,7 @@ struct BodyTrend: Equatable, Sendable {
             trend.bmi = round1(sample)
         }
 
-        guard trend.latestKilograms != nil || trend.bmi != nil else { return nil }
+        guard trend.latestKilograms != nil || trend.bmi != nil || trend.ageYears != nil || trend.biologicalSex != nil else { return nil }
         return trend
     }
 
@@ -155,6 +164,10 @@ struct BodyTrend: Equatable, Sendable {
     /// appears only as "latest".
     var promptBlock: String {
         var lines: [String] = []
+        let person = [ageYears.map { "age \($0)" }, biologicalSex].compactMap { $0 }
+        if !person.isEmpty {
+            lines.append("Person: \(person.joined(separator: ", ")) per Health — the only source for either; never guess an age.")
+        }
         if let smoothed = smoothedKilograms ?? latestKilograms {
             var line = "Weight: about \(unit.text(fromKilograms: smoothed)), seven-day average"
             if let days = daysSinceLatest {
@@ -179,7 +192,9 @@ struct BodyTrend: Equatable, Sendable {
             lines.append("BMI about \(bmi), \(BodyTrend.bmiBand(bmi)) — a screening number blind to build and muscle, never a verdict.")
         }
         guard !lines.isEmpty else { return "No weight or height data shared." }
-        lines.append("Speak in \(unit == .pounds ? "pounds" : "kilograms"); that is how this person weighs themselves.")
+        if smoothedKilograms != nil || latestKilograms != nil {
+            lines.append("Speak in \(unit == .pounds ? "pounds" : "kilograms"); that is how this person weighs themselves.")
+        }
         return lines.joined(separator: " ")
     }
 

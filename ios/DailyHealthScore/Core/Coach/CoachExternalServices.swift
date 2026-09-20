@@ -13,23 +13,39 @@ enum CoachFoodService {
     static func lookupText(query: String, session: URLSession = .shared) async -> String {
         let cleaned = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard cleaned.count >= 2 else { return "No food named. Ask what they ate, or estimate and label it approximate." }
-        let facts = await lookup(query: cleaned, session: session)
-        return formatted(facts, query: cleaned)
+        let result = await lookup(query: cleaned, session: session)
+        return formatted(result.facts, query: cleaned, failures: result.failures)
     }
 
-    static func lookup(query: String, session: URLSession = .shared) async -> [CoachFoodFact] {
-        if let data = await fetch(usdaSearchURL(query: query), session: session) {
+    struct LookupResult: Equatable {
+        var facts: [CoachFoodFact]
+        /// Transport-level trouble, per source, so "approximate" can say why.
+        var failures: [String]
+    }
+
+    static func lookup(query: String, session: URLSession = .shared) async -> LookupResult {
+        var failures: [String] = []
+        switch await fetch(usdaSearchURL(query: query), session: session) {
+        case .success(let data):
             let facts = USDAFoodParser.facts(fromSearchJSON: data, limit: 3)
-            if !facts.isEmpty { return facts }
+            if !facts.isEmpty { return LookupResult(facts: facts, failures: []) }
+        case .failure(let reason):
+            failures.append("USDA: \(reason.description)")
         }
-        if let data = await fetch(openFoodFactsSearchURL(query: query), session: session) {
-            return OpenFoodFactsParser.facts(fromSearchJSON: data, limit: 3)
+        switch await fetch(openFoodFactsSearchURL(query: query), session: session) {
+        case .success(let data):
+            return LookupResult(facts: OpenFoodFactsParser.facts(fromSearchJSON: data, limit: 3), failures: failures)
+        case .failure(let reason):
+            failures.append("Open Food Facts: \(reason.description)")
         }
-        return []
+        return LookupResult(facts: [], failures: failures)
     }
 
-    static func formatted(_ facts: [CoachFoodFact], query: String) -> String {
+    static func formatted(_ facts: [CoachFoodFact], query: String, failures: [String] = []) -> String {
         guard !facts.isEmpty else {
+            if !failures.isEmpty {
+                return "Food lookup unavailable for \"\(query)\" (\(failures.joined(separator: "; "))). Estimate typical values, label them approximate, state the serving you assumed, and say the database did not respond."
+            }
             return "No database match for \"\(query)\". Estimate typical values, label them approximate, and state the serving you assumed."
         }
         let lines = facts.enumerated().map { index, fact in "\(index + 1). \(fact.line)" }
@@ -64,17 +80,32 @@ enum CoachFoodService {
         return components?.url
     }
 
-    static func fetch(_ url: URL?, session: URLSession) async -> Data? {
-        guard let url else { return nil }
+    enum FetchFailure: Error, Equatable {
+        case badURL
+        case http(Int)
+        case transport(String)
+
+        var description: String {
+            switch self {
+            case .badURL: return "bad URL"
+            case .http(let code): return code == 429 ? "HTTP 429 rate limited" : "HTTP \(code)"
+            case .transport(let message): return message
+            }
+        }
+    }
+
+    static func fetch(_ url: URL?, session: URLSession) async -> Result<Data, FetchFailure> {
+        guard let url else { return .failure(.badURL) }
         var request = URLRequest(url: url, timeoutInterval: requestTimeout)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         do {
             let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
-            return data
+            guard let http = response as? HTTPURLResponse else { return .failure(.transport("no HTTP response")) }
+            guard (200..<300).contains(http.statusCode) else { return .failure(.http(http.statusCode)) }
+            return .success(data)
         } catch {
-            return nil
+            return .failure(.transport(error.localizedDescription))
         }
     }
 }
@@ -117,7 +148,7 @@ enum CoachEvidenceService {
             URLQueryItem(name: "retmode", value: "json"),
             URLQueryItem(name: "tool", value: "DailyHealthScore")
         ]
-        guard let data = await CoachFoodService.fetch(components?.url, session: session) else { return [] }
+        guard case .success(let data) = await CoachFoodService.fetch(components?.url, session: session) else { return [] }
         return PubMedParser.ids(fromSearchJSON: data)
     }
 
@@ -130,7 +161,7 @@ enum CoachEvidenceService {
             URLQueryItem(name: "retmode", value: "text"),
             URLQueryItem(name: "tool", value: "DailyHealthScore")
         ]
-        guard let data = await CoachFoodService.fetch(components?.url, session: session),
+        guard case .success(let data) = await CoachFoodService.fetch(components?.url, session: session),
               let text = String(data: data, encoding: .utf8) else { return [] }
         return PubMedParser.records(fromAbstractText: text)
     }

@@ -97,6 +97,12 @@ final class CoachFoodDataTests: XCTestCase {
 
     func test_formattedResultsTellTheModelWhatToDoWithThem() {
         XCTAssertTrue(CoachFoodService.formatted([], query: "unicorn bar").contains("label them approximate"))
+        let unavailable = CoachFoodService.formatted([], query: "unicorn bar", failures: ["USDA: HTTP 429 rate limited", "Open Food Facts: timed out"])
+        XCTAssertTrue(unavailable.contains("Food lookup unavailable"))
+        XCTAssertTrue(unavailable.contains("HTTP 429 rate limited"))
+        XCTAssertTrue(unavailable.contains("say the database did not respond"))
+        XCTAssertEqual(CoachFoodService.FetchFailure.http(429).description, "HTTP 429 rate limited")
+        XCTAssertEqual(CoachFoodService.FetchFailure.http(503).description, "HTTP 503")
         let fact = CoachFoodFact(name: "Oats", brand: "", servingDescription: "40 g", calories: 150, proteinGrams: 5, fiberGrams: 4, totalSugarGrams: 1, addedSugarGrams: nil, fatGrams: nil, carbGrams: nil, source: "USDA FoodData Central")
         let text = CoachFoodService.formatted([fact], query: "oats")
         XCTAssertTrue(text.contains("1. Oats — per 40 g: 150 kcal · 5 g protein · 4 g fiber · 1 g sugars"))
@@ -208,6 +214,16 @@ final class BodyTrendTests: XCTestCase {
         XCTAssertTrue(kilos.promptBlock.contains("122.1 kg"))
         XCTAssertTrue(kilos.promptBlock.contains("Speak in kilograms"))
 
+        var withPerson = measurements
+        withPerson.ageYears = 43
+        withPerson.biologicalSex = "male"
+        let person = BodyTrend.build(from: withPerson, now: now, calendar: calendar)!
+        XCTAssertTrue(person.promptBlock.contains("Person: age 43, male per Health"))
+        XCTAssertTrue(person.promptBlock.contains("never guess an age"))
+        let ageOnly = BodyTrend.build(from: BodyMeasurements(ageYears: 43), now: now, calendar: calendar)
+        XCTAssertNotNil(ageOnly, "Age alone is worth carrying")
+        XCTAssertFalse(ageOnly!.promptBlock.contains("Speak in"), "No weight, no unit sentence")
+
         XCTAssertEqual(BodyMassUnit.preferred(for: Locale(identifier: "en_US")), .pounds)
         XCTAssertEqual(BodyMassUnit.preferred(for: Locale(identifier: "de_DE")), .kilograms)
         XCTAssertEqual(BodyMassUnit.pounds.text(fromKilograms: 0.5), "1.1 lb")
@@ -248,6 +264,17 @@ final class CoachReplyShapingTests: XCTestCase {
         XCTAssertEqual(CoachReplyShape.detect(message: numb, intent: .planning), .howTo, "A how-do-I with a feeling in it is still a how-do-I")
     }
 
+    func test_pushbackIsItsOwnShapeAndStaysCurious() {
+        XCTAssertEqual(CoachReplyShape.detect(message: "I don’t want to walk. I hate walking.", intent: .general), .pushback)
+        XCTAssertEqual(CoachReplyShape.detect(message: "That won't work for me, my evenings are gone.", intent: .planning), .pushback)
+        XCTAssertEqual(CoachReplyShape.detect(message: "I hate how tired I feel", intent: .support), .feeling, "A feeling with 'hate' in it is still a feeling")
+        XCTAssertTrue(CoachReplyShape.pushback.hint.contains("no re-selling"))
+        XCTAssertTrue(CoachReplyShape.pushback.usesMemoryFiles)
+        XCTAssertLessThanOrEqual(CoachReplyShape.pushback.wordRange.upperBound, 120)
+        XCTAssertTrue(CoachReplyShape.general.hint.contains("first word is yes, no, or mostly"))
+        XCTAssertTrue(CoachReplyShape.data.hint.contains("No suggestion"))
+    }
+
     func test_writingHelpIsItsOwnShape() {
         XCTAssertEqual(CoachReplyShape.detect(message: "Help me word a short note to my team about our office manager leaving.", intent: .planning), .writing)
         XCTAssertEqual(CoachReplyShape.detect(message: "What should I say to my wife about the trip?", intent: .support), .writing)
@@ -268,7 +295,7 @@ final class CoachReplyShapingTests: XCTestCase {
 
     /// Ranges, not counts, and the files only where they can matter.
     func test_shapesCarryWordRangesAndDecideWhoSeesTheFiles() {
-        for shape in [CoachReplyShape.feeling, .howTo, .evaluation, .data, .winReport, .statement, .writing, .smallTalk, .general] {
+        for shape in [CoachReplyShape.feeling, .howTo, .evaluation, .data, .winReport, .statement, .pushback, .writing, .smallTalk, .general] {
             XCTAssertTrue(shape.hint.contains("About \(shape.wordRange.lowerBound) to \(shape.wordRange.upperBound) words"), shape.rawValue)
             XCTAssertFalse(shape.hint.contains("one sentence of"), shape.rawValue)
         }
@@ -279,7 +306,7 @@ final class CoachReplyShapingTests: XCTestCase {
         XCTAssertFalse(CoachReplyShape.writing.usesMemoryFiles)
         XCTAssertTrue(CoachReplyShape.feeling.usesMemoryFiles)
         XCTAssertTrue(CoachReplyShape.howTo.usesMemoryFiles)
-        XCTAssertTrue(CoachReplyShape.data.hint.contains("no HRV unless they asked"))
+        XCTAssertTrue(CoachReplyShape.data.hint.contains("or HRV unless they asked"))
         XCTAssertTrue(CoachReplyShape.feeling.hint.contains("how they are right now"))
     }
 
@@ -293,6 +320,49 @@ final class CoachReplyShapingTests: XCTestCase {
         XCTAssertTrue(lines.contains { $0.contains("swap one bar for a cup of cooked beans or add chia") })
         XCTAssertTrue(CoachRepetitionGuard.promptBlock(in: earlier)?.hasPrefix("ALREADY SUGGESTED IN THIS CHAT") == true)
         XCTAssertNil(CoachRepetitionGuard.promptBlock(in: ["Good morning."]))
+    }
+
+    /// The model sometimes starts the next structured field inside the message.
+    func test_polishDropsLeakedOutputFields() {
+        let leaked = "Thanks, Matt — that gives me a clear picture. Who's at home and who matters most to you?\n\nmemoryUpdates: [{"
+        XCTAssertEqual(CoachReplyPolish.polish(leaked), "Thanks, Matt — that gives me a clear picture. Who's at home and who matters most to you?")
+        XCTAssertEqual(CoachReplyPolish.stripLeakedFields("Good morning.\ngoalCheckIn: null\ngoalProposal: {"), "Good morning.")
+        XCTAssertEqual(CoachReplyPolish.stripLeakedFields("message: Yes — mostly."), "Yes — mostly.")
+        XCTAssertEqual(CoachReplyPolish.stripLeakedFields("Here is the message: be kind to yourself."), "Here is the message: be kind to yourself.", "A word mid-sentence is not a field")
+        XCTAssertEqual(CoachReplyPolish.stripLeakedFields("Two lines.\n\nSecond paragraph."), "Two lines.\n\nSecond paragraph.")
+    }
+
+    /// Structured claims need the person's words behind them.
+    func test_goalCheckInNeedsCompletionLanguage() {
+        XCTAssertFalse(CoachGoalCheckInRequest.claimsCompletion("I want to set a SMART goal to do Brilliant app every morning. Do I already have one?"))
+        XCTAssertFalse(CoachGoalCheckInRequest.claimsCompletion("How is my walking goal going?"))
+        XCTAssertTrue(CoachGoalCheckInRequest.claimsCompletion("I did my puzzles this morning."))
+        XCTAssertTrue(CoachGoalCheckInRequest.claimsCompletion("Walked with Maureen after dinner, can you log it?"))
+        XCTAssertTrue(CoachGoalCheckInRequest.claimsCompletion("Finished the notes before leaving today"))
+    }
+
+    func test_proposalThatChangesNothingIsNotAProposal() {
+        let goal = CoachTestFixtures.goal(text: "Do Brilliant app logic puzzles for 10 minutes in the mornings.")
+        let same = CoachGoalProposal.make(
+            operation: "update", goalID: goal.id.uuidString, specificText: goal.specificText,
+            targetCount: goal.targetCount, theme: goal.relevantTheme.rawValue, daysFromToday: nil, goals: [goal]
+        )
+        XCTAssertNotNil(same)
+        XCTAssertEqual(same?.isNoOp, true)
+        let changed = CoachGoalProposal.make(
+            operation: "update", goalID: goal.id.uuidString, specificText: nil,
+            targetCount: goal.targetCount + 2, theme: nil, daysFromToday: nil, goals: [goal]
+        )
+        XCTAssertEqual(changed?.isNoOp, false)
+    }
+
+    func test_errorsAreClassifiedByWhatTheFrameworkSays() {
+        XCTAssertTrue(FoundationModelsCoach.isContextOverflow(FakeOverflowError()))
+        XCTAssertFalse(FoundationModelsCoach.isContentDecline(FakeOverflowError()))
+        XCTAssertTrue(FoundationModelsCoach.isContentDecline(FakeRefusedError()))
+        XCTAssertFalse(FoundationModelsCoach.isContextOverflow(FakeNetworkError()))
+        XCTAssertTrue(FoundationModelsCoach.describe(FakeOverflowError()).contains("FakeOverflowError"), "The type or case name survives")
+        XCTAssertTrue(FoundationModelsCoach.describe(FakeOverflowError()).contains("4097 tokens"))
     }
 
     func test_polishStripsTokensAndCapsRunawayLength() {
@@ -322,4 +392,16 @@ final class CoachEvalPromptsTests: XCTestCase {
         XCTAssertTrue(CoachEvalPrompts.export(results: [fellBack]).contains("Fell back to on-device because: GenerationError.rateLimited"))
         XCTAssertTrue(export.contains("- add · Likes & staples · stated: Yoga"))
     }
+}
+
+struct FakeOverflowError: LocalizedError {
+    var errorDescription: String? { "Content contains 4097 tokens, which exceeds the maximum allowed context size of 4096." }
+}
+
+struct FakeRefusedError: LocalizedError {
+    var errorDescription: String? { "The model refused to answer." }
+}
+
+struct FakeNetworkError: LocalizedError {
+    var errorDescription: String? { "The Internet connection appears to be offline." }
 }
