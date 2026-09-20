@@ -53,7 +53,8 @@ final class CoachHomeCardTests: XCTestCase {
         )
         XCTAssertEqual(card.kind, .morning)
         XCTAssertTrue(card.isFallback)
-        XCTAssertTrue(card.healthLine.contains("of 10"))
+        XCTAssertNil(card.healthLine.rangeOfCharacter(from: .decimalDigits), "The tiles above the card carry the numbers")
+        XCTAssertTrue(card.healthLine.lowercased().contains("food"))
         XCTAssertFalse(card.healthLine.contains("BELOW GOAL"))
         XCTAssertFalse(card.healthLine.contains("NO DATA"))
         XCTAssertFalse(card.healthLine.contains("GOAL MET"))
@@ -79,6 +80,21 @@ final class CoachHomeCardTests: XCTestCase {
         XCTAssertTrue(card.question.hasSuffix("?"))
         XCTAssertTrue(card.spokenText.contains(card.healthLine))
         XCTAssertTrue(card.spokenText.hasSuffix(card.question))
+    }
+
+    func test_beforeHealthSyncs_theCardWaitsInsteadOfJudgingAnEmptyDay() {
+        let empty = makeRecord(sleep: 0, fiber: 0, exercise: 0, focus: .sleep)
+        XCTAssertFalse(CoachCheckInLogic.hasData(empty))
+        XCTAssertEqual(HomeCoachCardCopy.healthLine(for: empty), HomeCoachCardCopy.waitingLine)
+        XCTAssertEqual(HomeCoachCardCopy.eveningLine(for: empty), HomeCoachCardCopy.waitingLine)
+        let synced = makeRecord(sleep: 4.2, fiber: 0, exercise: 0, focus: .sleep)
+        XCTAssertTrue(CoachCheckInLogic.hasData(synced))
+        XCTAssertNotEqual(HomeCoachCardCopy.healthLine(for: synced), HomeCoachCardCopy.waitingLine)
+        for focus in PrimaryFocus.allCases {
+            let record = makeRecord(sleep: 7.5, fiber: 40, exercise: 30, focus: focus)
+            XCTAssertNil(HomeCoachCardCopy.healthLine(for: record).rangeOfCharacter(from: .decimalDigits))
+            XCTAssertNil(HomeCoachCardCopy.eveningLine(for: record).rangeOfCharacter(from: .decimalDigits))
+        }
     }
 
     func test_fallbackQuestionsRotateByDay() {

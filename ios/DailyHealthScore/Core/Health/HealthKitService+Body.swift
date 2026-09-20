@@ -14,6 +14,7 @@ extension HealthKitService {
             measurements.weights = samples.map {
                 BodyWeightSample(date: $0.startDate, kilograms: $0.quantity.doubleValue(for: .gramUnit(with: .kilo)))
             }
+            measurements.unit = await preferredBodyMassUnit(for: weightType)
         }
         if let heightType = HKQuantityType.quantityType(forIdentifier: .height) {
             // Height rarely changes; take the most recent reading of any age.
@@ -28,6 +29,18 @@ extension HealthKitService {
             }
         }
         return measurements
+    }
+
+    /// The unit the Health app shows for weight; the locale's default when
+    /// Health will not say (no authorization yet, or an error).
+    private func preferredBodyMassUnit(for type: HKQuantityType) async -> BodyMassUnit {
+        let fallback = BodyMassUnit.preferred()
+        guard let units = try? await store.preferredUnits(for: [type]), let unit = units[type] else {
+            return fallback
+        }
+        if unit == HKUnit.pound() { return .pounds }
+        if unit == HKUnit.gramUnit(with: .kilo) { return .kilograms }
+        return fallback
     }
 
     /// Newest first.

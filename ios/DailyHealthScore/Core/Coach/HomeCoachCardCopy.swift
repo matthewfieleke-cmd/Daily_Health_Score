@@ -1,35 +1,39 @@
 import Foundation
 
 /// Deterministic check-in copy for when the model is unavailable, and the
-/// health sentence every card can fall back to. Complete sentences, no tokens.
+/// sentence every card can fall back to. Complete sentences, no tokens, and
+/// no numbers: the tiles above the card carry those live.
 enum HomeCoachCardCopy {
-    /// One spoken sentence about today. Never prints status tokens.
+    /// Before Health has synced anything for today.
+    static let waitingLine = "Nothing from Apple Health for today yet — this note writes itself once the first numbers land."
+
+    /// One spoken sentence about the shape of today. Never prints status tokens.
     static func healthLine(for record: DailyRecord) -> String {
-        let score = ScoreCalculator.formatDisplayScore(record.totalScore)
+        guard CoachCheckInLogic.hasData(record) else { return waitingLine }
         switch record.primaryFocus {
         case .sleep:
-            return "You're at \(score) of 10 — last night's sleep was shorter than the night you wanted."
+            return "Short night behind you — the day is still wide open, and food and a walk can carry it."
         case .fiber:
-            return "You're at \(score) of 10 — food still has room before the day is done."
+            return "Food is the pillar with the most room today, and most of the day is still ahead of you."
         case .exercise:
-            return "You're at \(score) of 10 — movement still has room if you want it."
+            return "Movement is the pillar with the most room today, if you want it."
         case .maintain:
-            return "You're at \(score) of 10 — the three pillars are in a good place today."
+            return "All three pillars are in a good place so far — today is about protecting that, not adding to it."
         }
     }
 
     /// Evening voice: the day is mostly written, so reflect instead of steering.
     static func eveningLine(for record: DailyRecord) -> String {
-        let score = ScoreCalculator.formatDisplayScore(record.totalScore)
+        guard CoachCheckInLogic.hasData(record) else { return waitingLine }
         switch record.primaryFocus {
         case .sleep:
-            return "Today landed at \(score) of 10 on a short night — you carried the day anyway."
+            return "Today ran on a short night, and you carried it anyway."
         case .fiber:
-            return "Today landed at \(score) of 10; fiber was the pillar that ran light."
+            return "Fiber was the pillar that ran light today."
         case .exercise:
-            return "Today landed at \(score) of 10; movement was the pillar that ran light."
+            return "Movement was the pillar that ran light today."
         case .maintain:
-            return "Today landed at \(score) of 10 — all three pillars showed up."
+            return "All three pillars showed up today."
         }
     }
 

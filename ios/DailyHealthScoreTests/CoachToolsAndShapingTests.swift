@@ -43,7 +43,10 @@ final class CoachFoodDataTests: XCTestCase {
        "foodNutrients": [
          {"nutrientNumber": "208", "value": 132},
          {"nutrientNumber": "203", "value": 8.86},
-         {"nutrientNumber": "291", "value": 8.7}
+         {"nutrientNumber": "291", "value": 8.7},
+         {"nutrientNumber": "304", "value": 70},
+         {"nutrientNumber": "306", "value": 355},
+         {"nutrientNumber": "307", "value": 1}
        ]}
     ]}
     """
@@ -68,6 +71,10 @@ final class CoachFoodDataTests: XCTestCase {
         XCTAssertTrue(beans.line.contains("per 100 g"))
         XCTAssertEqual(beans.fiberGrams, 8.7)
         XCTAssertNil(beans.addedSugarGrams)
+        XCTAssertEqual(beans.magnesiumMg, 70)
+        XCTAssertTrue(beans.line.contains("70 mg magnesium"))
+        XCTAssertTrue(beans.line.contains("355 mg potassium"))
+        XCTAssertNil(clif.magnesiumMg, "Minerals appear only when the source lists them")
     }
 
     func test_openFoodFactsPrefersServingValuesWhenPresent() {
@@ -185,6 +192,27 @@ final class BodyTrendTests: XCTestCase {
         XCTAssertTrue(bmiOnly.promptBlock.contains("in the usual range"))
     }
 
+    /// Kilograms stay canonical; the words follow the unit the person weighs in.
+    func test_weightSpeaksInThePersonsUnit() {
+        var measurements = BodyMeasurements(weights: [sample(daysAgo: 0, kg: 122.1)], heightMeters: 1.83)
+        measurements.unit = .pounds
+        let pounds = BodyTrend.build(from: measurements, now: now, calendar: calendar)!
+        XCTAssertEqual(pounds.unit, .pounds)
+        XCTAssertTrue(pounds.promptBlock.contains("269.2 lb"), pounds.promptBlock)
+        XCTAssertFalse(pounds.promptBlock.contains("kg"))
+        XCTAssertTrue(pounds.promptBlock.contains("Speak in pounds"))
+        XCTAssertEqual(pounds.bmi ?? 0, 36.5, accuracy: 0.1, "BMI is unit-free")
+
+        measurements.unit = .kilograms
+        let kilos = BodyTrend.build(from: measurements, now: now, calendar: calendar)!
+        XCTAssertTrue(kilos.promptBlock.contains("122.1 kg"))
+        XCTAssertTrue(kilos.promptBlock.contains("Speak in kilograms"))
+
+        XCTAssertEqual(BodyMassUnit.preferred(for: Locale(identifier: "en_US")), .pounds)
+        XCTAssertEqual(BodyMassUnit.preferred(for: Locale(identifier: "de_DE")), .kilograms)
+        XCTAssertEqual(BodyMassUnit.pounds.text(fromKilograms: 0.5), "1.1 lb")
+    }
+
     func test_bmiBandsAreLabelsNotVerdicts() {
         XCTAssertEqual(BodyTrend.bmiBand(17.9), "below the usual range")
         XCTAssertEqual(BodyTrend.bmiBand(22), "in the usual range")
@@ -206,13 +234,36 @@ final class CoachReplyShapingTests: XCTestCase {
         XCTAssertEqual(CoachReplyShape.detect(message: "Should I take magnesium for sleep?", intent: .education), .general)
     }
 
+    /// The eval run routed three prompts wrong; the classifier's intent must not
+    /// override what the words plainly say.
+    func test_shapesSurviveAWrongIntent() {
+        let win = "I’ve been doing better recently with not bringing work home. I am a family medicine physician. I’m getting my notes and patient messages all taken care of while at work."
+        XCTAssertEqual(CoachReplyShape.detect(message: win, intent: .dataLookup), .winReport)
+        let insecure = "I find myself feeling insecure about work. My office manager is moving to a different clinic."
+        XCTAssertEqual(CoachReplyShape.detect(message: insecure, intent: .general), .feeling)
+        XCTAssertEqual(CoachReplyShape.detect(message: "How did this week go for me?", intent: .planning), .data)
+        XCTAssertEqual(CoachReplyShape.detect(message: "Show me my sleep this week", intent: .dataLookup), .data)
+        XCTAssertEqual(CoachReplyShape.detect(message: "This week was rough at the clinic.", intent: .dataLookup), .statement)
+        let numb = "I feel chronic stress and I think I’m using that to numb myself a bit. How do I increase the likelihood I make the healthier choice?"
+        XCTAssertEqual(CoachReplyShape.detect(message: numb, intent: .planning), .howTo, "A how-do-I with a feeling in it is still a how-do-I")
+    }
+
+    func test_writingHelpIsItsOwnShape() {
+        XCTAssertEqual(CoachReplyShape.detect(message: "Help me word a short note to my team about our office manager leaving.", intent: .planning), .writing)
+        XCTAssertEqual(CoachReplyShape.detect(message: "What should I say to my wife about the trip?", intent: .support), .writing)
+        XCTAssertEqual(CoachReplyShape.writing.reasoningDepth, .moderate)
+        XCTAssertTrue(CoachReplyShape.writing.hint.contains("Gather what matters first"))
+        XCTAssertTrue(CoachReplyShape.smallTalk.hint.contains("No question"))
+        XCTAssertTrue(CoachReplyShape.feeling.hint.contains("No numbered levers"))
+    }
+
     func test_reasoningDepthScalesWithTheShape() {
         XCTAssertEqual(CoachReplyShape.howTo.reasoningDepth, .deep)
         XCTAssertEqual(CoachReplyShape.evaluation.reasoningDepth, .deep)
         XCTAssertEqual(CoachReplyShape.feeling.reasoningDepth, .moderate)
         XCTAssertEqual(CoachReplyShape.smallTalk.reasoningDepth, .light)
         XCTAssertEqual(CoachReplyShape.data.reasoningDepth, .light)
-        XCTAssertTrue(CoachReplyShape.howTo.hint.contains("four numbered levers"))
+        XCTAssertTrue(CoachReplyShape.howTo.hint.contains("levers ordered by effort"))
     }
 
     func test_repetitionGuardListsEarlierSuggestions() {
@@ -248,8 +299,10 @@ final class CoachEvalPromptsTests: XCTestCase {
         let result = CoachEvalResult(promptID: "stress-numbing", reply: "**Yes.**", tier: .privateCloud, shape: .howTo, memoryNotes: ["add · Likes & staples · stated: Yoga"], seconds: 12.3)
         let export = CoachEvalPrompts.export(results: [result])
         XCTAssertTrue(export.contains("## Stress numbing and Clash Royale"))
-        XCTAssertTrue(export.contains("Model: privateCloud · shape: howTo · 12.3s"))
+        XCTAssertTrue(export.contains("Model: privateCloud · shape: howTo · 12.3s · 1 words"))
         XCTAssertTrue(export.contains("- [ ] "))
+        let fellBack = CoachEvalResult(promptID: "data-question", reply: "7.1", tier: .onDevice, shape: .data, memoryNotes: [], seconds: 9.9, fallbackReason: "GenerationError.rateLimited")
+        XCTAssertTrue(CoachEvalPrompts.export(results: [fellBack]).contains("Fell back to on-device because: GenerationError.rateLimited"))
         XCTAssertTrue(export.contains("- add · Likes & staples · stated: Yoga"))
     }
 }

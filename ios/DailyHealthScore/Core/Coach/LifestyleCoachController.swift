@@ -91,7 +91,12 @@ final class LifestyleCoachController: ObservableObject {
     ) async {
         refreshAvailability()
         let kind = CoachCheckInLogic.kind(for: now, calendar: calendar)
-        let key = CoachCheckInLogic.cacheKey(dateKey: record.date, kind: kind, goals: goals)
+        let key = CoachCheckInLogic.cacheKey(
+            dateKey: record.date,
+            kind: kind,
+            goals: goals,
+            signature: CoachCheckInLogic.statusSignature(for: record)
+        )
         if !force,
            memory.cachedCheckInKey == key,
            let cached = memory.cachedCheckIn,
@@ -107,7 +112,10 @@ final class LifestyleCoachController: ObservableObject {
             : nil
         let rows = CoachCheckInLogic.goalRows(goals: goals, activities: activities, todayKey: record.date)
 
-        guard availability == .available else {
+        // Nothing has synced for today: a written card would describe an empty
+        // day as a bad one. Show the waiting note under a key that never
+        // matches, so the first real numbers trigger the write.
+        guard CoachCheckInLogic.hasData(record), availability == .available else {
             let fallback = carryingReplyLink(
                 HomeCoachCardCopy.fallbackCheckIn(for: record, kind: kind, trend: trend, now: now, calendar: calendar)
             )
@@ -246,7 +254,8 @@ final class LifestyleCoachController: ObservableObject {
             pillar: thread.pillar,
             allowUnpromptedHealth: allowHealth,
             recentConversations: memory.recentConversationsBlock(),
-            goalPaceDirective: SMARTGoalPace.directive(goals: goals)
+            goalPaceDirective: SMARTGoalPace.directive(goals: goals),
+            emptyMemorySections: memory.emptySectionLabels
         )
 
         await compileProfileIfNeeded()
@@ -401,7 +410,8 @@ final class LifestyleCoachController: ObservableObject {
             pillar: .general,
             allowUnpromptedHealth: false,
             recentConversations: memory.recentConversationsBlock(),
-            goalPaceDirective: SMARTGoalPace.directive(goals: goals)
+            goalPaceDirective: SMARTGoalPace.directive(goals: goals),
+            emptyMemorySections: memory.emptySectionLabels
         )
         do {
             let snapshot = todayRecord.map {
@@ -428,7 +438,8 @@ final class LifestyleCoachController: ObservableObject {
                 tier: result.tier,
                 shape: result.shape,
                 memoryNotes: result.memoryUpdates.map { "\($0.operation.rawValue) · \($0.section.label) · \($0.basis.rawValue): \($0.text.isEmpty ? $0.replaces : $0.text)" },
-                seconds: Date().timeIntervalSince(started)
+                seconds: Date().timeIntervalSince(started),
+                fallbackReason: result.fallbackReason
             )
         } catch {
             return CoachEvalResult(

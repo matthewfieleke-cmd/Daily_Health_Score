@@ -56,6 +56,11 @@ final class CoachThreadLogicTests: XCTestCase {
         XCTAssertNil(CoachThreadLogic.sanitizedTitle(""))
         XCTAssertNil(CoachThreadLogic.sanitizedTitle("New chat"))
         XCTAssertNil(CoachThreadLogic.sanitizedTitle("This is a whole sentence that runs on far too long to be a title"))
+        XCTAssertNil(CoachThreadLogic.sanitizedTitle("How much fiber and sugar is"), "A trimmed question is not a title")
+        XCTAssertNil(CoachThreadLogic.sanitizedTitle("Help Me Word A Note"))
+        XCTAssertNil(CoachThreadLogic.sanitizedTitle("Weight Trend and the"))
+        XCTAssertEqual(CoachThreadLogic.sanitizedTitle("Clif Bar Fiber and Sugar"), "Clif Bar Fiber and Sugar")
+        XCTAssertEqual(CoachThreadLogic.sanitizedTitle("How Stress Narrows Perspective"), "How Stress Narrows Perspective")
     }
 
     func test_previewStripsMarkdownAndStaysOneLine() {

@@ -191,7 +191,8 @@ struct CoachThreadSection: Equatable, Identifiable {
 /// Pure list, naming, and timing rules. No SwiftData, no model calls.
 enum CoachThreadLogic {
     static let maxTitleCharacters = 40
-    static let maxTitleWords = 7
+    /// The filing pass asks for two to five words; six is already a sentence.
+    static let maxTitleWords = 6
     static let previewCharacters = 120
 
     static func sorted(_ threads: [CoachThread]) -> [CoachThread] {
@@ -282,11 +283,16 @@ enum CoachThreadLogic {
         }
         title = title.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
         guard !title.isEmpty else { return nil }
-        let words = title.split(separator: " ")
+        let words = title.split(separator: " ").map { $0.lowercased() }
         guard words.count <= maxTitleWords else { return nil }
         if title.count > maxTitleCharacters { return nil }
         let lowered = title.lowercased()
         if lowered == "new chat" || lowered == "chat" || lowered == "conversation" { return nil }
+        // A trimmed question is not a title: "How Much Fiber and Sugar Is".
+        let questionStarts: Set<String> = ["how", "what", "what's", "why", "when", "where", "which", "who", "is", "are", "can", "could", "should", "would", "do", "does", "did", "will", "help"]
+        let danglingEnds: Set<String> = ["is", "are", "was", "the", "a", "an", "of", "to", "and", "in", "on", "for", "with", "my", "your", "about", "at", "or", "if"]
+        if let last = words.last, danglingEnds.contains(last) { return nil }
+        if let first = words.first, questionStarts.contains(first), words.count >= 5 { return nil }
         return title
     }
 

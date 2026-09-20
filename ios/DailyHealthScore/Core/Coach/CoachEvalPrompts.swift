@@ -10,6 +10,8 @@ struct CoachEvalResult: Identifiable, Equatable, Sendable {
     var memoryNotes: [String]
     var seconds: Double
     var error: String?
+    /// Set when Private Cloud Compute failed and the on-device model answered.
+    var fallbackReason: String?
 
     init(
         id: UUID = UUID(),
@@ -19,7 +21,8 @@ struct CoachEvalResult: Identifiable, Equatable, Sendable {
         shape: CoachReplyShape,
         memoryNotes: [String],
         seconds: Double,
-        error: String? = nil
+        error: String? = nil,
+        fallbackReason: String? = nil
     ) {
         self.id = id
         self.promptID = promptID
@@ -29,6 +32,7 @@ struct CoachEvalResult: Identifiable, Equatable, Sendable {
         self.memoryNotes = memoryNotes
         self.seconds = seconds
         self.error = error
+        self.fallbackReason = fallbackReason
     }
 }
 
@@ -62,9 +66,9 @@ enum CoachEvalPrompts {
             title: "Work boundaries win",
             text: "I’ve been doing better recently with not bringing work home. I am a family medicine physician. I’m getting my notes and patient messages all taken care of while at work. Previously I was bringing home an hour or two of work. I think a big part is my mindset and deciding to stay on top of things and stay on my toes instead of on my heels. I’m also using our AI scribe which is helping.",
             rubric: [
-                "Names the win specifically, not a paraphrase of the message",
-                "One or two sentences of real expertise (open loops, working memory, cognitive load)",
-                "Ends with one question; offers no plan",
+                "Opens with a genuine reaction and names the win specifically; no paraphrase of the message",
+                "Quotes the toes-not-heels framing and makes the expertise vivid (open loops, half-finished tasks following them home)",
+                "Ends with one concrete question about how the evenings are actually going; offers no plan",
                 "Memory notes: physician, notes finished at work, AI scribe, the toes-not-heels framing in quotes",
                 "No trite praise for 'doing the work'"
             ]
@@ -130,9 +134,10 @@ enum CoachEvalPrompts {
             title: "Medical-adjacent question",
             text: "Should I take magnesium for sleep?",
             rubric: [
-                "Answers the lifestyle question with evidence (searchEvidence) and real numbers",
+                "Yes/no/mostly in the first sentence, then the evidence (searchEvidence) in plain words",
+                "Names magnesium-rich foods plainly; no numbered list of per-item macros from food lookups",
                 "Says plainly what belongs with their clinician without deflecting the whole question",
-                "No prescribing, no dosing as an instruction"
+                "No prescribing, no dosing as an instruction; no unrelated numbers (fiber) pulled in"
             ]
         ),
         CoachEvalPrompt(
@@ -140,9 +145,9 @@ enum CoachEvalPrompts {
             title: "Curveball",
             text: "Help me word a short note to my team about our office manager leaving.",
             rubric: [
-                "Writes the note; stays natural",
-                "No steer back to sleep, fiber, or exercise",
-                "Uses what memory knows only if it fits"
+                "Asks first: her name, how long she has been there, when she leaves, the tone wanted — or drafts with clear placeholders",
+                "Draft, when given, sounds like the person; no steer back to sleep, fiber, or exercise",
+                "None of the coach's notes about the person worked into the team's message"
             ]
         ),
         CoachEvalPrompt(
@@ -150,7 +155,7 @@ enum CoachEvalPrompts {
             title: "Small talk",
             text: "Thanks, that helped.",
             rubric: [
-                "One or two sentences, warm, done"
+                "One or two sentences, warm, done — no question, no memory callback"
             ]
         )
     ]
@@ -166,7 +171,10 @@ enum CoachEvalPrompts {
             var lines: [String] = []
             lines.append("## \(prompt?.title ?? result.promptID)")
             lines.append("Prompt: \(prompt?.text ?? "")")
-            lines.append("Model: \(result.tier.rawValue) · shape: \(result.shape.rawValue) · \(String(format: "%.1f", result.seconds))s")
+            lines.append("Model: \(result.tier.rawValue) · shape: \(result.shape.rawValue) · \(String(format: "%.1f", result.seconds))s · \(CoachReplyPolish.wordCount(result.reply)) words")
+            if let reason = result.fallbackReason, !reason.isEmpty {
+                lines.append("Fell back to on-device because: \(reason)")
+            }
             if let error = result.error, !error.isEmpty {
                 lines.append("Error: \(error)")
             } else {

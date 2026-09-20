@@ -9,6 +9,8 @@ struct CoachReplyContext: Equatable, Sendable {
     var allowUnpromptedHealth: Bool
     var recentConversations: String
     var goalPaceDirective: String?
+    /// Memory files with nothing in them yet; the intake asks toward these.
+    var emptyMemorySections: [String] = []
     var isAcquaintance: Bool { thread?.kind == .acquaintance }
 }
 
@@ -65,6 +67,8 @@ struct CoachReplyResult: Equatable {
     /// Which model wrote the message.
     var tier: CoachModelTier
     var shape: CoachReplyShape
+    /// Why the server model did not answer, when the on-device retry did.
+    var fallbackReason: String? = nil
 }
 
 /// What the on-device filing pass returns for a chat.

@@ -126,6 +126,11 @@ final class CoachMemoryStore: ObservableObject {
 
     var liveMemoryCount: Int { effectiveMemories.count }
 
+    /// Labels of the files the intake still needs to fill.
+    var emptySectionLabels: [String] {
+        CoachMemoryLogic.emptySections(in: effectiveMemories).map(\.label)
+    }
+
     var needsAcquaintance: Bool {
         CoachAcquaintance.isNeeded(threads: threads, liveMemoryCount: liveMemoryCount)
     }

@@ -6,12 +6,41 @@ struct BodyWeightSample: Equatable, Sendable {
     var kilograms: Double
 }
 
+/// The unit the person sees weight in. Kilograms stay canonical underneath;
+/// this only decides the words.
+enum BodyMassUnit: String, Equatable, Codable, Sendable {
+    case kilograms
+    case pounds
+
+    /// What Health would show when it has not told us: pounds in the US.
+    static func preferred(for locale: Locale = .current) -> BodyMassUnit {
+        locale.measurementSystem == .us ? .pounds : .kilograms
+    }
+
+    var symbol: String { self == .pounds ? "lb" : "kg" }
+
+    func value(fromKilograms kilograms: Double) -> Double {
+        self == .pounds ? kilograms * 2.20462262 : kilograms
+    }
+
+    /// "269.2 lb" or "122.1 kg", one decimal either way.
+    func text(fromKilograms kilograms: Double) -> String {
+        "\(BodyTrend.round1(value(fromKilograms: kilograms))) \(symbol)"
+    }
+
+    /// The noise band in this unit's words.
+    var noiseBandDescription: String {
+        self == .pounds ? "within about a pound" : "within half a kilogram"
+    }
+}
+
 /// Weight, height, and BMI as Health reports them, before any interpretation.
 struct BodyMeasurements: Equatable, Sendable {
     var weights: [BodyWeightSample] = []
     var heightMeters: Double?
     var latestBMISample: Double?
     var latestBMIDate: Date?
+    var unit: BodyMassUnit = .preferred()
 
     var isEmpty: Bool { weights.isEmpty && heightMeters == nil && latestBMISample == nil }
 }
@@ -40,6 +69,7 @@ struct BodyTrend: Equatable, Sendable {
     var heightMeters: Double?
     var daysSinceLatest: Int?
     var readingCount: Int
+    var unit: BodyMassUnit = .kilograms
 
     var direction4w: Direction? { changeOverFourWeeks.map(Self.direction) }
     var direction12w: Direction? { changeOverTwelveWeeks.map(Self.direction) }
@@ -70,6 +100,7 @@ struct BodyTrend: Equatable, Sendable {
             .sorted { $0.date < $1.date }
         var trend = BodyTrend(readingCount: weights.count)
         trend.heightMeters = measurements.heightMeters
+        trend.unit = measurements.unit
 
         if let latest = weights.last {
             trend.latestKilograms = round1(latest.kilograms)
@@ -120,12 +151,12 @@ struct BodyTrend: Equatable, Sendable {
 
     // MARK: - Words for the model
 
-    /// Sentences, not readings. The daily number appears only as "latest".
+    /// Sentences, not readings, in the unit the person uses. The daily number
+    /// appears only as "latest".
     var promptBlock: String {
         var lines: [String] = []
         if let smoothed = smoothedKilograms ?? latestKilograms {
-            let pounds = smoothed * 2.20462
-            var line = "Weight: about \(BodyTrend.round1(smoothed)) kg (\(Int(pounds.rounded())) lb), seven-day average"
+            var line = "Weight: about \(unit.text(fromKilograms: smoothed)), seven-day average"
             if let days = daysSinceLatest {
                 if days > BodyTrend.staleAfterDays {
                     line += "; the last reading is \(days) days old, so treat it as background"
@@ -148,17 +179,18 @@ struct BodyTrend: Equatable, Sendable {
             lines.append("BMI about \(bmi), \(BodyTrend.bmiBand(bmi)) — a screening number blind to build and muscle, never a verdict.")
         }
         guard !lines.isEmpty else { return "No weight or height data shared." }
+        lines.append("Speak in \(unit == .pounds ? "pounds" : "kilograms"); that is how this person weighs themselves.")
         return lines.joined(separator: " ")
     }
 
     private func changeSentence(_ change: Double, direction: Direction, period: String) -> String {
         switch direction {
         case .steady:
-            return "Steady over the last \(period) (within half a kilogram)."
+            return "Steady over the last \(period) (\(unit.noiseBandDescription))."
         case .down:
-            return "Down about \(BodyTrend.round1(abs(change))) kg over the last \(period), gradual."
+            return "Down about \(unit.text(fromKilograms: abs(change))) over the last \(period), gradual."
         case .up:
-            return "Up about \(BodyTrend.round1(abs(change))) kg over the last \(period)."
+            return "Up about \(unit.text(fromKilograms: abs(change))) over the last \(period)."
         }
     }
 }

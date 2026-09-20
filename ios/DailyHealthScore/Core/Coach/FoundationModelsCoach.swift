@@ -219,9 +219,11 @@ final class FoundationModelsCoach {
             let profileSection = compact ? "Omitted." : (profile.isEmpty ? "None yet." : profile.limitedToCoachBudget(budget.profileCharacters))
             let memorySection = compact ? "Omitted." : memoryBlock.limitedToCoachBudget(budget.profileCharacters)
             let recentSection = compact ? "Omitted." : context.recentConversations.limitedToCoachBudget(budget.summaryCharacters)
-            let acquaintance = context.isAcquaintance ? CoachCharter.acquaintanceContract : ""
+            let acquaintance = context.isAcquaintance
+                ? CoachCharter.acquaintanceContract(emptyFiles: context.emptyMemorySections)
+                : ""
             let opening = context.isFirstReply
-                ? "This is the first exchange of a new chat; if a note or an earlier chat connects, one accurate callback belongs near the top."
+                ? "This is the first exchange of a new chat. Most first replies need no callback to the files; use one only if a note genuinely bears on this message."
                 : "Stay with this conversation; do not restart it."
             if isGoalConversation {
                 let goalContext = CoachGoalPlanning.context(
@@ -283,7 +285,7 @@ final class FoundationModelsCoach {
                 """
             } ?? ""
             let toolsLine = answeringTier == .privateCloud
-                ? "TOOLS: \(CoachSessionTools.toolNames). Look up any food or product they named before estimating; use the calculator for totals; use the evidence tool when a claim deserves a source."
+                ? "TOOLS: \(CoachSessionTools.toolNames). Look up any food or product they named or asked about before estimating — not foods you are merely recommending; use the calculator for totals; use the evidence tool when a claim deserves a source."
                 : "TOOLS: none on this device. Estimate food values and label them approximate."
             let suggestedSection = alreadySuggested.map { "\n" + $0 } ?? ""
             return """
@@ -330,6 +332,7 @@ final class FoundationModelsCoach {
         }
 
         let content: GenerableCoachReply
+        var fallbackReason: String?
         do {
             content = try await CoachModelProvider.respond(
                 session,
@@ -343,6 +346,9 @@ final class FoundationModelsCoach {
             // exhausted server quota, or context pressure. Retry on-device with
             // memory and reference material dropped. If that also fails the
             // cause is not size or reachability, so say something human.
+            if tier == .privateCloud {
+                fallbackReason = Self.describe(error)
+            }
             let retryBudget = CoachContextBudget.make(
                 totalTokens: await CoachModelProvider.contextTokens(for: .onDevice),
                 instructionCharacters: instructions.count
@@ -391,11 +397,21 @@ final class FoundationModelsCoach {
             goalProposal: proposal,
             proposalRejected: isGoalConversation && content.goalProposal != nil && proposal == nil,
             tier: lastTierUsed,
-            shape: shape
+            shape: shape,
+            fallbackReason: fallbackReason
         )
         #else
         throw CoachError.unavailable(.unavailable)
         #endif
+    }
+
+    /// The framework's error, named for the eval screen: the enum case plus its
+    /// message, so a guardrail refusal reads differently from a network drop.
+    nonisolated static func describe(_ error: Error) -> String {
+        let mirror = String(reflecting: error)
+        let described = error.localizedDescription
+        if mirror.count <= 160 { return described.isEmpty ? mirror : "\(mirror): \(described)" }
+        return described.isEmpty ? String(mirror.prefix(160)) : described
     }
 
     // MARK: - On-device filing
@@ -555,7 +571,7 @@ struct GenerableMemoryUpdate {
     @Guide(description: "aboutYou, people, patterns, coaching, goals, likes, routines, body, or recent.")
     var section: String
 
-    @Guide(description: "The note, under 240 characters, third person, present tense, specific: names, products, dates as of a month, the person's own phrase in quotes when it matters. Empty for remove.")
+    @Guide(description: "The note as one full sentence with its context — the when, the why, or the person's own words — never a bare word ('Does yoga; part of what a good day looks like to him', not 'Yoga.'). Under 240 characters, third person, present tense, specific: names, products, dates as of a month. Empty for remove.")
     var text: String
 
     @Guide(description: "For update or remove: the existing note being replaced or removed, quoted as closely as possible. Empty for add.")

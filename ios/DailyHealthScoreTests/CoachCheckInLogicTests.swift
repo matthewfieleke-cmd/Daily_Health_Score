@@ -41,6 +41,28 @@ final class CoachCheckInLogicTests: XCTestCase {
         XCTAssertNotEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-20", kind: .evening, goals: [first, second]))
     }
 
+    /// A Health sync that lands the first numbers or crosses a goal changes the
+    /// signature and earns a rewrite; a few more fiber grams below goal do not.
+    func test_statusSignatureChangesOnlyWhenTheShapeOfTheDayDoes() {
+        let empty = makeRecord(date: "2026-09-19", sleep: 0, fiber: 0, exercise: 0)
+        let morning = makeRecord(date: "2026-09-19", sleep: 4.2, fiber: 7, exercise: 9)
+        let moreFiber = makeRecord(date: "2026-09-19", sleep: 4.2, fiber: 19, exercise: 9)
+        let fiberMet = makeRecord(date: "2026-09-19", sleep: 4.2, fiber: 41, exercise: 9)
+        XCTAssertNotEqual(CoachCheckInLogic.statusSignature(for: empty), CoachCheckInLogic.statusSignature(for: morning))
+        XCTAssertEqual(CoachCheckInLogic.statusSignature(for: morning), CoachCheckInLogic.statusSignature(for: moreFiber))
+        XCTAssertNotEqual(CoachCheckInLogic.statusSignature(for: moreFiber), CoachCheckInLogic.statusSignature(for: fiberMet))
+        XCTAssertTrue(CoachCheckInLogic.statusSignature(for: empty).contains("sleep=none"))
+        XCTAssertTrue(CoachCheckInLogic.statusSignature(for: fiberMet).contains("fiber=met"))
+        XCTAssertFalse(CoachCheckInLogic.statusSignature(for: morning).contains("focus"), "The weakest pillar flips all day; it must not drive rewrites")
+
+        let goals = [CoachTestFixtures.goal(text: "walk after lunch")]
+        let before = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: goals, signature: CoachCheckInLogic.statusSignature(for: morning))
+        let same = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: goals, signature: CoachCheckInLogic.statusSignature(for: moreFiber))
+        let crossed = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: goals, signature: CoachCheckInLogic.statusSignature(for: fiberMet))
+        XCTAssertEqual(before, same)
+        XCTAssertNotEqual(before, crossed)
+    }
+
     func test_goalRowsPutUnloggedFirstAndKnowWhatWasLoggedToday() {
         let walk = CoachTestFixtures.goal(text: "walk after lunch")
         let call = CoachTestFixtures.goal(text: "call a friend")
@@ -119,6 +141,8 @@ final class CoachCheckInLogicTests: XCTestCase {
         XCTAssertFalse(CoachAcquaintance.isNeeded(threads: [intake], liveMemoryCount: 0))
         XCTAssertEqual(CoachAcquaintance.existingThread(in: [intake])?.id, intake.id)
         XCTAssertTrue(CoachAcquaintance.opener.contains("?"))
+        XCTAssertTrue(CoachAcquaintance.opener.contains("what should I call you"))
+        XCTAssertTrue(CoachAcquaintance.opener.contains("who's at home"))
     }
 
     func test_goalCheckInRequestValidatesAgainstLiveGoals() {

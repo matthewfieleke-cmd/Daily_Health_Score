@@ -21,12 +21,15 @@ enum CoachCheckInKind: String, Codable, Sendable {
     }
 }
 
-/// The Home card. Written by the Coach twice a day; deterministic when the
-/// model is unavailable. Reply opens a chat that starts with this text.
+/// The Home card. Written by the Coach for each window of the day and again
+/// when the day's shape changes; deterministic when the model is unavailable.
+/// It never carries numbers — the tiles above it show those live — so it
+/// cannot go stale against them. Reply opens a chat that starts with this text.
 struct CoachCheckIn: Equatable, Codable, Sendable {
     var kind: CoachCheckInKind
     var dateKey: String
-    /// One spoken sentence about today (morning) or how the day went (evening).
+    /// One spoken sentence about the shape of today (morning) or how the day
+    /// went (evening), without numbers.
     var healthLine: String
     /// One question that shows the Coach remembers this person.
     var question: String
@@ -93,15 +96,42 @@ enum CoachCheckInLogic {
         calendar.component(.weekday, from: date) == 2
     }
 
-    /// Two writes a day at most. Tapping a goal Done must not rewrite the card,
-    /// so progress masks stay out of the key; only which goals exist matters.
-    static func cacheKey(dateKey: String, kind: CoachCheckInKind, goals: [SMARTGoal]) -> String {
+    /// Health has synced something for today. Before that, writing a card
+    /// would describe an empty day as a bad one.
+    static func hasData(_ record: DailyRecord) -> Bool {
+        record.sleepHours > 0 || record.fiberGrams > 0 || record.exerciseMinutes > 0
+    }
+
+    /// The shape of the day as the card describes it: whether sleep is in, and
+    /// which pillars are met versus still open. It changes a few times a day
+    /// at most (first sync, a pillar crossing its goal), and each change earns
+    /// a rewrite so the card never contradicts the tiles above it. The weakest
+    /// pillar is deliberately not part of it: fiber and movement leapfrog each
+    /// other all day, and the card speaks in open-versus-in-hand terms instead.
+    static func statusSignature(for record: DailyRecord) -> String {
+        let sleep = record.sleepHours <= 0
+            ? "none"
+            : (record.sleepHours >= record.sleepGoal.rawValue ? "met" : "below")
+        let fiber = record.fiberGrams >= Double(record.fiberGoal.rawValue) ? "met" : "open"
+        let exercise = record.exerciseMinutes >= Double(record.exerciseGoalMinutes) ? "met" : "open"
+        return "sleep=\(sleep),fiber=\(fiber),exercise=\(exercise)"
+    }
+
+    /// One write per window and per shape of the day. Tapping a goal Done must
+    /// not rewrite the card, so progress masks stay out of the key; only which
+    /// goals exist matters.
+    static func cacheKey(
+        dateKey: String,
+        kind: CoachCheckInKind,
+        goals: [SMARTGoal],
+        signature: String = ""
+    ) -> String {
         let ids = goals
             .filter { $0.status == .active && !$0.isComplete && !$0.isExpired }
             .map(\.id.uuidString)
             .sorted()
             .joined(separator: ",")
-        return "\(dateKey)#\(kind.rawValue)#checkin2#\(ids)"
+        return "\(dateKey)#\(kind.rawValue)#checkin3#\(ids)#\(signature)"
     }
 
     /// Active goals a person could still log today, unlogged ones first.
@@ -251,10 +281,12 @@ enum CoachAcquaintance {
     /// With this many live notes the Coach already knows enough to skip the intake.
     static let notesThatSkipIntake = 3
 
+    /// Names what is useful up front, so a short answer can still be specific,
+    /// then asks the two things every later reply leans on.
     static let opener = """
-    Before we get to any numbers, I'd like to know you a little. Nothing here is a test, and you can skip anything.
+    Before we get to any numbers, I'd like to know you a little — the things a good coach actually uses: what you do and how your week runs, who's at home, what tends to trip you up and what helps, what lifts you. Nothing here is a test, and you can skip anything.
 
-    To start: what does a good day look like for you, from waking up to lights out?
+    To start: what should I call you, and what do you do for work — including which days tend to run heaviest?
     """
 
     static func existingThread(in threads: [CoachThread]) -> CoachThread? {
