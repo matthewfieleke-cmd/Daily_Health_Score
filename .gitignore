@@ -31,3 +31,6 @@ __pycache__/
 # Leftover web build artifacts (app is iOS-only)
 dist/
 node_modules/
+
+# App secrets (USDA FoodData Central key). Copy Secrets.example.plist to Secrets.plist locally.
+ios/DailyHealthScore/Secrets.plist

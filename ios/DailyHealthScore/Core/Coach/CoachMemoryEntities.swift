@@ -8,6 +8,8 @@ final class CoachChatMessageEntity {
     var text: String
     var createdAt: Date
     var threadId: UUID?
+    /// Which model wrote a Coach turn; empty for user turns and older rows.
+    var modelTierRaw: String = ""
 
     init(turn: CoachChatTurn) {
         id = turn.id
@@ -15,11 +17,19 @@ final class CoachChatMessageEntity {
         text = turn.text
         createdAt = turn.createdAt
         threadId = turn.threadId
+        modelTierRaw = turn.modelTier?.rawValue ?? ""
     }
 
     func toTurn() -> CoachChatTurn? {
         guard let role = CoachChatTurn.Role(rawValue: roleRaw) else { return nil }
-        return CoachChatTurn(id: id, role: role, text: text, createdAt: createdAt, threadId: threadId)
+        return CoachChatTurn(
+            id: id,
+            role: role,
+            text: text,
+            createdAt: createdAt,
+            threadId: threadId,
+            modelTier: CoachModelTier(rawValue: modelTierRaw)
+        )
     }
 }
 
@@ -162,6 +172,11 @@ final class CoachMemoryStateEntity {
     var updatedAt: Date
     var memoryRevision: Int = 0
     var deletedFingerprintsJSON: String = "[]"
+    /// One paragraph per file, compiled on-device from the entries.
+    var compiledProfile: String = ""
+    /// Fingerprint of the entries the profile was compiled from.
+    var compiledProfileKey: String = ""
+    var lastFilesReviewAt: Date?
 
     init(
         id: String = "default",

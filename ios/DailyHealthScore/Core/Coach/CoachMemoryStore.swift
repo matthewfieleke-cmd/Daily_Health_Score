@@ -373,7 +373,7 @@ final class CoachMemoryStore: ObservableObject {
             let item = CoachMemoryItem(
                 category: CoachMemoryCategory(section: update.section),
                 content: update.text,
-                provenance: .coachNoted,
+                provenance: update.basis.provenance,
                 createdAt: now,
                 confirmation: .unconfirmed
             )
@@ -399,10 +399,12 @@ final class CoachMemoryStore: ObservableObject {
                 }
                 if CoachMemoryFingerprint.normalize(target.content) == CoachMemoryFingerprint.normalize(update.text) { continue }
                 guard !CoachMemoryLogic.isTombstoned(content: update.text, tombstones: blocked) else { continue }
+                // A stated fact stays stated when the Coach rewrites it.
+                let provenance: CoachMemoryProvenance = target.provenance.isStated ? .coachRecorded : update.basis.provenance
                 let replacement = CoachMemoryItem(
                     category: CoachMemoryCategory(section: update.section),
                     content: update.text,
-                    provenance: .coachNoted,
+                    provenance: provenance,
                     createdAt: now,
                     associatedGoalId: target.associatedGoalId,
                     confirmation: .unconfirmed
@@ -476,12 +478,171 @@ final class CoachMemoryStore: ObservableObject {
                 upsert(restored)
                 removeTombstone(item.contentFingerprint)
             }
+        case .refiled:
+            // previousContent carries the original file's storage key.
+            if let item = memories.first(where: { $0.id == stored.itemId }),
+               let original = CoachMemorySection(rawValue: stored.previousContent) {
+                var moved = item
+                moved.category = CoachMemoryCategory(section: original)
+                upsert(moved)
+            }
         }
         stored.isUndone = true
         upsertChange(stored)
         persistDerivedProfile()
-        bumpRevision(removing: stored.newContent.isEmpty ? [] : [stored.newContent])
+        bumpRevision(removing: stored.newContent.isEmpty || stored.kind == .refiled ? [] : [stored.newContent])
         reload()
+    }
+
+    /// The person agrees with an inferred note: it becomes a stated fact.
+    func confirmInference(_ item: CoachMemoryItem, now: Date = Date()) {
+        var confirmed = item
+        confirmed.provenance = .userConfirmed
+        confirmed.confirmation = .confirmed
+        confirmed.lastConfirmedAt = now
+        save(confirmed)
+    }
+
+    // MARK: - Compiled profile and housekeeping
+
+    /// Fingerprint of the live entries, so the compiled profile is rebuilt only
+    /// when something changed.
+    var memoryFingerprint: String {
+        let live = effectiveMemories.sorted { $0.id.uuidString < $1.id.uuidString }
+        return CoachMemoryFingerprint.fingerprint(live.map { "\($0.id.uuidString)|\($0.section.rawValue)|\($0.content)" }.joined(separator: "\n"))
+    }
+
+    var compiledProfile: String {
+        let state = fetchOrCreateState()
+        // A stale profile is worse than none: it would contradict the entries.
+        guard state.compiledProfileKey == memoryFingerprint else { return "" }
+        return state.compiledProfile
+    }
+
+    var needsProfileCompile: Bool {
+        !effectiveMemories.isEmpty && fetchOrCreateState().compiledProfileKey != memoryFingerprint
+    }
+
+    func saveCompiledProfile(_ profile: String) {
+        let state = fetchOrCreateState()
+        state.compiledProfile = profile
+        state.compiledProfileKey = memoryFingerprint
+        state.updatedAt = Date()
+        try? modelContext.save()
+        objectWillChange.send()
+    }
+
+    /// Housekeeping runs at most daily and only once the files have some weight.
+    func shouldReviewFiles(now: Date = Date()) -> Bool {
+        guard effectiveMemories.count >= 6 else { return false }
+        let state = fetchOrCreateState()
+        guard let last = state.lastFilesReviewAt else { return true }
+        return now.timeIntervalSince(last) >= 20 * 3600
+    }
+
+    func markFilesReviewed(now: Date = Date()) {
+        let state = fetchOrCreateState()
+        state.lastFilesReviewAt = now
+        try? modelContext.save()
+    }
+
+    var entryList: String {
+        CoachMemoryLogic.entryList(items: memories)
+    }
+
+    /// Applies the review pass. Every operation is logged and undoable; stated
+    /// notes are only ever refiled or dated, never reworded into something else.
+    @discardableResult
+    func applyReview(_ operations: [CoachFileReviewOperation], now: Date = Date()) -> [CoachMemoryChange] {
+        var applied: [CoachMemoryChange] = []
+        let live = effectiveMemories
+        func target(_ prefix: String) -> CoachMemoryItem? {
+            live.first { $0.id.uuidString.lowercased().hasPrefix(prefix) }
+        }
+        for operation in operations.prefix(6) {
+            switch operation.kind {
+            case .refile:
+                guard let item = target(operation.idPrefix), let section = operation.section, item.section != section else { continue }
+                var moved = item
+                moved.category = CoachMemoryCategory(section: section)
+                upsert(moved)
+                applied.append(record(CoachMemoryChange(
+                    kind: .refiled,
+                    section: section,
+                    itemId: item.id,
+                    previousContent: item.section.rawValue,
+                    newContent: item.content,
+                    createdAt: now
+                )))
+            case .update:
+                guard let item = target(operation.idPrefix) else { continue }
+                let before = CoachMemoryFingerprint.normalize(item.content)
+                let after = CoachMemoryFingerprint.normalize(operation.text)
+                guard before != after else { continue }
+                // A stated note may only gain a date or a merged detail, never shrink.
+                if item.provenance.isStated, operation.text.count < item.content.count { continue }
+                var replacement = CoachMemoryItem(
+                    category: item.category,
+                    content: operation.text,
+                    provenance: item.provenance,
+                    createdAt: item.createdAt,
+                    lastConfirmedAt: item.lastConfirmedAt,
+                    associatedGoalId: item.associatedGoalId,
+                    confirmation: item.confirmation,
+                    isTemporary: item.isTemporary
+                )
+                if let section = operation.section { replacement.category = CoachMemoryCategory(section: section) }
+                var previous = item
+                previous.supersededById = replacement.id
+                upsert(previous)
+                upsert(replacement)
+                applied.append(record(CoachMemoryChange(
+                    kind: .updated,
+                    section: replacement.section,
+                    itemId: replacement.id,
+                    previousItemId: item.id,
+                    previousContent: item.content,
+                    newContent: operation.text,
+                    createdAt: now
+                )))
+            case .retire:
+                guard let item = target(operation.idPrefix), !item.provenance.isStated || item.section == .recent else { continue }
+                var deleted = item
+                deleted.isDeleted = true
+                upsert(deleted)
+                applied.append(record(CoachMemoryChange(
+                    kind: .removed,
+                    section: item.section,
+                    itemId: item.id,
+                    previousContent: item.content,
+                    createdAt: now
+                )))
+            case .add:
+                guard let section = operation.section,
+                      !CoachMemoryLogic.hasEquivalent(operation.text, in: memories, at: now),
+                      !CoachMemoryLogic.isTombstoned(content: operation.text, tombstones: tombstones) else { continue }
+                let item = CoachMemoryItem(
+                    category: CoachMemoryCategory(section: section),
+                    content: operation.text,
+                    provenance: .coachNoted,
+                    createdAt: now,
+                    confirmation: .unconfirmed
+                )
+                upsert(item)
+                applied.append(record(CoachMemoryChange(
+                    kind: .added,
+                    section: section,
+                    itemId: item.id,
+                    newContent: operation.text,
+                    createdAt: now
+                )))
+            }
+        }
+        if !applied.isEmpty {
+            persistDerivedProfile()
+            reload()
+        }
+        return applied
     }
 
     /// Model-extracted notes stay unconfirmed interpretations. Tombstones win.

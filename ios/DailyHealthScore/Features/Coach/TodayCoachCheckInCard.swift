@@ -28,6 +28,7 @@ struct TodayCoachCheckInCard: View {
                         goals: appState.smartGoalStore.goals,
                         activities: appState.smartGoalStore.activities,
                         hrvSensitivity: appState.settingsStore.hrvSensitivity,
+                        bodyTrend: appState.bodyTrend,
                         now: context.date
                     )
                 }
@@ -41,6 +42,7 @@ struct TodayCoachCheckInCard: View {
                     goals: appState.smartGoalStore.goals,
                     activities: appState.smartGoalStore.activities,
                     hrvSensitivity: appState.settingsStore.hrvSensitivity,
+                    bodyTrend: appState.bodyTrend,
                     force: true
                 )
             }

@@ -46,10 +46,14 @@ final class HealthKitService {
               let hrv = HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else {
             throw HealthKitError.unavailable
         }
-        try await store.requestAuthorization(
-            toShare: [],
-            read: [sleep, fiber, exercise, hrv, HKObjectType.workoutType()]
-        )
+        var readTypes: Set<HKObjectType> = [sleep, fiber, exercise, hrv, HKObjectType.workoutType()]
+        // Weight, height, and BMI feed the Coach only; the score never sees them.
+        for identifier in [HKQuantityTypeIdentifier.bodyMass, .height, .bodyMassIndex] {
+            if let type = HKObjectType.quantityType(forIdentifier: identifier) {
+                readTypes.insert(type)
+            }
+        }
+        try await store.requestAuthorization(toShare: [], read: readTypes)
     }
 
     /// Wakes the app when sleep, fiber, exercise minutes, or a workout land in

@@ -58,11 +58,18 @@ struct CoachGoalCheckInRequest: Identifiable, Equatable, Sendable {
 
 struct CoachReplyResult: Equatable {
     var message: String
-    var title: String
-    var summary: String
-    var pillar: CoachPillar
     var memoryUpdates: [CoachMemoryUpdate]
     var goalCheckIn: CoachGoalCheckInRequest?
     var goalProposal: CoachGoalProposal?
     var proposalRejected: Bool
+    /// Which model wrote the message.
+    var tier: CoachModelTier
+    var shape: CoachReplyShape
+}
+
+/// What the on-device filing pass returns for a chat.
+struct CoachChatFiling: Equatable, Sendable {
+    var title: String
+    var summary: String
+    var pillar: CoachPillar
 }

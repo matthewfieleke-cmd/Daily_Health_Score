@@ -18,6 +18,7 @@ final class LifestyleCoachController: ObservableObject {
     @Published private(set) var goalProposal: CoachGoalProposal?
     /// The Coach heard "I did it"; the person confirms before anything is logged.
     @Published private(set) var pendingGoalCheckIn: CoachGoalCheckInRequest?
+    @Published private(set) var isHousekeeping = false
     private var checkInGenerationID = UUID()
     private var chatGenerationID = UUID()
 
@@ -83,6 +84,7 @@ final class LifestyleCoachController: ObservableObject {
         goals: [SMARTGoal] = [],
         activities: [SMARTGoalActivity] = [],
         hrvSensitivity: HRVSensitivity = .balanced,
+        bodyTrend: BodyTrend? = nil,
         force: Bool = false,
         now: Date = Date(),
         calendar: Calendar = .current
@@ -127,6 +129,8 @@ final class LifestyleCoachController: ObservableObject {
         }
         defer { if checkInGenerationID == generationID { isGeneratingCheckIn = false } }
 
+        await compileProfileIfNeeded()
+
         do {
             let snapshot = CoachSnapshotBuilder.build(
                 today: record,
@@ -135,11 +139,13 @@ final class LifestyleCoachController: ObservableObject {
                 hrvSensitivity: hrvSensitivity,
                 phase: DayPhase.current(from: now, calendar: calendar),
                 now: now,
-                calendar: calendar
+                calendar: calendar,
+                bodyTrend: bodyTrend
             )
             let generated = try await model.generateCheckIn(
                 kind: kind,
                 snapshot: snapshot,
+                profile: memory.compiledProfile,
                 memoryBlock: memory.promptMemoryBlock,
                 recentConversations: memory.recentConversationsBlock(now: now),
                 goalRows: rows,
@@ -182,7 +188,8 @@ final class LifestyleCoachController: ObservableObject {
         focusedGoalID: UUID? = nil,
         planningGoal: Bool = false,
         focus: CoachFocusContext? = nil,
-        activities: [SMARTGoalActivity] = []
+        activities: [SMARTGoalActivity] = [],
+        bodyTrend: BodyTrend? = nil
     ) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -242,13 +249,16 @@ final class LifestyleCoachController: ObservableObject {
             goalPaceDirective: SMARTGoalPace.directive(goals: goals)
         )
 
+        await compileProfileIfNeeded()
+
         do {
             let snapshot = todayRecord.map {
                 CoachSnapshotBuilder.build(
                     today: $0,
                     records: records,
                     goals: goals,
-                    hrvSensitivity: hrvSensitivity
+                    hrvSensitivity: hrvSensitivity,
+                    bodyTrend: bodyTrend
                 )
             }
             let result = try await model.reply(
@@ -256,6 +266,7 @@ final class LifestyleCoachController: ObservableObject {
                 intent: intent,
                 snapshot: snapshot,
                 historyBlock: historyBlock,
+                profile: memory.compiledProfile,
                 memoryBlock: memory.promptMemoryBlock,
                 recentTurns: memory.recentTurnsForPrompt(limit: CoachContextBudget.maxTranscriptTurns),
                 goals: goals,
@@ -264,16 +275,11 @@ final class LifestyleCoachController: ObservableObject {
                 planningGoal: planningGoal,
                 focus: focus,
                 activitiesByGoal: Dictionary(grouping: activities, by: \.goalId),
+                bodyTrend: bodyTrend,
                 context: context
             )
             guard chatGenerationID == generationID else { return }
-            memory.append(CoachChatTurn(role: .coach, text: result.message))
-            memory.applyReplyMetadata(
-                threadID: thread.id,
-                title: result.title,
-                summary: result.summary,
-                pillar: result.pillar
-            )
+            memory.append(CoachChatTurn(role: .coach, text: result.message, modelTier: result.tier))
             if allowHealth {
                 memory.markHealthMentioned()
             }
@@ -293,6 +299,9 @@ final class LifestyleCoachController: ObservableObject {
                     memory.ingestUserStatedFacts(from: trimmed)
                 }
             }
+            // Filing happens after the reply is on screen and costs no quota.
+            await fileChat(threadID: thread.id, userMessage: trimmed, reply: result.message)
+            await compileProfileIfNeeded()
         } catch {
             guard chatGenerationID == generationID else { return }
             let message = error.localizedDescription.isEmpty
@@ -309,6 +318,124 @@ final class LifestyleCoachController: ObservableObject {
         isChatBusy = true
         chatGenerationID = UUID()
     }
+
+    // MARK: - On-device filing and housekeeping
+
+    private func fileChat(threadID: UUID, userMessage: String, reply: String) async {
+        guard let thread = memory.threads.first(where: { $0.id == threadID }) else { return }
+        do {
+            let filing = try await model.fileChat(
+                userMessage: userMessage,
+                reply: reply,
+                currentTitle: thread.title,
+                titleIsProvisional: thread.titleIsProvisional,
+                currentPillar: thread.pillar
+            )
+            memory.applyReplyMetadata(
+                threadID: threadID,
+                title: filing.title,
+                summary: filing.summary,
+                pillar: filing.pillar
+            )
+        } catch {
+            // The provisional title stands; nothing else depends on this.
+        }
+    }
+
+    /// Rebuilds the compiled profile when the entries changed. On-device.
+    func compileProfileIfNeeded() async {
+        guard availability == .available, memory.needsProfileCompile else { return }
+        do {
+            let profile = try await model.compileProfile(entryList: memory.entryList)
+            memory.saveCompiledProfile(profile)
+        } catch {
+            // Entries alone still go into the prompt.
+        }
+    }
+
+    /// Daily tidy of the files, on-device, logged and undoable.
+    func performHousekeepingIfDue() async {
+        refreshAvailability()
+        guard availability == .available, !isHousekeeping, memory.shouldReviewFiles() else { return }
+        isHousekeeping = true
+        defer { isHousekeeping = false }
+        do {
+            let operations = try await model.reviewFiles(entryList: memory.entryList)
+            memory.applyReview(operations)
+            memory.markFilesReviewed()
+            await compileProfileIfNeeded()
+        } catch {
+            // Try again tomorrow.
+        }
+    }
+
+    // MARK: - Eval
+
+    /// Runs one prompt through the live pipeline without saving anything:
+    /// no chat, no memory edits, no card. For the eval screen.
+    func evaluate(
+        prompt: String,
+        promptID: String,
+        todayRecord: DailyRecord?,
+        records: [DailyRecord],
+        goals: [SMARTGoal],
+        activities: [SMARTGoalActivity],
+        hrvSensitivity: HRVSensitivity,
+        bodyTrend: BodyTrend?
+    ) async -> CoachEvalResult {
+        refreshAvailability()
+        let started = Date()
+        guard availability == .available else {
+            return CoachEvalResult(
+                promptID: promptID, reply: "", tier: .onDevice, shape: .general, memoryNotes: [],
+                seconds: 0, error: availability.guidance
+            )
+        }
+        let intent = CoachIntentClassifier.classify(prompt)
+        let context = CoachReplyContext(
+            thread: nil,
+            isFirstReply: true,
+            pillar: .general,
+            allowUnpromptedHealth: false,
+            recentConversations: memory.recentConversationsBlock(),
+            goalPaceDirective: SMARTGoalPace.directive(goals: goals)
+        )
+        do {
+            let snapshot = todayRecord.map {
+                CoachSnapshotBuilder.build(
+                    today: $0, records: records, goals: goals, hrvSensitivity: hrvSensitivity, bodyTrend: bodyTrend
+                )
+            }
+            let result = try await model.reply(
+                to: prompt,
+                intent: intent,
+                snapshot: snapshot,
+                historyBlock: nil,
+                profile: memory.compiledProfile,
+                memoryBlock: memory.promptMemoryBlock,
+                recentTurns: [],
+                goals: goals,
+                activitiesByGoal: Dictionary(grouping: activities, by: \.goalId),
+                bodyTrend: bodyTrend,
+                context: context
+            )
+            return CoachEvalResult(
+                promptID: promptID,
+                reply: result.message,
+                tier: result.tier,
+                shape: result.shape,
+                memoryNotes: result.memoryUpdates.map { "\($0.operation.rawValue) · \($0.section.label) · \($0.basis.rawValue): \($0.text.isEmpty ? $0.replaces : $0.text)" },
+                seconds: Date().timeIntervalSince(started)
+            )
+        } catch {
+            return CoachEvalResult(
+                promptID: promptID, reply: "", tier: .onDevice, shape: .general, memoryNotes: [],
+                seconds: Date().timeIntervalSince(started), error: error.localizedDescription
+            )
+        }
+    }
+
+    // MARK: - Clearing
 
     /// Chats, files, and the card.
     func clearMemory() {
