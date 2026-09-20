@@ -97,6 +97,19 @@ extension CoachModelProvider {
         ).content
     }
 
+    /// Free text, the same way: reasoning on the server model, defaults on-device.
+    static func respondText(
+        _ session: LanguageModelSession,
+        to prompt: String,
+        tier: CoachModelTier,
+        depth: CoachReasoningDepth
+    ) async throws -> String {
+        guard tier == .privateCloud else {
+            return try await session.respond(to: prompt).content
+        }
+        return try await session.respond(to: prompt, contextOptions: contextOptions(for: depth)).content
+    }
+
     private static func contextOptions(for depth: CoachReasoningDepth) -> ContextOptions {
         switch depth {
         case .light: return ContextOptions(reasoningLevel: .light)
