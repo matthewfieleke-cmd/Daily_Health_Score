@@ -11,6 +11,10 @@ struct CoachReplyContext: Equatable, Sendable {
     var goalPaceDirective: String?
     /// Memory files with nothing in them yet; the intake asks toward these.
     var emptyMemorySections: [String] = []
+    /// How many live notes exist; a handful means the files are thin.
+    var memoryNoteCount: Int = 0
+    /// A disclosure in this message that deserves care, found deterministically.
+    var safetyConcern: CoachSafetyGate.Concern? = nil
     var isAcquaintance: Bool { thread?.kind == .acquaintance }
 }
 
