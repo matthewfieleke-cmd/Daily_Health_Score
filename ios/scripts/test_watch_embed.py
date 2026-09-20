@@ -100,7 +100,10 @@ class BundleIDAlignmentTests(unittest.TestCase):
         versions = re.findall(r'CURRENT_PROJECT_VERSION:\s*"(\d+)"', yml)
         self.assertGreaterEqual(len(versions), 4)
         self.assertTrue(all(version == versions[0] for version in versions))
-        self.assertIn("DHS_HAS_PRIVATE_CLOUD_COMPUTE", yml)
+        # Private Cloud Compute routing is unconditional now that iOS 27 is the floor.
+        self.assertNotIn("DHS_HAS_PRIVATE_CLOUD_COMPUTE", yml)
+        self.assertIn('iOS: "27.0"', yml)
+        self.assertIn('watchOS: "26.0"', yml)
         self.assertIn("HealthKit.framework", yml)
         self.assertIn("WatchConnectivity.framework", yml)
 
