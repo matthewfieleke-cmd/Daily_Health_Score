@@ -69,6 +69,9 @@ struct CoachEvalView: View {
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
+                            Text("Tools: \(result.toolsUsed.isEmpty ? "none" : result.toolsUsed.joined(separator: ", "))")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                             if !result.memoryNotes.isEmpty {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("Memory the Coach would have written")

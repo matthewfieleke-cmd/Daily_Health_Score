@@ -106,6 +106,7 @@ struct CoachChatsView: View {
             presenting: pendingDelete
         ) { thread in
             Button("Delete", role: .destructive) {
+                coach.forgetSession(for: thread.id)
                 coach.memory.deleteThread(thread.id)
                 pendingDelete = nil
             }
