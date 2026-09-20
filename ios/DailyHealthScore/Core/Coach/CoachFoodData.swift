@@ -12,9 +12,15 @@ struct CoachFoodFact: Equatable, Sendable {
     var addedSugarGrams: Double?
     var fatGrams: Double?
     var carbGrams: Double?
+    var saturatedFatGrams: Double? = nil
+    var sodiumMg: Double? = nil
+    var potassiumMg: Double? = nil
+    var calciumMg: Double? = nil
+    var ironMg: Double? = nil
+    var magnesiumMg: Double? = nil
     var source: String
 
-    /// "Clif Oatmeal Raisin Walnut (Clif Bar) — per 68 g bar: 250 kcal · 10 g protein · 5 g fiber · 20 g sugars (14 g added) — USDA"
+    /// "Clif Oatmeal Raisin Walnut (Clif Bar) — per 68 g bar: 250 kcal · 10 g protein · 5 g fiber · 20 g sugars (14 g added) · 180 mg sodium — USDA"
     var line: String {
         var parts: [String] = []
         if let calories { parts.append("\(CoachCalculator.format(calories)) kcal") }
@@ -27,8 +33,15 @@ struct CoachFoodFact: Equatable, Sendable {
         } else if let addedSugarGrams {
             parts.append("\(CoachCalculator.format(addedSugarGrams)) g added sugar")
         }
-        if let fatGrams { parts.append("\(CoachCalculator.format(fatGrams)) g fat") }
+        if let fatGrams {
+            var fat = "\(CoachCalculator.format(fatGrams)) g fat"
+            if let saturatedFatGrams { fat += " (\(CoachCalculator.format(saturatedFatGrams)) g saturated)" }
+            parts.append(fat)
+        }
         if let carbGrams { parts.append("\(CoachCalculator.format(carbGrams)) g carbs") }
+        for (value, label) in [(sodiumMg, "sodium"), (potassiumMg, "potassium"), (calciumMg, "calcium"), (ironMg, "iron"), (magnesiumMg, "magnesium")] {
+            if let value { parts.append("\(CoachCalculator.format(value.rounded())) mg \(label)") }
+        }
         let brandText = brand.isEmpty ? "" : " (\(brand))"
         let serving = servingDescription.isEmpty ? "per 100 g" : "per \(servingDescription)"
         return "\(name)\(brandText) — \(serving): \(parts.isEmpty ? "no nutrient values listed" : parts.joined(separator: " · ")) — \(source)"
@@ -48,6 +61,12 @@ enum USDAFoodParser {
         case fiber = "291"
         case sugars = "269"
         case addedSugars = "539"
+        case saturatedFat = "606"
+        case calcium = "301"
+        case iron = "303"
+        case magnesium = "304"
+        case potassium = "306"
+        case sodium = "307"
     }
 
     static func facts(fromSearchJSON data: Data, limit: Int = 3) -> [CoachFoodFact] {
@@ -114,6 +133,12 @@ enum USDAFoodParser {
             addedSugarGrams: value(.addedSugars),
             fatGrams: value(.fat),
             carbGrams: value(.carbs),
+            saturatedFatGrams: value(.saturatedFat),
+            sodiumMg: value(.sodium),
+            potassiumMg: value(.potassium),
+            calciumMg: value(.calcium),
+            ironMg: value(.iron),
+            magnesiumMg: value(.magnesium),
             source: source
         )
     }
@@ -145,6 +170,17 @@ enum OpenFoodFactsParser {
         func value(_ base: String) -> Double? {
             hasServing ? number("\(base)_serving") ?? number("\(base)_100g") : number("\(base)_100g")
         }
+        // Open Food Facts lists minerals in grams; the label reads in milligrams.
+        func milligrams(_ base: String) -> Double? {
+            let key = hasServing && nutriments["\(base)_serving"] != nil ? "\(base)_serving" : "\(base)_100g"
+            guard let raw = nutriments[key] else { return nil }
+            let grams: Double?
+            if let value = raw as? Double { grams = value }
+            else if let value = raw as? Int { grams = Double(value) }
+            else if let text = raw as? String { grams = Double(text) }
+            else { grams = nil }
+            return grams.map { ($0 * 1000).rounded() }
+        }
         return CoachFoodFact(
             name: name,
             brand: brand,
@@ -156,6 +192,12 @@ enum OpenFoodFactsParser {
             addedSugarGrams: value("added-sugars"),
             fatGrams: value("fat"),
             carbGrams: value("carbohydrates"),
+            saturatedFatGrams: value("saturated-fat"),
+            sodiumMg: milligrams("sodium"),
+            potassiumMg: milligrams("potassium"),
+            calciumMg: milligrams("calcium"),
+            ironMg: milligrams("iron"),
+            magnesiumMg: milligrams("magnesium"),
             source: "Open Food Facts"
         )
     }

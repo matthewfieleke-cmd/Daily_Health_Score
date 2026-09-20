@@ -7,7 +7,7 @@ import FoundationModels
 /// the model asks; the app performs the request and hands the text back.
 struct CoachFoodLookupTool: Tool {
     let name = "lookupFood"
-    let description = "Nutrition facts for a food or branded product from USDA FoodData Central and Open Food Facts: calories, protein, fiber, sugars, added sugars per serving. Call once per food or product the person named before estimating anything."
+    let description = "Nutrition facts for a food or branded product from USDA FoodData Central and Open Food Facts: calories, protein, fiber, sugars, added sugars, fat, and minerals (sodium, potassium, calcium, iron, magnesium) per serving when listed. Call once per food or product the person named or asked about; not for foods you are merely recommending."
 
     @Generable
     struct Arguments {
