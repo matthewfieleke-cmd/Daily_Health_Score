@@ -9,13 +9,16 @@ import Foundation
 /// and this uses the conservative end of that range.
 struct CoachContextBudget: Equatable, Sendable {
     /// Apple documents roughly three to four characters per token for English.
-    static let charactersPerToken = 3.5
+    /// Coach prompts run denser than prose — numbers, labels, field names — and
+    /// a 4,096-token window overflowed by one token at 3.5, so this sits below
+    /// the documented range on purpose.
+    static let charactersPerToken = 3.0
     /// Window to assume when the framework cannot report one.
     static let fallbackTokenCapacity = 4096
-    /// Fixed prompt scaffolding: snapshot, directives, contract, section headers.
-    /// The snapshot now also carries HRV and SMART goal status, so this reserve
-    /// has to cover a fuller worst case than the three daily metrics alone.
-    static let scaffoldingCharacters = 3200
+    /// Fixed prompt scaffolding: snapshot, directives, contract, section headers,
+    /// the shape note, a care note, and the intake contract when it applies.
+    /// This reserve has to cover the fullest of those at once.
+    static let scaffoldingCharacters = 4200
 
     /// Ceilings any window can reach. Callers that build a block before knowing
     /// which model will answer use these, and the prompt trims to the real
@@ -31,7 +34,7 @@ struct CoachContextBudget: Equatable, Sendable {
 
     /// Characters per token is an estimate, and filling a window to the last
     /// token means any text that runs denser than the estimate overflows.
-    static let safetyMarginTokens = 120
+    static let safetyMarginTokens = 200
 
     let totalTokens: Int
     let responseTokens: Int

@@ -189,6 +189,15 @@ final class FoundationModelsCoach {
             .contains { loweredMessage.contains($0) }
         var snapshot = snapshot
         if !asksAboutHRV { snapshot?.hrvSummary = nil }
+        // A data question is answered with the metrics it asked about. Goals and
+        // weight stay out unless named, and the goal-pace nudge stays out entirely.
+        if shape == .data {
+            let asksGoals = ["goal", "check-in", "check in", "checkin", "smart", "streak"].contains { loweredMessage.contains($0) }
+            let asksBody = ["weight", "weigh", "bmi", "pound", "kilo", "scale", "body"].contains { loweredMessage.contains($0) }
+            if !asksGoals { snapshot?.smartGoals = [] }
+            if !asksBody { snapshot?.bodyLine = nil }
+        }
+        let goalPaceDirective = shape == .data ? nil : context.goalPaceDirective
         let tools: [any Tool] = tier == .privateCloud
             ? CoachSessionTools.make(
                 snapshot: snapshot,
@@ -357,7 +366,7 @@ final class FoundationModelsCoach {
 
             HEALTH SNAPSHOT (authoritative numbers):
             \(healthBlock)\(historySection)\(focusSection)
-            \(context.goalPaceDirective ?? "")
+            \(goalPaceDirective ?? "")
 
             PROFILE (compiled from the memory files):
             \(profileSection)
@@ -369,7 +378,7 @@ final class FoundationModelsCoach {
             \(recentSection)
 
             RECENT TRANSCRIPT (this chat):
-            \(compact || transcript.isEmpty ? "None yet." : transcript)
+            \(compact ? Self.transcriptBlock(recentTurns, maxTurns: 2, maxCharactersPerTurn: 220).nilIfEmpty ?? "None yet." : (transcript.isEmpty ? "None yet." : transcript))
             \(suggestedSection)
 
             BACKGROUND (optional reference; your own knowledge and the tools come first):
@@ -387,13 +396,26 @@ final class FoundationModelsCoach {
         var fallbackReason: String?
         lastFailureReason = nil
         do {
-            content = try await CoachModelProvider.respond(
-                session,
-                to: makePrompt(compact: false, budget: budget, answeringTier: tier),
-                generating: GenerableCoachReply.self,
-                tier: tier,
-                depth: shape.reasoningDepth
-            )
+            do {
+                content = try await CoachModelProvider.respond(
+                    session,
+                    to: makePrompt(compact: false, budget: budget, answeringTier: tier),
+                    generating: GenerableCoachReply.self,
+                    tier: tier,
+                    depth: shape.reasoningDepth
+                )
+            } catch where tier == .privateCloud && !Self.isContentDecline(error) && !Self.isContextOverflow(error) {
+                // A server hiccup is usually gone a second later. One more try on
+                // a fresh session before giving the message to the small model.
+                let again = CoachModelProvider.makeSession(tier: tier, instructions: instructions, tools: tools)
+                content = try await CoachModelProvider.respond(
+                    again,
+                    to: makePrompt(compact: false, budget: budget, answeringTier: tier),
+                    generating: GenerableCoachReply.self,
+                    tier: tier,
+                    depth: shape.reasoningDepth
+                )
+            }
         } catch {
             // One fallback covers every failure mode that matters: no network,
             // exhausted server quota, or context pressure. Retry on-device with
@@ -407,18 +429,36 @@ final class FoundationModelsCoach {
                 totalTokens: await CoachModelProvider.contextTokens(for: .onDevice),
                 instructionCharacters: retryInstructions.count
             )
-            let retrySession = CoachModelProvider.makeSession(
-                tier: .onDevice,
-                instructions: retryInstructions,
-                tools: []
-            )
             lastTierUsed = .onDevice
-            do {
-                content = try await retrySession.respond(
-                    to: makePrompt(compact: tier == .onDevice, budget: retryBudget, answeringTier: .onDevice),
-                    generating: GenerableCoachReply.self
-                ).content
-            } catch {
+            // The small model gets the compact prompt every time. If even that
+            // overflows the window, one more attempt at half the budget: the
+            // estimate is an estimate, and a one-token miss should not end the turn.
+            var budgets = [retryBudget]
+            budgets.append(CoachContextBudget.make(
+                totalTokens: retryBudget.totalTokens / 2,
+                instructionCharacters: retryInstructions.count
+            ))
+            var lastRetryError: Error?
+            var retried: GenerableCoachReply?
+            for attemptBudget in budgets {
+                let retrySession = CoachModelProvider.makeSession(
+                    tier: .onDevice,
+                    instructions: retryInstructions,
+                    tools: []
+                )
+                do {
+                    retried = try await retrySession.respond(
+                        to: makePrompt(compact: true, budget: attemptBudget, answeringTier: .onDevice),
+                        generating: GenerableCoachReply.self
+                    ).content
+                    break
+                } catch {
+                    lastRetryError = error
+                    guard Self.isContextOverflow(error) else { break }
+                }
+            }
+            guard let retried else {
+                let error = lastRetryError ?? firstError
                 // Both declined the content itself: the app answers, with care.
                 // Anything else is size or reachability, and gets the plain message.
                 lastFailureReason = "\(Self.describe(firstError)); on-device retry: \(Self.describe(error))"
@@ -427,6 +467,7 @@ final class FoundationModelsCoach {
                 }
                 throw CoachError.generationFailed(Self.friendlyFailureMessage)
             }
+            content = retried
         }
         let message = CoachReplyPolish.polish(content.message.trimmedForCoach())
         guard !message.isEmpty else {
@@ -436,10 +477,13 @@ final class FoundationModelsCoach {
         let memoryUpdates = content.memoryUpdates.compactMap {
             CoachMemoryUpdate(operation: $0.operation, section: $0.section, text: $0.text, replaces: $0.replaces, basis: $0.basis)
         }
-        let checkIn = content.goalCheckIn.flatMap {
-            CoachGoalCheckInRequest.make(goalID: $0.goalID, when: $0.when, note: $0.note, goals: goals)
-        }
-        let proposal = isGoalConversation ? content.goalProposal.flatMap { draft in
+        // The model's structured fields are claims; the message has to back them.
+        let checkIn = CoachGoalCheckInRequest.claimsCompletion(userMessage)
+            ? content.goalCheckIn.flatMap {
+                CoachGoalCheckInRequest.make(goalID: $0.goalID, when: $0.when, note: $0.note, goals: goals)
+            }
+            : nil
+        let rawProposal = isGoalConversation ? content.goalProposal.flatMap { draft in
             CoachGoalProposal.make(
                 operation: draft.operation, goalID: draft.goalID,
                 specificText: draft.specificText, targetCount: draft.targetCount,
@@ -451,12 +495,13 @@ final class FoundationModelsCoach {
                 fallbackAction: draft.fallbackAction
             )
         } : nil
+        let proposal = rawProposal?.isNoOp == true ? nil : rawProposal
         return CoachReplyResult(
             message: message,
             memoryUpdates: memoryUpdates,
             goalCheckIn: checkIn,
             goalProposal: proposal,
-            proposalRejected: isGoalConversation && content.goalProposal != nil && proposal == nil,
+            proposalRejected: isGoalConversation && content.goalProposal != nil && rawProposal == nil,
             tier: lastTierUsed,
             shape: shape,
             fallbackReason: fallbackReason
@@ -469,10 +514,25 @@ final class FoundationModelsCoach {
     /// The framework's error, named for the eval screen: the enum case plus its
     /// message, so a guardrail refusal reads differently from a network drop.
     nonisolated static func describe(_ error: Error) -> String {
-        let mirror = String(reflecting: error)
+        var mirror = String(reflecting: error)
+        // Swift wraps private types in an anonymous context; that is noise here.
+        while let noise = mirror.range(of: #"\(unknown context at \$[0-9a-fA-F]+\)\."#, options: .regularExpression) {
+            mirror.removeSubrange(noise)
+        }
         let described = error.localizedDescription
-        if mirror.count <= 160 { return described.isEmpty ? mirror : "\(mirror): \(described)" }
-        return described.isEmpty ? String(mirror.prefix(160)) : described
+        // The case name is the useful part; the payload can run to paragraphs.
+        let caseName = String(mirror.prefix { $0 != "(" }).trimmingCharacters(in: .whitespacesAndNewlines)
+        let head = caseName.isEmpty ? String(mirror.prefix(120)) : String(caseName.prefix(120))
+        if described.isEmpty || described.hasPrefix("The operation couldn’t be completed") {
+            return described.isEmpty ? head : "\(head): \(described)"
+        }
+        return head == described ? described : "\(head): \(described)"
+    }
+
+    /// The window was too small for the prompt; a smaller prompt can still work.
+    nonisolated static func isContextOverflow(_ error: Error) -> Bool {
+        let text = (String(reflecting: error) + " " + error.localizedDescription).lowercased()
+        return text.contains("context") && (text.contains("exceed") || text.contains("window") || text.contains("size"))
     }
 
     // MARK: - On-device filing
@@ -734,4 +794,6 @@ private extension String {
     func trimmedForCoach() -> String {
         trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
