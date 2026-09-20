@@ -527,6 +527,40 @@ enum CoachMemoryLogic {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
+    /// Words that carry a note's substance: long enough to mean something and
+    /// not scaffolding. Names and numbers count.
+    static func substanceWords(in text: String) -> Set<String> {
+        let stop: Set<String> = [
+            "about", "after", "again", "also", "always", "another", "around", "because", "been", "before",
+            "being", "between", "both", "could", "does", "doing", "during", "each", "either", "every",
+            "feels", "from", "have", "having", "help", "helps", "helpful", "into", "just", "keeps", "like",
+            "likely", "makes", "many", "more", "most", "much", "often", "only", "other", "over", "part",
+            "person", "really", "same", "says", "seems", "since", "some", "something", "still", "such",
+            "than", "that", "their", "them", "then", "there", "these", "they", "thing", "things", "this",
+            "those", "through", "under", "until", "uses", "very", "want", "wants", "when", "where",
+            "which", "while", "will", "with", "within", "without", "would", "your", "stated", "inferred",
+            "january", "february", "march", "april", "june", "july", "august", "september", "october",
+            "november", "december", "2025", "2026", "2027", "tends", "tend", "usually", "sometimes"
+        ]
+        let tokens = text.lowercased()
+            .replacingOccurrences(of: "’", with: "'")
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.count >= 4 || ($0.count >= 2 && $0.allSatisfy(\.isNumber)) }
+        return Set(tokens.filter { !stop.contains($0) }.map { $0.hasSuffix("s") && $0.count > 4 ? String($0.dropLast()) : $0 })
+    }
+
+    /// A new note has to come from the person's words. The Coach's own
+    /// suggestions filed as facts about the person are how a memory drifts from
+    /// the truth; this keeps them out.
+    static func isGrounded(_ update: CoachMemoryUpdate, inPersonsWords words: String) -> Bool {
+        guard update.operation != .remove else { return true }
+        let noteWords = substanceWords(in: update.text)
+        guard !noteWords.isEmpty else { return false }
+        let spoken = substanceWords(in: words)
+        let overlap = noteWords.intersection(spoken).count
+        return noteWords.count <= 4 ? overlap >= 1 : overlap >= 2
+    }
+
     /// The durable files with nothing in them yet, in the order the intake
     /// asks about them. Recent is state, not a file to fill.
     static func emptySections(in items: [CoachMemoryItem]) -> [CoachMemorySection] {
@@ -566,12 +600,18 @@ enum CoachMemoryLogic {
         tombstonesIgnored: Bool = true,
         at date: Date = Date(),
         perSectionLimit: Int = 12,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        sections: Set<CoachMemorySection>? = nil
     ) -> String {
         let live = itemsByOverridingContradictions(items, at: date)
-        if live.isEmpty { return "No notes yet. Write down what a careful coach would keep." }
+            .filter { sections?.contains($0.section) ?? true }
+        if live.isEmpty {
+            return sections == nil
+                ? "No notes yet. Write down what a careful coach would keep."
+                : "No notes in these files yet."
+        }
         var parts: [String] = []
-        for section in CoachMemorySection.allCases {
+        for section in CoachMemorySection.allCases where sections?.contains(section) ?? true {
             let rows = live.filter { $0.section == section }
             guard !rows.isEmpty else { continue }
             let ordered = rows.sorted { $0.createdAt > $1.createdAt }

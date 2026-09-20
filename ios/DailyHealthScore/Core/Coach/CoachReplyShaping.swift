@@ -80,16 +80,21 @@ enum CoachReplyShape: String, Equatable, Sendable {
     /// Whether the profile and memory files belong in this prompt at all. Where
     /// they cannot be relevant, leaving them out is the only reliable way to keep
     /// them out of the reply; the lookup tool still answers a direct reference.
-    var usesMemoryFiles: Bool {
+    var usesMemoryFiles: Bool { memoryScope != .none }
+
+    /// Which of the person's files this shape may see. Presence in the prompt
+    /// is an invitation the model always accepts, so relevance is decided here.
+    var memoryScope: CoachMemoryScope {
         switch self {
-        case .data, .smallTalk, .writing: return false
-        case .feeling, .howTo, .evaluation, .winReport, .statement, .pushback, .general: return true
+        case .data, .smallTalk, .writing: return .none
+        case .general, .howTo, .evaluation: return .essentials
+        case .feeling, .winReport, .statement, .pushback: return .full
         }
     }
 
     /// One line for the prompt: the move, described, never scripted.
     var hint: String {
-        let range = "About \(wordRange.lowerBound) to \(wordRange.upperBound) words."
+        let range = "Typically \(wordRange.lowerBound) to \(wordRange.upperBound) words when the content earns it; never pad to reach it."
         switch self {
         case .feeling:
             return "Likely shape: a feeling or a disclosure. Meet it as a wise friend would: a genuine reaction first, the strain or the loop they described named in your own words, one honest insight that reframes it as a human response rather than a flaw, the strengths and tools they have already told you about, then a small concrete move or simply presence, and a caring question about how they are right now. No numbered levers. Advice only if they ask. \(range)"
@@ -120,6 +125,24 @@ enum CoachReplyShape: String, Equatable, Sendable {
         case .howTo, .evaluation: return .deep
         case .feeling, .winReport, .statement, .pushback, .writing, .general: return .moderate
         case .data, .smallTalk: return .light
+        }
+    }
+}
+
+/// How much of the memory files a prompt carries.
+enum CoachMemoryScope: String, Equatable, Sendable {
+    /// Nothing from the files; the lookup tool still answers a direct reference.
+    case none
+    /// Only the notes that shape advice for anyone: About you, Body & health, Likes & staples.
+    case essentials
+    /// Profile, every file, and recent conversations.
+    case full
+
+    var sections: Set<CoachMemorySection>? {
+        switch self {
+        case .none: return []
+        case .essentials: return [.aboutYou, .body, .likes]
+        case .full: return nil
         }
     }
 }
