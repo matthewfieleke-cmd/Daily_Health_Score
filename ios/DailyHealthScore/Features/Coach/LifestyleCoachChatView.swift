@@ -478,8 +478,8 @@ struct LifestyleCoachChatView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         .textSelection(.enabled)
                     if turn.modelTier == .onDevice, CoachModelProvider.serverModelExists {
-                        // Honest about the fallback: this answer did not get the server model.
-                        Text("Answered on-device — Private Cloud Compute was unavailable or at today’s limit.")
+                        // Honest about the fallback, and specific about why.
+                        Text("Answered on-device — \(turn.fallbackReason ?? "Private Cloud Compute was unavailable or at today’s limit.")")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 6)

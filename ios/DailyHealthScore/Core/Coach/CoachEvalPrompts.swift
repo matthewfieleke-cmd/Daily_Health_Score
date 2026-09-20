@@ -12,6 +12,8 @@ struct CoachEvalResult: Identifiable, Equatable, Sendable {
     var error: String?
     /// Set when Private Cloud Compute failed and the on-device model answered.
     var fallbackReason: String?
+    /// The SMART goal draft the reply carried, if any.
+    var draft: String?
 
     init(
         id: UUID = UUID(),
@@ -22,7 +24,8 @@ struct CoachEvalResult: Identifiable, Equatable, Sendable {
         memoryNotes: [String],
         seconds: Double,
         error: String? = nil,
-        fallbackReason: String? = nil
+        fallbackReason: String? = nil,
+        draft: String? = nil
     ) {
         self.id = id
         self.promptID = promptID
@@ -33,6 +36,7 @@ struct CoachEvalResult: Identifiable, Equatable, Sendable {
         self.seconds = seconds
         self.error = error
         self.fallbackReason = fallbackReason
+        self.draft = draft
     }
 }
 
@@ -157,6 +161,38 @@ enum CoachEvalPrompts {
             rubric: [
                 "One or two sentences, warm, done — no question, no memory callback"
             ]
+        ),
+        // General knowledge: the category where a coach becomes a progress report.
+        CoachEvalPrompt(
+            id: "general-walking",
+            title: "General knowledge: walking outside",
+            text: "How is going on walks outside good for me?",
+            rubric: [
+                "Answers as expertise for anyone: daylight and circadian rhythm, mood, blood pressure and post-meal glucose, joints and bone, the nature effect",
+                "No progress report: no today's minutes, no gap to 30, no weakest pillar",
+                "No unrequested callbacks to the files",
+                "Specific mechanisms named in plain words; a position, not a survey"
+            ]
+        ),
+        CoachEvalPrompt(
+            id: "general-alcohol-sleep",
+            title: "General knowledge: alcohol and sleep",
+            text: "What does alcohol do to sleep?",
+            rubric: [
+                "Falls asleep faster, then fragmented second half, suppressed REM, more waking; dose and timing matter",
+                "No progress report and no callbacks unless the person's own drinking is in the files and bears on the answer",
+                "No moralizing; a clear position on timing and amount"
+            ]
+        ),
+        CoachEvalPrompt(
+            id: "general-protein",
+            title: "General knowledge: protein needs",
+            text: "How much protein do I actually need?",
+            rubric: [
+                "A real range per kilogram of body weight, adjusted for age and activity, with the weight trend used only because the question needs it",
+                "Plant sources named plainly when the files say they eat that way",
+                "No progress report on today's score; no unrequested callbacks"
+            ]
         )
     ]
 
@@ -174,6 +210,9 @@ enum CoachEvalPrompts {
             lines.append("Model: \(result.tier.rawValue) · shape: \(result.shape.rawValue) · \(String(format: "%.1f", result.seconds))s · \(CoachReplyPolish.wordCount(result.reply)) words")
             if let reason = result.fallbackReason, !reason.isEmpty {
                 lines.append("Fell back to on-device because: \(reason)")
+            }
+            if let draft = result.draft {
+                lines.append("Draft: \(draft)")
             }
             if let error = result.error, !error.isEmpty {
                 lines.append("Error: \(error)")

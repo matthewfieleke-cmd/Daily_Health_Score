@@ -105,10 +105,14 @@ extension CoachModelProvider {
         }
     }
 
+    /// `permissiveGuardrails` relaxes the on-device input classifier for text the
+    /// person wrote about themselves — Apple's own knob for user-provided content
+    /// that trips the default filter. The model can still decline on its own.
     static func makeSession(
         tier: CoachModelTier,
         instructions: String,
-        tools: [any Tool] = []
+        tools: [any Tool] = [],
+        permissiveGuardrails: Bool = false
     ) -> LanguageModelSession {
         switch tier {
         case .privateCloud:
@@ -118,8 +122,24 @@ extension CoachModelProvider {
                 instructions: instructions
             )
         case .onDevice:
+            if permissiveGuardrails {
+                return LanguageModelSession(
+                    model: SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations),
+                    tools: tools,
+                    instructions: instructions
+                )
+            }
             return LanguageModelSession(tools: tools, instructions: instructions)
         }
+    }
+
+    /// Where the daily server allowance stands, for Settings and the eval screen.
+    static var serverQuotaSummary: String {
+        guard serverModelExists else { return "Private Cloud Compute is not available in this build." }
+        if isServerQuotaExhausted { return "Private Cloud Compute: today’s limit reached — replies are on-device until it resets." }
+        if isServerQuotaApproaching { return "Private Cloud Compute: approaching today’s limit — background writing has moved on-device." }
+        if isServerModelAvailable { return "Private Cloud Compute: available." }
+        return "Private Cloud Compute: unavailable on this device right now (entitlement, network, or Apple Intelligence)."
     }
 
     private static func readContextTokens(for tier: CoachModelTier) async -> Int {
@@ -143,6 +163,7 @@ extension CoachModelProvider {
     static var isServerQuotaExhausted: Bool { false }
     static var isServerQuotaApproaching: Bool { false }
     static let serverModelExists = false
+    static var serverQuotaSummary: String { "Private Cloud Compute is not available in this build." }
 
     private static func readContextTokens(for tier: CoachModelTier) async -> Int {
         tier.assumedContextTokens

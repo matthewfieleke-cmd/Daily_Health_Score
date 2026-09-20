@@ -22,9 +22,11 @@ struct CoachEvalView: View {
     var body: some View {
         List {
             Section {
-                Text("Each prompt runs through the real pipeline — Private Cloud Compute with reasoning and tools when available — using your current memory files. Nothing is saved: no chat, no notes, no card.")
+                Text("Each prompt runs through the real pipeline — Private Cloud Compute with reasoning and tools when available — using your current memory files. Nothing is saved: no chat, no notes, no card. A full run spends \(CoachEvalPrompts.all.count) server requests plus retries and tool calls against today’s allowance.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                Text(CoachModelProvider.serverQuotaSummary)
+                    .font(.footnote.weight(.medium))
                 Button {
                     runAll()
                 } label: {
@@ -61,6 +63,11 @@ struct CoachEvalView: View {
                                 Text("Fell back to on-device because: \(reason)")
                                     .font(.caption2)
                                     .foregroundStyle(.orange)
+                            }
+                            if let draft = result.draft {
+                                Text("Draft: \(draft)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
                             }
                             if !result.memoryNotes.isEmpty {
                                 VStack(alignment: .leading, spacing: 3) {
