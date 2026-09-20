@@ -80,6 +80,23 @@ final class CoachMemoryFilesLogicTests: XCTestCase {
         XCTAssertFalse(CoachMemoryLogic.hasEquivalent("Prefers morning workouts.", in: items))
     }
 
+    /// The intake asks toward whichever durable files are still empty; Recent is state.
+    func test_emptySectionsFollowTheIntakeOrderAndSkipRecent() {
+        XCTAssertEqual(
+            CoachMemoryLogic.emptySections(in: []),
+            [.aboutYou, .routines, .people, .likes, .body, .patterns, .coaching, .goals]
+        )
+        let items = [
+            CoachMemoryItem(category: .people, content: "Wife is Maureen; sons Isaac, 14, and Caleb, 13.", provenance: .coachRecorded),
+            CoachMemoryItem(category: .checkIns, content: "Mood: steady this week.", provenance: .coachRecorded)
+        ]
+        let empty = CoachMemoryLogic.emptySections(in: items)
+        XCTAssertFalse(empty.contains(.people))
+        XCTAssertFalse(empty.contains(.recent))
+        XCTAssertEqual(empty.first, .aboutYou)
+        XCTAssertEqual(empty.map(\.label).first, "About you")
+    }
+
     func test_promptBlockDatesEntriesAndSeparatesStatedFromInferred() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/Chicago")!
