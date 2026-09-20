@@ -113,13 +113,6 @@ struct LifestyleCoachChatView: View {
                             goalProposalCard(proposal)
                                 .id("goal-proposal")
                         }
-                        if let error = coach.chatError, !coach.isChatBusy,
-                           visibleTurns.last?.role != .coach {
-                            Text(error)
-                                .font(.footnote)
-                                .foregroundStyle(.red)
-                                .id("chat-error")
-                        }
                     }
                     .padding(16)
                 }
@@ -197,6 +190,8 @@ struct LifestyleCoachChatView: View {
             // not reset a chat that has already started.
             guard !didOpen else { return }
             didOpen = true
+            // An error belongs to the chat it happened in, not the next one.
+            coach.chatError = nil
             coach.memory.open(launch)
         }
     }
