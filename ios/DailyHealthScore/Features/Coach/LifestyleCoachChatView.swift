@@ -12,6 +12,7 @@ struct LifestyleCoachChatView: View {
     @State private var focus: CoachFocusContext?
     @State private var showMemory = false
     @State private var launch: CoachChatLaunch
+    @State private var didOpen = false
     @FocusState private var isInputFocused: Bool
 
     init(
@@ -32,6 +33,7 @@ struct LifestyleCoachChatView: View {
         } else {
             resolved = .newChat
         }
+        var resolvedFocus = focus
         var goalID = focusedGoalID ?? focus?.goalId
         var prefill = initialMessage
         var isPlanning = focusedGoalID != nil || focus?.feature == .goal || initialMessage.lowercased().contains("smart goal")
@@ -42,13 +44,17 @@ struct LifestyleCoachChatView: View {
         case .compose(let text):
             prefill = text
             isPlanning = isPlanning || text.lowercased().contains("smart goal")
+        case .focus(let context):
+            resolvedFocus = context
+            goalID = goalID ?? context.goalId
+            isPlanning = isPlanning || context.feature == .goal
         default:
             break
         }
         _draft = State(initialValue: prefill)
         _focusedGoalID = State(initialValue: goalID)
         _planningGoal = State(initialValue: isPlanning)
-        _focus = State(initialValue: focus)
+        _focus = State(initialValue: resolvedFocus)
         _launch = State(initialValue: resolved)
     }
 
@@ -187,6 +193,10 @@ struct LifestyleCoachChatView: View {
         }
         .onAppear {
             coach.refreshAvailability()
+            // Once per presentation: coming back from a pushed goal screen must
+            // not reset a chat that has already started.
+            guard !didOpen else { return }
+            didOpen = true
             coach.memory.open(launch)
         }
     }

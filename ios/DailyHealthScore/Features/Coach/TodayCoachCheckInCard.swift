@@ -51,18 +51,13 @@ struct TodayCoachCheckInCard: View {
         VStack(alignment: .leading, spacing: 10) {
             header(kind: kind)
 
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 10) {
-                    if coach.memory.needsAcquaintance {
-                        acquaintBody
-                    } else if coach.isGeneratingCheckIn && coach.checkIn == nil {
-                        loadingBody
-                    } else if let card = displayedCheckIn(kind: kind, now: now) {
-                        checkInBody(card, kind: kind)
-                    }
+            // Natural height when it fits; only an overflowing evening card scrolls.
+            ViewThatFits(in: .vertical) {
+                noteBody(kind: kind, now: now)
+                ScrollView(.vertical, showsIndicators: false) {
+                    noteBody(kind: kind, now: now)
                 }
             }
-            .scrollBounceBehavior(.basedOnSize)
 
             door(kind: kind, now: now)
         }
@@ -71,6 +66,19 @@ struct TodayCoachCheckInCard: View {
         .background(AppTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
         .cardShadow()
+    }
+
+    private func noteBody(kind: CoachCheckInKind, now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if coach.memory.needsAcquaintance {
+                acquaintBody
+            } else if coach.isGeneratingCheckIn && coach.checkIn == nil {
+                loadingBody
+            } else if let card = displayedCheckIn(kind: kind, now: now) {
+                checkInBody(card, kind: kind)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// The generated card for this window, or a deterministic one while it writes.
@@ -231,7 +239,7 @@ struct TodayCoachCheckInCard: View {
     private func door(kind: CoachCheckInKind, now: Date) -> some View {
         if coach.memory.needsAcquaintance {
             doorButton(title: "Let’s get acquainted", systemImage: "hand.wave.fill", action: onAcquaint)
-        } else if let card = coach.checkIn,
+        } else if let card = coach.memory.cachedCheckIn,
                   card.kind == kind,
                   card.dateKey == record?.date,
                   let replyID = card.replyThreadID,
