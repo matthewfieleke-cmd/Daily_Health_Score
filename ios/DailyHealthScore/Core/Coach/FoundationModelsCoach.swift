@@ -185,7 +185,7 @@ final class FoundationModelsCoach {
         // the message is about it.
         let memoryAllowed = shape.usesMemoryFiles || context.isAcquaintance
         let loweredMessage = userMessage.lowercased()
-        let asksAboutHRV = ["hrv", "heart rate variability", "variability", "recovery", "resting heart"]
+        let asksAboutHRV = ["hrv", "heart rate variability", "variability", "recover", "resting heart", "rested", "sleep quality", "how well did i sleep"]
             .contains { loweredMessage.contains($0) }
         var snapshot = snapshot
         if !asksAboutHRV { snapshot?.hrvSummary = nil }
