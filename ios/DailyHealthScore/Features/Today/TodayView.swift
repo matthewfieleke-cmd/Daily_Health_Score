@@ -8,10 +8,9 @@ struct TodayView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var showCoachChat = false
+    @State private var coachLaunch: CoachChatLaunch?
     @State private var showSMARTGoals = false
     @State private var showHRVAnalysis = false
-    @State private var coachFocus: CoachFocusContext?
     /// Shared 0…1 progress for coordinated dial-up (ring, numbers, bars).
     @State private var dialUpProgress: Double = 0
     @State private var hasPlayedLaunchDialUp = false
@@ -50,7 +49,7 @@ struct TodayView: View {
                     smartGoalAttentionCount: SMARTGoalLogic.attentionCount(
                         goals: appState.smartGoalStore.goals
                     ),
-                    onAskCoach: { showCoachChat = true },
+                    onAskCoach: { coachLaunch = .recents },
                     onOpenSMARTGoals: { showSMARTGoals = true },
                     onOpenHRVAnalysis: { showHRVAnalysis = true },
                     onRefresh: {
@@ -77,13 +76,18 @@ struct TodayView: View {
             startDialUp()
         }
         .onDisappear { dialUpTask?.cancel() }
-        .sheet(isPresented: $showCoachChat) {
+        .sheet(item: $coachLaunch) { launch in
             NavigationStack {
-                LifestyleCoachChatView(focus: coachFocus)
-                    .environmentObject(appState)
-                    .environmentObject(appState.coach)
+                if launch == .recents {
+                    CoachRecentsView()
+                        .environmentObject(appState)
+                        .environmentObject(appState.coach)
+                } else {
+                    LifestyleCoachChatView(launch: launch)
+                        .environmentObject(appState)
+                        .environmentObject(appState.coach)
+                }
             }
-            .onDisappear { coachFocus = nil }
         }
     }
 
@@ -102,7 +106,12 @@ struct TodayView: View {
                 metricRow(for: record)
                     .animation(DialUpAnimation.timing, value: dialUpProgress)
 
-                TodayLifestyleCoachCard(record: record) { showCoachChat = true }
+                TodayLifestyleCoachCard(
+                    record: record,
+                    onContinue: { coachLaunch = .continueThread },
+                    onWhatsOnMyMind: { coachLaunch = .inbox },
+                    onRecents: { coachLaunch = .recents }
+                )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     // Remaining height is the grouped screen, not empty card chrome.
             }
@@ -202,8 +211,7 @@ struct TodayView: View {
             )
             .contextMenu {
                 Button("Ask Coach about this") {
-                    coachFocus = CoachFocusContextBuilder.metric(.sleep, record: record)
-                    showCoachChat = true
+                    coachLaunch = .room(.sleep)
                 }
             }
             CompactMetricCard(
@@ -220,8 +228,7 @@ struct TodayView: View {
             )
             .contextMenu {
                 Button("Ask Coach about this") {
-                    coachFocus = CoachFocusContextBuilder.metric(.fiber, record: record)
-                    showCoachChat = true
+                    coachLaunch = .room(.nutrition)
                 }
             }
             CompactMetricCard(
@@ -238,8 +245,7 @@ struct TodayView: View {
             )
             .contextMenu {
                 Button("Ask Coach about this") {
-                    coachFocus = CoachFocusContextBuilder.metric(.exercise, record: record)
-                    showCoachChat = true
+                    coachLaunch = .room(.activity)
                 }
             }
         }

@@ -4,51 +4,21 @@ import Foundation
 /// paragraph the UI can always show as complete sentences.
 enum HomeCoachCardCopy {
     static func whereYouAre(for record: DailyRecord) -> String {
-        let sleep = CoachSnapshotBuilder.status(
-            name: "Sleep",
-            value: record.sleepHours,
-            goal: record.sleepGoal.rawValue,
-            unit: "h",
-            decimals: 1,
-            points: record.sleepScore,
-            maxPoints: 4
-        )
-        let fiber = CoachSnapshotBuilder.status(
-            name: "Fiber",
-            value: record.fiberGrams,
-            goal: Double(record.fiberGoal.rawValue),
-            unit: "g",
-            decimals: 1,
-            points: record.fiberScore,
-            maxPoints: 4
-        )
-        let exercise = CoachSnapshotBuilder.status(
-            name: "Exercise",
-            value: record.exerciseMinutes,
-            goal: Double(record.exerciseGoalMinutes),
-            unit: "min",
-            decimals: 0,
-            points: record.exerciseScore,
-            maxPoints: 2
-        )
-        let score = ScoreCalculator.formatDisplayScore(record.totalScore)
-        return "You're at \(score) of 10 today. \(compact(sleep, decimals: 1)) \(compact(fiber, decimals: 1)) \(compact(exercise, decimals: 0))"
+        healthLine(for: record)
     }
 
-    /// Home-sized status line. Exact goal words, without the prompt's point math.
-    private static func compact(_ metric: CoachMetricStatus, decimals: Int) -> String {
-        let value = String(format: "%.\(max(decimals, 0))f", metric.value)
-        let goalDecimals = metric.goal.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 1
-        let goal = String(format: "%.\(goalDecimals)f", metric.goal)
-        switch metric.level {
-        case .missing:
-            return "\(metric.name) is unlogged — NO DATA, not a zero (goal \(goal) \(metric.unit))."
-        case .below:
-            return "\(metric.name) is \(value) \(metric.unit) — BELOW GOAL (goal \(goal) \(metric.unit))."
-        case .met:
-            return "\(metric.name) is \(value) \(metric.unit) — GOAL MET."
-        case .exceeded:
-            return "\(metric.name) is \(value) \(metric.unit) — GOAL EXCEEDED (goal \(goal) \(metric.unit))."
+    /// One spoken sentence. Never prints status tokens.
+    static func healthLine(for record: DailyRecord) -> String {
+        let score = ScoreCalculator.formatDisplayScore(record.totalScore)
+        switch record.primaryFocus {
+        case .sleep:
+            return "You're at \(score) of 10 — last night's sleep was shorter than the night you wanted."
+        case .fiber:
+            return "You're at \(score) of 10 — food still has room before the day is done."
+        case .exercise:
+            return "You're at \(score) of 10 — movement still has room if you want it."
+        case .maintain:
+            return "You're at \(score) of 10 — the three pillars are in a good place today."
         }
     }
 
@@ -74,8 +44,9 @@ enum HomeCoachCardCopy {
     ) -> DailyCoachCardContent {
         let time = CoachTimeOfDay.current(from: now, calendar: calendar)
         return DailyCoachCardContent(
-            whereYouAre: whereYouAre(for: record),
-            nextMove: nextMove(for: record, timeOfDay: time)
+            whereYouAre: healthLine(for: record),
+            nextMove: nextMove(for: record, timeOfDay: time),
+            healthLine: healthLine(for: record)
         )
     }
 

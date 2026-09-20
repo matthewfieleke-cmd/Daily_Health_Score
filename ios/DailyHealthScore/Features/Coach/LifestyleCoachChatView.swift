@@ -11,17 +11,20 @@ struct LifestyleCoachChatView: View {
     @State private var goalEdit: SMARTGoalEdit?
     @State private var focus: CoachFocusContext?
     @State private var showMemory = false
+    @State private var launch: CoachChatLaunch
     @FocusState private var isInputFocused: Bool
 
     init(
         initialMessage: String = "",
         focus: CoachFocusContext? = nil,
-        focusedGoalID: UUID? = nil
+        focusedGoalID: UUID? = nil,
+        launch: CoachChatLaunch? = nil
     ) {
         _draft = State(initialValue: initialMessage)
         _focusedGoalID = State(initialValue: focusedGoalID ?? focus?.goalId)
         _planningGoal = State(initialValue: focusedGoalID != nil || focus?.feature == .goal || initialMessage.lowercased().contains("smart goal"))
         _focus = State(initialValue: focus)
+        _launch = State(initialValue: launch ?? focus.map { .focus($0) } ?? .inbox)
     }
 
     private var selectedGoal: SMARTGoal? {
@@ -98,7 +101,7 @@ struct LifestyleCoachChatView: View {
             composer
         }
         .background(AppTheme.screenBackground.ignoresSafeArea())
-        .navigationTitle("DHS Lifestyle Coach")
+        .navigationTitle(coach.memory.openThread?.title ?? "DHS Lifestyle Coach")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -135,6 +138,7 @@ struct LifestyleCoachChatView: View {
         }
         .onAppear {
             coach.refreshAvailability()
+            _ = coach.memory.open(launch)
         }
     }
 
@@ -142,7 +146,7 @@ struct LifestyleCoachChatView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(CoachCharter.philosophy)
                 .font(.subheadline.weight(.medium))
-            Text("Talk through what matters to you, formulate a SMART goal, or work through a barrier. Your coach can use your saved goals, dated check-ins, and memories you can inspect. Conversations stay in this app's local memory.")
+            Text(coach.memory.openThread.map { "\( $0.room.label). Same coach — follow what matters. Lifestyle Medicine, one mind." } ?? "Talk through what matters. Same coach in every room.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

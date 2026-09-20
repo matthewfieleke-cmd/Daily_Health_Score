@@ -65,7 +65,7 @@ final class LifestyleCoachController: ObservableObject {
         let timeOfDay = CoachTimeOfDay.current(from: now, calendar: calendar)
         // Keyed by clock window as well as day: a morning card must not still
         // sit on Home at 6pm suggesting lunch.
-        let cacheKey = "\(record.date)#\(timeOfDay.rawValue)#\(CoachGoalPlanning.cacheKey(goals: goals))"
+        let cacheKey = "\(record.date)#\(timeOfDay.rawValue)#rooms1#\(CoachGoalPlanning.cacheKey(goals: goals))"
         if !force,
            memory.cachedDailyCardDateKey == cacheKey,
            let cached = memory.cachedDailyCard {
@@ -101,12 +101,16 @@ final class LifestyleCoachController: ObservableObject {
                 now: now,
                 calendar: calendar
             )
-            let card = try await model.generateDailyCard(
+            var card = try await model.generateDailyCard(
                 snapshot: snapshot,
                 profile: memory.profile,
                 summary: memory.runningSummary,
                 memoryBlock: memory.promptMemoryBlock
             )
+            memory.parkStaleThreads()
+            if let continued = CoachThreadLogic.continueThread(in: memory.threads) {
+                card.continueTitle = continued.title
+            }
             guard dailyGenerationID == generationID else { return }
             memory.saveDailyCard(card, dateKey: cacheKey)
             dailyCard = card
@@ -138,8 +142,8 @@ final class LifestyleCoachController: ObservableObject {
         // Acute risk is answered deterministically, before availability or the model.
         if case .escalate(let message) = CoachSafetyGate.evaluate(trimmed) {
             goalProposal = nil
-            memory.append(CoachChatTurn(role: .user, text: trimmed))
-            memory.append(CoachChatTurn(role: .coach, text: message))
+            memory.append(CoachChatTurn(role: .user, text: trimmed, threadId: memory.openThreadID))
+            memory.append(CoachChatTurn(role: .coach, text: message, threadId: memory.openThreadID))
             chatError = nil
             if chatGenerationID == generationID { isChatBusy = false }
             return
@@ -156,8 +160,15 @@ final class LifestyleCoachController: ObservableObject {
         chatError = nil
         defer { if chatGenerationID == generationID { isChatBusy = false } }
 
-        memory.append(CoachChatTurn(role: .user, text: trimmed))
+        memory.append(CoachChatTurn(role: .user, text: trimmed, threadId: memory.openThreadID))
         memory.ingestUserStatedFacts(from: trimmed)
+        memory.classifyOpenThreadIfNeeded(latestUserText: trimmed)
+        let room = memory.openThread?.room ?? .inbox
+        let allowHealth = CoachThreadLogic.shouldMentionHealth(
+            room: room,
+            alreadyMentionedInWindow: memory.hasMentionedHealthThisWindow(),
+            userAskedAboutNumbers: CoachIntentClassifier.classify(trimmed).usesFullMetrics
+        )
 
         do {
             let snapshot = todayRecord.map {
@@ -195,10 +206,16 @@ final class LifestyleCoachController: ObservableObject {
                 planningGoal: planningGoal,
                 focus: focus,
                 memoryBlock: memory.promptMemoryBlock,
-                activitiesByGoal: Dictionary(grouping: activities, by: \.goalId)
+                activitiesByGoal: Dictionary(grouping: activities, by: \.goalId),
+                room: room,
+                bridges: memory.recentBridges(),
+                allowUnpromptedHealth: allowHealth
             )
             guard chatGenerationID == generationID else { return }
-            memory.append(CoachChatTurn(role: .coach, text: result.message))
+            memory.append(CoachChatTurn(role: .coach, text: result.message, threadId: memory.openThreadID))
+            if allowHealth {
+                memory.markHealthMentioned()
+            }
             goalProposal = result.goalProposal
             if result.proposalRejected {
                 chatError = "The draft needs clarification before it can be saved. Ask the coach to clarify the action, target, or deadline, or create the goal manually."
@@ -215,7 +232,7 @@ final class LifestyleCoachController: ObservableObject {
                 ? FoundationModelsCoach.friendlyFailureMessage
                 : error.localizedDescription
             chatError = message
-            memory.append(CoachChatTurn(role: .coach, text: message))
+            memory.append(CoachChatTurn(role: .coach, text: message, threadId: memory.openThreadID))
         }
     }
 

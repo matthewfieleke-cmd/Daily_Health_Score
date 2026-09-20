@@ -81,7 +81,9 @@ Then, on a **newly paired Ultra 4** (or any Watch that will not take the app):
 
 If the Ultra 4 shows **Unable to Install “Daily Health Score”** / **integrity could not be verified**, the new watch is not in the signing profile or Developer Mode is still off. Do steps 2–6 again, then on each of **DailyHealthScore**, **DailyHealthScoreWatch**, and **DailyHealthScoreWatchWidgets** toggle **Automatically manage signing** off and on.
 
-If the Watch **app** shows today’s score but a face slot still says **Today / Open iPhone**, pull this build (18), `xcodegen generate`, set Team, Clean, and Run **DailyHealthScore** to the iPhone. In Settings tap **Refresh Watch face** — it stays enabled and must show a result (Sent 3.3 / Watch is connecting / not paired). Raise the Ultra 4. The face now also reads the same Watch Connectivity feed the Watch app uses, and HealthKit if that feed is empty. You do not need to remove and re-add the slot.
+If the Watch **app** shows today’s score but a face slot still says **Today / Open iPhone**, pull this build (19), `xcodegen generate`, set Team, Clean, and Run **DailyHealthScore** to the iPhone. In Settings tap **Refresh Watch face** — it stays enabled and must show a result (Sent 3.3 / Watch is connecting / not paired). Raise the Ultra 4. The face now also reads the same Watch Connectivity feed the Watch app uses, and HealthKit if that feed is empty. You do not need to remove and re-add the slot.
+
+Lifestyle Coach (build 19): Home is one spoken health line plus **Continue**, **What’s on my mind**, and **All chats**. Six desks live one level down in Recents. The same coach follows you; a thread files after 1–2 turns and refiles (and renames) if the talk moves. Sleep / fiber / exercise “Ask Coach” resumes that desk’s Active thread only — it does not drag in another room.
 
 The iPhone app can still run if the Watch companion is waiting. A missing Watch app is a packaging/install issue, not a coach or SMART-goal issue.
 
@@ -108,5 +110,5 @@ Tune `HealthKitService.swift` if your sleep totals differ from the Health app.
 
 ## Content
 
-- **DHS Lifestyle Coach** — daily card and Ask-the-coach chat via Private Cloud Compute, with on-device fallback (Apple Intelligence).
+- **DHS Lifestyle Coach** — one coach, six Lifestyle Medicine desks (Relationships, Nutrition, Sleep, Physical Activity, Stress, Hobbies), plus What’s on my mind. Home is one PCC health line and doors into Continue / inbox / Recents. Private Cloud Compute first, on-device fallback. Shared memory; rooms are doors, not fences.
 - Rotating suggestion libraries remain available to the record builder.

@@ -43,20 +43,19 @@ final class CoachHomeCardTests: XCTestCase {
         XCTAssertTrue(move.contains("before lunch"))
     }
 
-    func test_fallbackCard_isTwoCompleteBeatsWithStatuses() {
+    func test_fallbackCard_isOneSpokenHealthLineWithoutStatusTokens() {
         let record = makeRecord(sleep: 5.0, fiber: 12, exercise: 2, focus: .fiber)
         let card = HomeCoachCardCopy.fallbackCard(
             for: record,
             now: date(hour: 18, minute: 0),
             calendar: calendar
         )
-        XCTAssertTrue(card.whereYouAre.contains("of 10"))
-        XCTAssertTrue(card.whereYouAre.contains("Sleep"))
-        XCTAssertTrue(card.whereYouAre.contains("Fiber"))
-        XCTAssertTrue(card.whereYouAre.contains("Exercise"))
-        XCTAssertTrue(card.whereYouAre.contains("BELOW GOAL") || card.whereYouAre.contains("NO DATA"))
-        XCTAssertLessThan(card.whereYouAre.count, 320)
-        XCTAssertFalse(card.whereYouAre.contains("…"))
+        XCTAssertTrue(card.healthLine.contains("of 10"))
+        XCTAssertFalse(card.healthLine.contains("BELOW GOAL"))
+        XCTAssertFalse(card.healthLine.contains("NO DATA"))
+        XCTAssertFalse(card.healthLine.contains("GOAL MET"))
+        XCTAssertLessThan(card.healthLine.count, 220)
+        XCTAssertFalse(card.healthLine.contains("…"))
         XCTAssertFalse(card.nextMove.contains("…"))
         XCTAssertFalse(card.nextMove.isEmpty)
         XCTAssertFalse(card.nextMove.lowercased().contains("after lunch"))
