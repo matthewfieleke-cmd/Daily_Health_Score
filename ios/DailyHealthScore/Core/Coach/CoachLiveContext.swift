@@ -116,15 +116,21 @@ final class CoachLiveContext {
             fallbackAction: fallbackAction
         )
         guard let proposal else {
-            proposalRejected = true
-            return "Not drafted: a new goal needs specificText, targetCount (1–30), theme (marriage, parenting, health, relationships, finances, career, choresMisc), and daysFromToday (1–30); an update needs an exact goalID from the saved goals."
+            let kept = pendingProposal != nil
+            if !kept { proposalRejected = true }
+            let reason = "Not drafted: a new goal needs specificText, targetCount (1–30), theme (marriage, parenting, health, relationships, finances, career, choresMisc), and daysFromToday (1–30); an update needs an exact goalID from the saved goals."
+            return kept ? reason + " The draft already on screen is unchanged." : reason
         }
         if proposal.isNoOp {
             return "Not drafted: that is the goal exactly as it already is."
         }
+        let replaced = pendingProposal != nil
         pendingProposal = proposal
         proposalRejected = false
-        return "Drafted. The app will show it for review; it is not saved until they save it."
+        if replaced {
+            return "Replaced the earlier draft. Only this latest one is on screen. It is not saved yet."
+        }
+        return "One draft is on screen. It is not saved yet."
     }
 
     func logCheckIn(goalID: String, when: String, note: String) -> String {
@@ -135,6 +141,6 @@ final class CoachLiveContext {
             return "Not offered: use an exact goalID from the saved goals, and only for a goal that can still take a check-in."
         }
         pendingCheckIn = request
-        return "The app will ask them to confirm the check-in."
+        return "Ready for them to confirm. It is not logged yet."
     }
 }

@@ -57,8 +57,6 @@ final class FoundationModelsCoach {
         kind: CoachCheckInKind,
         snapshot: CoachSnapshot,
         profile: String,
-        memoryBlock: String,
-        recentConversations: String,
         goalRows: [CoachCheckInGoalRow],
         trend: CoachTrendDigest?,
         goalPaceDirective: String?,
@@ -85,14 +83,8 @@ final class FoundationModelsCoach {
 
             \(trend?.promptBlock ?? "TREND FACTS: none today.")
 
-            PROFILE (compiled from the memory files):
+            WHO THEY ARE (orientation for this card; use a detail only when it fits today):
             \(profile.isEmpty ? "None yet." : profile.limitedToCoachBudget(budget.profileCharacters))
-
-            MEMORY FILES (dated; quote accurately):
-            \(memoryBlock.limitedToCoachBudget(budget.profileCharacters))
-
-            RECENT CONVERSATIONS (for the question; quote accurately):
-            \(recentConversations.limitedToCoachBudget(budget.summaryCharacters))
 
             \(CoachCharter.checkInContract(kind: kind, hasTrend: trend != nil))
             """
@@ -146,13 +138,13 @@ final class FoundationModelsCoach {
     // MARK: - Chat
 
     /// One conversation per chat, held by the framework the way any assistant
-    /// holds a thread. Rebuilt when the tier or the standing profile changes,
-    /// or after a context overflow; seeded from the stored turns on a cold start.
+    /// holds a thread. Rebuilt when the tier changes or after a context overflow;
+    /// seeded from the stored turns on a cold start. Who the person is stays in
+    /// the tools, so a new note does not throw the conversation away.
     #if canImport(FoundationModels)
     private struct LiveSession {
         var session: LanguageModelSession
         var tier: CoachModelTier
-        var profileRevision: Int
         var turnsSeen: Int
     }
     private var sessions: [UUID: LiveSession] = [:]
@@ -171,13 +163,11 @@ final class FoundationModelsCoach {
         #endif
     }
 
-    /// The reply. The model sees the conversation, the standing profile, and a
-    /// set of tools for facts and actions; it decides what this message needs.
+    /// The reply. The model sees the conversation and a set of tools for facts
+    /// and actions; it decides what this message needs.
     func reply(
         to userMessage: String,
         recentTurns: [CoachChatTurn],
-        profile: String,
-        profileRevision: Int,
         live: CoachLiveContext,
         focus: CoachFocusContext? = nil,
         historyBlock: String? = nil,
@@ -224,7 +214,7 @@ final class FoundationModelsCoach {
 
         // Server: a persistent session per chat.
         if tier == .privateCloud {
-            let instructions = CoachCharter.instructions(for: .privateCloud, profile: profile)
+            let instructions = CoachCharter.instructions(for: .privateCloud)
             let budget = CoachContextBudget.make(
                 totalTokens: await CoachModelProvider.contextTokens(for: .privateCloud),
                 instructionCharacters: instructions.count
@@ -232,7 +222,7 @@ final class FoundationModelsCoach {
             let threadID = context.thread?.id
             var seed: [CoachChatTurn]? = nil
             var liveSession: LiveSession
-            if let threadID, let existing = sessions[threadID], existing.tier == .privateCloud, existing.profileRevision == profileRevision {
+            if let threadID, let existing = sessions[threadID], existing.tier == .privateCloud {
                 liveSession = existing
             } else {
                 // Cold start: the stored turns (minus the message being sent) seed
@@ -241,7 +231,6 @@ final class FoundationModelsCoach {
                 liveSession = LiveSession(
                     session: CoachModelProvider.makeSession(tier: .privateCloud, instructions: instructions, tools: CoachSessionTools.make(context: live)),
                     tier: .privateCloud,
-                    profileRevision: profileRevision,
                     turnsSeen: 0
                 )
             }
@@ -251,7 +240,7 @@ final class FoundationModelsCoach {
                     session,
                     to: prompt(seedingTranscript: seed, budget: budget),
                     tier: .privateCloud,
-                    depth: .moderate
+                    depth: .deep
                 )
             }
 
@@ -263,7 +252,7 @@ final class FoundationModelsCoach {
                     // The thread outgrew the window: start a fresh session seeded
                     // with the recent turns and continue.
                     let fresh = CoachModelProvider.makeSession(tier: .privateCloud, instructions: instructions, tools: CoachSessionTools.make(context: live))
-                    liveSession = LiveSession(session: fresh, tier: .privateCloud, profileRevision: profileRevision, turnsSeen: 0)
+                    liveSession = LiveSession(session: fresh, tier: .privateCloud, turnsSeen: 0)
                     text = try await attempt(fresh, seed: Array(recentTurns.suffix(8).dropLast(recentTurns.last?.role == .user ? 1 : 0)))
                 } catch where !Self.isContentDecline(error) {
                     // A server hiccup is usually gone a second later.
@@ -543,10 +532,10 @@ struct GenerableCoachCheckIn {
     @Guide(description: "One complete spoken sentence about today's health. No status tokens (BELOW GOAL, GOAL MET, NO DATA). No ellipses. Plain text.")
     var healthLine: String
 
-    @Guide(description: "One question that shows you remember this person, tied to a memory note, a recent conversation, or a live goal. One sentence ending in a question mark. Plain text.")
+    @Guide(description: "One easy question about the day ahead. One sentence ending in a question mark. Plain text. A memory only when it genuinely fits this day. A commute is driving; never suggest doing anything during it other than listening.")
     var question: String
 
-    @Guide(description: "Evening only: one small specific thing for tomorrow, one sentence starting with Tomorrow. Empty string in the morning.")
+    @Guide(description: "Evening only: one small specific thing for tomorrow, one sentence starting with Tomorrow. Empty string in the morning. A commute is driving; never suggest doing anything during it other than listening.")
     var tomorrowLine: String
 
     @Guide(description: "Only when TREND FACTS were provided: one sentence with plain numbers. Otherwise empty string.")

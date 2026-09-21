@@ -156,8 +156,6 @@ final class LifestyleCoachController: ObservableObject {
                 kind: kind,
                 snapshot: snapshot,
                 profile: memory.compiledProfile,
-                memoryBlock: memory.promptMemoryBlock,
-                recentConversations: memory.recentConversationsBlock(now: now),
                 goalRows: rows,
                 trend: trend,
                 goalPaceDirective: SMARTGoalPace.directive(goals: goals, now: now, calendar: calendar),
@@ -255,8 +253,6 @@ final class LifestyleCoachController: ObservableObject {
             emptyMemorySections: memory.emptySectionLabels
         )
 
-        await compileProfileIfNeeded()
-
         do {
             // Everything the tools can reach for, live, for this turn.
             live.snapshot = todayRecord.map {
@@ -280,8 +276,6 @@ final class LifestyleCoachController: ObservableObject {
             let result = try await model.reply(
                 to: trimmed,
                 recentTurns: memory.recentTurnsForPrompt(limit: CoachContextBudget.maxTranscriptTurns),
-                profile: memory.compiledProfile,
-                profileRevision: memory.compiledProfile.hashValue,
                 live: live,
                 focus: focus,
                 historyBlock: historyBlock,
@@ -373,7 +367,7 @@ final class LifestyleCoachController: ObservableObject {
             let profile = try await model.compileProfile(entryList: memory.entryList)
             memory.saveCompiledProfile(profile)
         } catch {
-            // Entries alone still go into the prompt.
+            // The card can be written without a compiled profile; the files stay in the tool.
         }
     }
 
@@ -433,8 +427,6 @@ final class LifestyleCoachController: ObservableObject {
             let result = try await model.reply(
                 to: prompt,
                 recentTurns: [],
-                profile: memory.compiledProfile,
-                profileRevision: memory.compiledProfile.hashValue,
                 live: live,
                 context: context
             )
