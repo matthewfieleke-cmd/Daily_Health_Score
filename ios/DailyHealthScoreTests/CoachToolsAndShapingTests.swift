@@ -376,7 +376,7 @@ final class CoachLiveContextTests: XCTestCase {
         XCTAssertTrue(live.logCheckIn(goalID: goal.id.uuidString, when: "today", note: "").hasPrefix("Not offered: the person has not said"))
         live.personsWords = "I walked after dinner tonight, can you log it?"
         XCTAssertTrue(live.logCheckIn(goalID: UUID().uuidString, when: "today", note: "").hasPrefix("Not offered: use an exact goalID"))
-        XCTAssertEqual(live.logCheckIn(goalID: goal.id.uuidString, when: "today", note: "by the pond"), "The app will ask them to confirm the check-in.")
+        XCTAssertEqual(live.logCheckIn(goalID: goal.id.uuidString, when: "today", note: "by the pond"), "Ready for them to confirm. It is not logged yet.")
         XCTAssertEqual(live.pendingCheckIn?.goalId, goal.id)
     }
 
@@ -388,12 +388,24 @@ final class CoachLiveContextTests: XCTestCase {
         XCTAssertTrue(same.hasPrefix("Not drafted: that is the goal exactly"))
         XCTAssertNil(live.pendingProposal)
         let created = live.propose(operation: "create", goalID: nil, specificText: "Walk with Maureen after dinner", targetCount: 3, theme: "marriage", daysFromToday: 14, personalReason: "connection", cue: "after dinner", expectedBarriers: nil, fallbackAction: "five minutes outside")
-        XCTAssertTrue(created.hasPrefix("Drafted."))
+        XCTAssertTrue(created.hasPrefix("One draft is on screen"))
         XCTAssertEqual(live.pendingProposal?.edit.specificText, "Walk with Maureen after dinner")
         XCTAssertFalse(live.proposalRejected)
+        let replaced = live.propose(operation: "create", goalID: nil, specificText: "Finish each note before the next patient", targetCount: 5, theme: "career", daysFromToday: 7, personalReason: nil, cue: nil, expectedBarriers: nil, fallbackAction: "one note")
+        XCTAssertTrue(replaced.hasPrefix("Replaced the earlier draft"))
+        XCTAssertEqual(live.pendingProposal?.edit.specificText, "Finish each note before the next patient")
+        XCTAssertFalse(replaced.contains("Walk with Maureen"))
         let broken = live.propose(operation: "create", goalID: nil, specificText: nil, targetCount: nil, theme: nil, daysFromToday: nil, personalReason: nil, cue: nil, expectedBarriers: nil, fallbackAction: nil)
         XCTAssertTrue(broken.hasPrefix("Not drafted: a new goal needs"))
+        XCTAssertTrue(broken.contains("already on screen is unchanged"))
+        XCTAssertFalse(live.proposalRejected)
+        XCTAssertEqual(live.pendingProposal?.edit.specificText, "Finish each note before the next patient")
+        live.beginTurn()
+        let alone = live.propose(operation: "create", goalID: nil, specificText: nil, targetCount: nil, theme: nil, daysFromToday: nil, personalReason: nil, cue: nil, expectedBarriers: nil, fallbackAction: nil)
+        XCTAssertTrue(alone.hasPrefix("Not drafted: a new goal needs"))
+        XCTAssertFalse(alone.contains("unchanged"))
         XCTAssertTrue(live.proposalRejected)
+        XCTAssertNil(live.pendingProposal)
     }
 
     func test_toolNamesIncludeTheActions() async {

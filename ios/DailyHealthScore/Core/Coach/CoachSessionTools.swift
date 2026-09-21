@@ -50,7 +50,7 @@ struct CoachLookupTodayTool: Tool {
 
 struct CoachLookupGoalsTool: Tool {
     let name = "lookupSMARTGoals"
-    let description = "Saved SMART goals with exact goalIDs, progress, pace, deadlines, and cues. Call when goals come up, before proposing a change, and before offering to log a check-in."
+    let description = "Saved SMART goals with exact goalIDs, progress, pace, deadlines, and cues. Call when goals come up, before proposing a change, and before offering to log a check-in. This list is the truth about what is saved, including a draft they saved earlier in the chat."
     let context: CoachLiveContext
 
     @Generable
@@ -67,7 +67,7 @@ struct CoachLookupGoalsTool: Tool {
 
 struct CoachLookupPersonTool: Tool {
     let name = "lookupWhatWeRemember"
-    let description = "Your dated notes about this person — who is in their life, their patterns and what helps, how they eat, their routines, their health, recent state — plus summaries of other recent chats. Call when the conversation turns to their life and the profile is not enough."
+    let description = "Your dated notes about this person — who is in their life, their patterns and what helps, how they eat, their routines, their health, recent state — plus summaries of other recent chats. Call when knowing this person would change the answer. Leave it when a stranger would have gotten the same reply."
     let context: CoachLiveContext
 
     @Generable
@@ -155,7 +155,7 @@ struct CoachRememberTool: Tool {
 
 struct CoachProposeGoalTool: Tool {
     let name = "proposeSMARTGoal"
-    let description = "Hand the person a SMART goal draft to review — a new goal, or an update to a saved one by exact goalID — once a concrete plan is agreed. The app shows it for review; nothing is saved until they save it."
+    let description = "Hand the person a SMART goal draft to review — a new goal, or an update to a saved one by exact goalID — once a concrete plan is agreed. Only one draft can be on screen at a time; a second call replaces the first. Nothing is saved until they save it."
     let context: CoachLiveContext
 
     @Generable
@@ -201,7 +201,7 @@ struct CoachProposeGoalTool: Tool {
 
 struct CoachLogCheckInTool: Tool {
     let name = "logGoalCheckIn"
-    let description = "Offer to record a check-in on a saved SMART goal, only when the person clearly said they completed that action today or yesterday. The app asks them to confirm; never say it is logged."
+    let description = "Offer to record a check-in on a saved SMART goal, only when the person clearly said they completed that action today or yesterday. Call lookupSMARTGoals first; that list is what is saved. Never say the check-in is already logged."
     let context: CoachLiveContext
 
     @Generable

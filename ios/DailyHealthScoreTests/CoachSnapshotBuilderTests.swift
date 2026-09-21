@@ -150,8 +150,8 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertLessThan(block.count, 1_700)
     }
 
-    /// One page: identity, the few things a person would need to be told, the
-    /// hard lines, and the standing profile. Facts come through tools.
+    /// One page: identity, the few things a person would need to be told, and the
+    /// hard lines. Who the person is arrives through tools, not a standing biography.
     func test_charter_isOnePageOfIdentityAndHardLines() {
         let charter = CoachCharter.instructions
         XCTAssertTrue(CoachCharter.philosophy.contains("acceptance"))
@@ -167,7 +167,8 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(charter.contains("Never paraphrase their message back"))
         XCTAssertTrue(charter.contains("never narrate your own note-taking"))
         XCTAssertTrue(charter.contains("re-read it and correct it plainly rather than defend it"))
-        XCTAssertTrue(charter.contains("come only from the tools and the profile below, never from guesswork"))
+        XCTAssertTrue(charter.contains("come only from the tools, never from guesswork"))
+        XCTAssertTrue(charter.contains("would be glad to have given it"))
         XCTAssertTrue(charter.contains("rememberAboutPerson"))
         XCTAssertTrue(charter.contains("proposeSMARTGoal"))
         XCTAssertTrue(charter.contains("logGoalCheckIn"))
@@ -188,14 +189,13 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         let sentences = quoted.filter { $0.count > 24 && $0 != CoachSafetyGate.immediateHelpSentence && $0 != CoachCharter.philosophy }
         XCTAssertEqual(sentences, [], "Example sentences become scripts: \(sentences)")
 
-        // The standing profile rides in the instructions; the on-device model goes without it.
-        let withProfile = CoachCharter.instructions(profile: "About you: family physician, four clinic days.")
-        XCTAssertTrue(withProfile.contains("WHO THIS PERSON IS"))
-        XCTAssertTrue(withProfile.contains("family physician, four clinic days"))
+        // The biography stays out of the prompt. Both models share this page;
+        // a note about the person is a tool call, not standing context.
         XCTAssertFalse(charter.contains("WHO THIS PERSON IS"))
-        XCTAssertEqual(CoachCharter.instructions(for: .privateCloud, profile: "x"), CoachCharter.instructions(profile: "x"))
-        XCTAssertEqual(CoachCharter.instructions(for: .onDevice, profile: "x"), CoachCharter.onDeviceInstructions)
-        XCTAssertFalse(CoachCharter.onDeviceInstructions.contains("WHO THIS PERSON IS"))
+        XCTAssertFalse(charter.contains("family physician"))
+        XCTAssertEqual(CoachCharter.instructions(for: .privateCloud), charter)
+        XCTAssertEqual(CoachCharter.instructions(for: .onDevice), CoachCharter.onDeviceInstructions)
+        XCTAssertEqual(CoachCharter.onDeviceInstructions, charter)
 
         XCTAssertTrue(CoachCharter.acquaintanceContract().contains("what to call them"))
         XCTAssertTrue(CoachCharter.acquaintanceContract().contains("Every file has something now"))
@@ -209,10 +209,16 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(morning.contains("TIME RULES"))
         XCTAssertTrue(morning.contains("TREND FACTS"))
         XCTAssertTrue(morning.contains("Never write a number"))
+        XCTAssertTrue(morning.contains("only when it genuinely fits"))
+        XCTAssertFalse(morning.contains("tied to a memory"))
+        XCTAssertTrue(morning.contains("A commute is driving"))
         let evening = CoachCharter.checkInContract(kind: .evening, hasTrend: false)
         XCTAssertTrue(evening.contains("tomorrowLine"))
         XCTAssertTrue(evening.contains("Tomorrow"))
         XCTAssertTrue(evening.contains("Never write a number"))
+        XCTAssertTrue(evening.contains("only when they genuinely fit"))
+        XCTAssertFalse(evening.contains("tied to a memory"))
+        XCTAssertEqual(evening.components(separatedBy: "A commute is driving").count - 1, 2)
         XCTAssertTrue(CoachCharter.filingInstructions.contains("threadTitle"))
         XCTAssertTrue(CoachCharter.reviewInstructions.contains("Never invent facts"))
     }
