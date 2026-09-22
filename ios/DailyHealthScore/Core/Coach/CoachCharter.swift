@@ -40,8 +40,8 @@ enum CoachCharter {
     /// facts are tools, not a biography pasted into the prompt.
     static func instructions(for tier: CoachModelTier) -> String {
         switch tier {
-        case .privateCloud, .onDevice:
-            return instructions
+        case .privateCloud: return instructions
+        case .onDevice: return onDeviceInstructions
         }
     }
 
