@@ -181,7 +181,6 @@ final class BodyTrendTests: XCTestCase {
         XCTAssertTrue(trend.promptBlock.contains("seven-day average"))
         XCTAssertTrue(trend.promptBlock.contains("Steady over the last four weeks"))
         XCTAssertTrue(trend.promptBlock.contains("Down about"))
-        XCTAssertTrue(trend.promptBlock.contains("screening number"))
     }
 
     func test_staleAndSparseDataSaySo() {
@@ -195,7 +194,7 @@ final class BodyTrendTests: XCTestCase {
         XCTAssertNil(BodyTrend.build(from: BodyMeasurements(), now: now, calendar: calendar))
         let bmiOnly = BodyTrend.build(from: BodyMeasurements(latestBMISample: 24.2), now: now, calendar: calendar)!
         XCTAssertEqual(bmiOnly.bmi, 24.2)
-        XCTAssertTrue(bmiOnly.promptBlock.contains("in the usual range"))
+        XCTAssertTrue(bmiOnly.promptBlock.contains("BMI about 24.2."))
     }
 
     /// Kilograms stay canonical; the words follow the unit the person weighs in.
@@ -229,11 +228,16 @@ final class BodyTrendTests: XCTestCase {
         XCTAssertEqual(BodyMassUnit.pounds.text(fromKilograms: 0.5), "1.1 lb")
     }
 
-    func test_bmiBandsAreLabelsNotVerdicts() {
-        XCTAssertEqual(BodyTrend.bmiBand(17.9), "below the usual range")
-        XCTAssertEqual(BodyTrend.bmiBand(22), "in the usual range")
-        XCTAssertEqual(BodyTrend.bmiBand(27.9), "in the overweight screening range")
-        XCTAssertEqual(BodyTrend.bmiBand(31), "in the obesity screening range")
+    /// BMI is handed over as a number. Naming a screening band, or warning that
+    /// the number is blind to muscle, is interpretation the coach can do itself.
+    func test_bmiIsHandedOverAsANumber() {
+        var measurements = BodyMeasurements(weights: [sample(daysAgo: 0, kg: 122.1)], heightMeters: 1.83)
+        measurements.unit = .pounds
+        let block = BodyTrend.build(from: measurements, now: now, calendar: calendar)!.promptBlock
+        XCTAssertTrue(block.contains("BMI about 36.5."), block)
+        XCTAssertFalse(block.lowercased().contains("screening"))
+        XCTAssertFalse(block.lowercased().contains("obesity"))
+        XCTAssertFalse(block.lowercased().contains("verdict"))
     }
 }
 

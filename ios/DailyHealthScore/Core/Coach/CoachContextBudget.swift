@@ -38,7 +38,6 @@ struct CoachContextBudget: Equatable, Sendable {
 
     let totalTokens: Int
     let responseTokens: Int
-    let knowledgeCharacters: Int
     let historyCharacters: Int
     let transcriptTurns: Int
     let transcriptCharactersPerTurn: Int
@@ -70,25 +69,21 @@ struct CoachContextBudget: Equatable, Sendable {
 
         // Shares of what's left, then clamped so a very large window does not
         // produce a rambling prompt and a small one still leaves room for facts.
-        // The knowledge floor is one full reference entry; below that, retrieval
-        // returns a fragment and the model answers from memory instead.
         // Shares sum to well under 1.0: every block being simultaneously full is
         // the worst case, and the small window has no room for an overrun.
         // Upper bounds are generous enough for the 32K server window without
         // letting a prompt grow past the point where more material helps.
-        var knowledge = clamp(Int(Double(available) * 0.28), min: 900, max: 12_000)
-        var history = clamp(Int(Double(available) * 0.10), min: 400, max: maxHistoryCharacters)
-        var transcript = clamp(Int(Double(available) * 0.30), min: 480, max: 16_000)
+        var history = clamp(Int(Double(available) * 0.15), min: 400, max: maxHistoryCharacters)
+        var transcript = clamp(Int(Double(available) * 0.45), min: 480, max: 16_000)
         var summary = clamp(Int(Double(available) * 0.10), min: 300, max: 2_000)
         var profile = clamp(Int(Double(available) * 0.09), min: 260, max: 1_600)
 
         // Those floors can outrun a small window as the charter grows, and a
         // budget that promises more room than exists is how prompts get silently
         // truncated. Scale every block back together instead.
-        let requested = knowledge + history + transcript + summary + profile
+        let requested = history + transcript + summary + profile
         if requested > available {
             let scale = Double(available) / Double(requested)
-            knowledge = Swift.max(Int(Double(knowledge) * scale), 500)
             history = Swift.max(Int(Double(history) * scale), 200)
             transcript = Swift.max(Int(Double(transcript) * scale), 300)
             summary = Swift.max(Int(Double(summary) * scale), 150)
@@ -100,7 +95,6 @@ struct CoachContextBudget: Equatable, Sendable {
         return CoachContextBudget(
             totalTokens: totalTokens,
             responseTokens: reservedResponseTokens(totalTokens: totalTokens),
-            knowledgeCharacters: knowledge,
             historyCharacters: history,
             transcriptTurns: turns,
             transcriptCharactersPerTurn: max(transcript / turns, 120),

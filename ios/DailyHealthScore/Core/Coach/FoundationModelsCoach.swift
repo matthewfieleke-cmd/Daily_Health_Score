@@ -170,7 +170,6 @@ final class FoundationModelsCoach {
         recentTurns: [CoachChatTurn],
         live: CoachLiveContext,
         focus: CoachFocusContext? = nil,
-        historyBlock: String? = nil,
         context: CoachReplyContext
     ) async throws -> CoachReplyResult {
         #if canImport(FoundationModels)
@@ -181,8 +180,8 @@ final class FoundationModelsCoach {
         lastFailureReason = nil
         live.beginTurn()
 
-        // Framing the model would not otherwise know: which chat this is, what a
-        // metric tap or a past-day question already resolved, and the intake.
+        // Framing the model would not otherwise know: which chat this is, what
+        // the person tapped to open it, and the intake. Past days are a tool.
         var framing: [String] = []
         if let thread = context.thread {
             switch thread.kind {
@@ -197,9 +196,6 @@ final class FoundationModelsCoach {
         }
         if let focus {
             framing.append(focus.promptBlock.limitedToCoachBudget(CoachContextBudget.maxHistoryCharacters))
-        }
-        if let historyBlock {
-            framing.append("EARLIER DAYS THE PERSON ASKED ABOUT (already computed — use these numbers exactly):\n" + historyBlock.limitedToCoachBudget(CoachContextBudget.maxHistoryCharacters))
         }
 
         func prompt(seedingTranscript turns: [CoachChatTurn]?, budget: CoachContextBudget) -> String {

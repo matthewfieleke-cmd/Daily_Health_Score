@@ -7,7 +7,7 @@ final class CoachContextBudgetTests: XCTestCase {
     private let server = CoachContextBudget.make(totalTokens: 32_768)
 
     func test_largerWindowGetsMoreRoom() {
-        XCTAssertGreaterThan(os27.knowledgeCharacters, os26.knowledgeCharacters)
+        XCTAssertGreaterThan(os27.historyCharacters, os26.historyCharacters)
         XCTAssertGreaterThan(os27.transcriptTurns, os26.transcriptTurns)
         XCTAssertGreaterThan(os27.summaryCharacters, os26.summaryCharacters)
     }
@@ -15,8 +15,8 @@ final class CoachContextBudgetTests: XCTestCase {
     /// The Private Cloud Compute window is 32K; the caps have to leave room to
     /// use it or routing to the server model buys nothing.
     func test_serverWindowIsActuallyUsed() {
-        XCTAssertGreaterThan(server.knowledgeCharacters, os27.knowledgeCharacters * 2)
         XCTAssertGreaterThan(server.transcriptTurns, os27.transcriptTurns)
+        XCTAssertEqual(server.transcriptTurns, CoachContextBudget.maxTranscriptTurns)
     }
 
     /// A bigger window should buy a fuller answer, not only a longer prompt.
@@ -26,7 +26,7 @@ final class CoachContextBudgetTests: XCTestCase {
     }
 
     func test_smallWindowKeepsWorkableFloors() {
-        XCTAssertGreaterThanOrEqual(os26.knowledgeCharacters, 500)
+        XCTAssertGreaterThanOrEqual(os26.historyCharacters, 200)
         XCTAssertGreaterThanOrEqual(os26.transcriptTurns, 2)
         XCTAssertGreaterThanOrEqual(os26.transcriptCharactersPerTurn, 120)
     }
@@ -35,8 +35,8 @@ final class CoachContextBudgetTests: XCTestCase {
     /// preferred size. It has to give ground evenly rather than promise room
     /// that isn't there and let the prompt truncate somewhere unpredictable.
     func test_smallWindowScalesBlocksTogetherRatherThanOverflowing() {
-        let blocks = os26.knowledgeCharacters
-            + os26.historyCharacters
+        let blocks = os26.historyCharacters
+            + os26.transcriptTurns * os26.transcriptCharactersPerTurn
             + os26.summaryCharacters
             + os26.profileCharacters
         let available = CoachContextBudget.availablePromptCharacters(
@@ -46,7 +46,7 @@ final class CoachContextBudgetTests: XCTestCase {
 
         XCTAssertLessThanOrEqual(blocks, available)
         // A window with room to spare must not be scaled back at all.
-        XCTAssertEqual(server.knowledgeCharacters, 12_000)
+        XCTAssertEqual(server.historyCharacters, CoachContextBudget.maxHistoryCharacters)
     }
 
     /// Filling a window to its last token means any text that tokenizes denser
@@ -55,7 +55,6 @@ final class CoachContextBudgetTests: XCTestCase {
         for budget in [os26, os27, server] {
             let characters = CoachCharter.instructions.count
                 + CoachContextBudget.scaffoldingCharacters
-                + budget.knowledgeCharacters
                 + budget.historyCharacters
                 + budget.transcriptTurns * budget.transcriptCharactersPerTurn
                 + budget.summaryCharacters
@@ -76,7 +75,6 @@ final class CoachContextBudgetTests: XCTestCase {
         for budget in [os26, os27, server] {
             let characters = CoachCharter.instructions.count
                 + CoachContextBudget.scaffoldingCharacters
-                + budget.knowledgeCharacters
                 + budget.historyCharacters
                 + budget.transcriptTurns * budget.transcriptCharactersPerTurn
                 + budget.summaryCharacters
