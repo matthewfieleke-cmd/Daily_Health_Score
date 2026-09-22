@@ -63,7 +63,7 @@ enum CoachReplyShape: String, Equatable, Sendable {
 
 /// Mirrors the framework's reasoning levels without importing it, so policy
 /// stays testable on any platform.
-enum CoachReasoningDepth: String, Equatable, Sendable {
+enum CoachReasoningDepth: String, CaseIterable, Equatable, Sendable {
     case light
     case moderate
     case deep

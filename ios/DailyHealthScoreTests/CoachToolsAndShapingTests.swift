@@ -24,6 +24,8 @@ final class CoachCalculatorTests: XCTestCase {
         XCTAssertEqual(CoachCalculator.format(12.5), "12.5")
         XCTAssertEqual(CoachCalculator.format(12.0), "12")
         XCTAssertEqual(CoachCalculator.format(1.333333), "1.33")
+        XCTAssertEqual(CoachCalculator.answer("268.7 lb to kg"), "268.7 lb = 121.88 kg")
+        XCTAssertEqual(CoachCalculator.answer("121.9 kilograms in pounds"), "121.9 kg = 268.74 lb")
     }
 }
 
@@ -114,6 +116,44 @@ final class CoachFoodDataTests: XCTestCase {
         XCTAssertTrue(text.contains("calculator"))
     }
 
+    func test_foodMatchesDistinguishExactCandidatesAndConflicts() {
+        let clif = CoachFoodFact(
+            name: "Oatmeal Raisin Walnut", brand: "Clif", servingDescription: "68 g",
+            calories: 250, proteinGrams: 10, fiberGrams: 5, totalSugarGrams: 18,
+            addedSugarGrams: 14, fatGrams: 6, carbGrams: nil, source: "USDA"
+        )
+        XCTAssertEqual(
+            CoachFoodService.matchQuality([clif], query: "Clif Oatmeal Raisin Walnut"),
+            .exact
+        )
+
+        var conflicting = clif
+        conflicting.calories = 230
+        conflicting.proteinGrams = 8
+        conflicting.source = "Open Food Facts"
+        XCTAssertEqual(
+            CoachFoodService.matchQuality(
+                [clif, conflicting],
+                query: "Clif Oatmeal Raisin Walnut"
+            ),
+            .candidates
+        )
+
+        let fruit = CoachFoodFact(
+            name: "Apple Mango Fruit Bar", brand: "That's It", servingDescription: "35 g",
+            calories: 100, proteinGrams: 1, fiberGrams: 3, totalSugarGrams: 17,
+            addedSugarGrams: 0, fatGrams: 0, carbGrams: 25, source: "USDA"
+        )
+        XCTAssertEqual(
+            CoachFoodService.matchQuality([fruit], query: "That's It bar"),
+            .candidates
+        )
+        let output = CoachFoodService.formatted([fruit], query: "That's It bar")
+        XCTAssertTrue(output.hasPrefix("Candidate database matches"))
+        XCTAssertTrue(output.contains("Do not use candidates in an exact total"))
+        XCTAssertEqual(CoachFoodService.matchQuality([], query: "anything"), .none)
+    }
+
     func test_urlsCarryOnlyTheFoodName() {
         let url = CoachFoodService.usdaSearchURL(query: "clif oatmeal raisin walnut", key: "TESTKEY")
         XCTAssertEqual(url?.host, "api.nal.usda.gov")
@@ -128,28 +168,47 @@ final class CoachFoodDataTests: XCTestCase {
         {"esearchresult": {"count": "2", "idlist": ["12345678", "23456789"]}}
         """
         XCTAssertEqual(PubMedParser.ids(fromSearchJSON: Data(search.utf8)), ["12345678", "23456789"])
-        let abstracts = """
-        1. J Nutr. 2020 Jan;150(1):1-10.
-
-        Dietary fiber and satiety: a systematic review.
-
-        Fiber intake was associated with greater fullness across 22 trials.
-
-        PMID: 12345678
-
-
-        2. Appetite. 2019;140:1-9.
-
-        Breakfast composition and morning hunger.
-
-        Protein and fiber at breakfast reduced mid-morning hunger.
-
-        PMID: 23456789
+        let xml = """
+        <PubmedArticleSet>
+          <PubmedArticle>
+            <MedlineCitation>
+              <PMID>12345678</PMID>
+              <Article>
+                <ArticleTitle>Dietary <i>fiber</i> and satiety: a systematic review.</ArticleTitle>
+                <Abstract><AbstractText Label="RESULTS">Fiber increased fullness.</AbstractText></Abstract>
+                <Journal><Title>Journal of Nutrition</Title><JournalIssue><PubDate><Year>2020</Year></PubDate></JournalIssue></Journal>
+              </Article>
+            </MedlineCitation>
+          </PubmedArticle>
+          <PubmedArticle>
+            <MedlineCitation>
+              <PMID>23456789</PMID>
+              <Article>
+                <ArticleTitle>Breakfast composition and morning hunger.</ArticleTitle>
+                <Abstract>
+                  <AbstractText Label="BACKGROUND">Breakfast composition varies.</AbstractText>
+                  <AbstractText Label="CONCLUSION">Protein and fiber reduced hunger.</AbstractText>
+                </Abstract>
+                <Journal><Title>Appetite</Title><JournalIssue><PubDate><MedlineDate>Winter 2019</MedlineDate></PubDate></JournalIssue></Journal>
+              </Article>
+            </MedlineCitation>
+          </PubmedArticle>
+        </PubmedArticleSet>
         """
-        let records = PubMedParser.records(fromAbstractText: abstracts)
+        let records = PubMedParser.records(fromXML: Data(xml.utf8))
         XCTAssertEqual(records.count, 2)
-        XCTAssertTrue(records[0].contains("PMID: 12345678"))
-        XCTAssertTrue(records[1].contains("Breakfast composition"))
+        XCTAssertEqual(records[0].pmid, "12345678")
+        XCTAssertEqual(records[0].title, "Dietary fiber and satiety: a systematic review.")
+        XCTAssertEqual(records[0].journal, "Journal of Nutrition")
+        XCTAssertEqual(records[0].year, "2020")
+        XCTAssertTrue(records[0].abstract.contains("RESULTS: Fiber increased fullness."))
+        XCTAssertEqual(records[1].pmid, "23456789")
+        XCTAssertEqual(records[1].title, "Breakfast composition and morning hunger.")
+        XCTAssertEqual(records[1].year, "2019")
+        XCTAssertTrue(records[1].abstract.contains("BACKGROUND:"))
+        XCTAssertTrue(records[1].abstract.contains("CONCLUSION:"))
+        XCTAssertTrue(records[1].line.contains("PMID 23456789"))
+        XCTAssertFalse(records[1].line.contains("12345678"))
     }
 }
 
@@ -209,14 +268,14 @@ final class BodyTrendTests: XCTestCase {
         let pounds = BodyTrend.build(from: measurements, now: now, calendar: calendar)!
         XCTAssertEqual(pounds.unit, .pounds)
         XCTAssertTrue(pounds.promptBlock.contains("269.2 lb"), pounds.promptBlock)
-        XCTAssertFalse(pounds.promptBlock.contains("kg"))
-        XCTAssertTrue(pounds.promptBlock.contains("Speak in pounds"))
+        XCTAssertTrue(pounds.promptBlock.contains("Calculation weight: 122.1 kg"))
+        XCTAssertTrue(pounds.promptBlock.contains("speak to the person in pounds"))
         XCTAssertEqual(pounds.bmi ?? 0, 36.5, accuracy: 0.1, "BMI is unit-free")
 
         measurements.unit = .kilograms
         let kilos = BodyTrend.build(from: measurements, now: now, calendar: calendar)!
         XCTAssertTrue(kilos.promptBlock.contains("122.1 kg"))
-        XCTAssertTrue(kilos.promptBlock.contains("Speak in kilograms"))
+        XCTAssertTrue(kilos.promptBlock.contains("speak to the person in kilograms"))
 
         var withPerson = measurements
         withPerson.ageYears = 43
@@ -226,7 +285,7 @@ final class BodyTrendTests: XCTestCase {
         XCTAssertTrue(person.promptBlock.contains("never guess an age"))
         let ageOnly = BodyTrend.build(from: BodyMeasurements(ageYears: 43), now: now, calendar: calendar)
         XCTAssertNotNil(ageOnly, "Age alone is worth carrying")
-        XCTAssertFalse(ageOnly!.promptBlock.contains("Speak in"), "No weight, no unit sentence")
+        XCTAssertFalse(ageOnly!.promptBlock.contains("Calculation weight"), "No weight, no unit sentence")
 
         XCTAssertEqual(BodyMassUnit.preferred(for: Locale(identifier: "en_US")), .pounds)
         XCTAssertEqual(BodyMassUnit.preferred(for: Locale(identifier: "de_DE")), .kilograms)
@@ -331,15 +390,25 @@ final class CoachReplyShapingTests: XCTestCase {
 
 final class CoachEvalPromptsTests: XCTestCase {
     func test_setCoversTheShapesAndExports() {
-        XCTAssertEqual(CoachEvalPrompts.all.count, 13)
-        XCTAssertEqual(Set(CoachEvalPrompts.all.map(\.id)).count, 13)
+        XCTAssertEqual(CoachEvalPrompts.all.count, 17)
+        XCTAssertEqual(Set(CoachEvalPrompts.all.map(\.id)).count, 17)
+        XCTAssertEqual(CoachEvalPrompts.all.map(\.requestCount).reduce(0, +), 22)
         XCTAssertEqual(CoachEvalPrompts.all.filter { $0.id.hasPrefix("general-") }.count, 3, "General knowledge is measured, not noticed")
         XCTAssertTrue(CoachEvalPrompts.all.allSatisfy { !$0.rubric.isEmpty })
-        let result = CoachEvalResult(promptID: "stress-numbing", reply: "**Yes.**", tier: .privateCloud, shape: .howTo, memoryNotes: ["add · Likes & staples · stated: Yoga"], seconds: 12.3)
+        XCTAssertTrue(CoachEvalPrompts.sharedRubric.contains { $0.contains("adds value beyond restating") })
+        let medicine = CoachEvalPrompts.prompt(id: "conversation-medicine-correction")!
+        XCTAssertEqual(medicine.messages.count, 4)
+        XCTAssertTrue(medicine.displayText.contains("4. What are some common"))
+        XCTAssertEqual(
+            CoachEvalPrompts.prompt(id: "on-device-general-medicine")?.forcedTier,
+            .onDevice
+        )
+        let result = CoachEvalResult(promptID: "stress-numbing", reply: "**Yes.**", tier: .privateCloud, shape: .howTo, memoryNotes: ["add · Likes & staples · stated: Yoga"], seconds: 12.3, reasoningDepth: .deep)
         let export = CoachEvalPrompts.export(results: [result])
         XCTAssertTrue(export.contains("## Stress numbing and Clash Royale"))
-        XCTAssertTrue(export.contains("Model: privateCloud · shape: howTo · 12.3s · 1 words"))
+        XCTAssertTrue(export.contains("Model: privateCloud · shape: howTo · reasoning: deep · 12.3s · 1 words"))
         XCTAssertTrue(export.contains("- [ ] "))
+        XCTAssertTrue(export.contains("Claims, calculations, and citations are accurate"))
         let fellBack = CoachEvalResult(promptID: "data-question", reply: "7.1", tier: .onDevice, shape: .data, memoryNotes: [], seconds: 9.9, fallbackReason: "GenerationError.rateLimited")
         XCTAssertTrue(CoachEvalPrompts.export(results: [fellBack]).contains("Fell back to on-device because: GenerationError.rateLimited"))
         let drafted = CoachEvalResult(promptID: "goal-conversation", reply: "Here is a draft.", tier: .privateCloud, shape: .howTo, memoryNotes: [], seconds: 10, draft: "create: Walk with Maureen after dinner × 3")
@@ -430,13 +499,38 @@ final class CoachLiveContextTests: XCTestCase {
             detail: "  Seven Sundays\n\"Wildberry\" Protein Oats  ",
             outcome: "match"
         )
+        XCTAssertFalse(live.requiresFreshSession, "Reference data can support a follow-up")
         live.log("lookupTodayHealth", outcome: "success")
+        XCTAssertTrue(live.requiresFreshSession, "Personal changing data is turn-scoped")
         XCTAssertEqual(
             live.toolLog,
             [
                 "lookupFood(\"Seven Sundays 'Wildberry' Protein Oats\") → match",
                 "lookupTodayHealth → success"
             ]
+        )
+        live.beginTurn()
+        XCTAssertFalse(live.requiresFreshSession)
+    }
+
+    func test_evidenceSearchDeduplicatesButAllowsOneRefinement() async {
+        let live = CoachLiveContext()
+        XCTAssertEqual(
+            live.beginEvidenceSearch("implementation intentions habit formation stress"),
+            .search(index: 0)
+        )
+        XCTAssertEqual(
+            live.beginEvidenceSearch("implementation intentions habit change stress"),
+            .duplicate
+        )
+        live.finishEvidenceSearch(index: 0, matched: false)
+        XCTAssertEqual(
+            live.beginEvidenceSearch("phone gaming stress coping randomized trial"),
+            .search(index: 1)
+        )
+        XCTAssertEqual(
+            live.beginEvidenceSearch("screen time emotional regulation"),
+            .turnLimit
         )
     }
 
@@ -455,5 +549,27 @@ final class CoachLiveContextTests: XCTestCase {
         XCTAssertTrue(payload.contains("Patient confidence"))
         XCTAssertFalse(payload.contains("Wildberry"))
         XCTAssertFalse(payload.contains("\"Breakfast\""))
+    }
+
+    func test_personLookupHasARelevanceBudgetNotABiography() async {
+        let live = CoachLiveContext()
+        live.memoryItems = (0 ..< 8).map {
+            CoachMemoryItem(
+                category: .routines,
+                content: "Work routine detail \($0) helps patient flow.",
+                provenance: .coachRecorded,
+                createdAt: Date(timeIntervalSince1970: TimeInterval($0))
+            )
+        }
+        live.recentConversations = """
+        - Today: "Work one" — Talked about patient flow.
+        - Yesterday: "Work two" — Talked about work routines.
+        - 2 days ago: "Work three" — Talked about office flow.
+        """
+        let payload = live.personPayload(topic: "work patient flow")
+        XCTAssertEqual(payload.components(separatedBy: "- [").count - 1, 6)
+        XCTAssertTrue(payload.contains("Work one"))
+        XCTAssertTrue(payload.contains("Work two"))
+        XCTAssertFalse(payload.contains("Work three"))
     }
 }

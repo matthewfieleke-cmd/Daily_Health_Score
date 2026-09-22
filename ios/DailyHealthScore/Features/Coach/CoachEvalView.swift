@@ -14,23 +14,34 @@ struct CoachEvalView: View {
     @State private var isRunningAll = false
     @State private var checked: Set<String> = []
     @State private var copied = false
+    @State private var reasoningDepth: CoachReasoningDepth = .deep
 
     private var todayRecord: DailyRecord? {
         appState.recordStore.records.first { $0.date == DateHelpers.localDateKey() }
     }
 
+    private var requestCount: Int {
+        CoachEvalPrompts.all.reduce(0) { $0 + $1.requestCount }
+    }
+
     var body: some View {
         List {
             Section {
-                Text("Each prompt runs through the real pipeline — Private Cloud Compute with reasoning and tools when available — using your current memory files. Nothing is saved: no chat, no notes, no card. A full run spends \(CoachEvalPrompts.all.count) server requests plus retries and tool calls against today’s allowance.")
+                Text("Each prompt runs through the real pipeline — Private Cloud Compute with reasoning and tools when available — using your current memory files. Conversation regressions keep their follow-ups in one throwaway thread; the fallback case is forced on-device. Nothing is saved: no chat, no notes, no card. A full run makes \(requestCount) model requests plus retries and tool calls.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 Text(CoachModelProvider.serverQuotaSummary)
                     .font(.footnote.weight(.medium))
+                Picker("PCC reasoning", selection: $reasoningDepth) {
+                    Text("Moderate").tag(CoachReasoningDepth.moderate)
+                    Text("Deep").tag(CoachReasoningDepth.deep)
+                }
+                .pickerStyle(.segmented)
+                .disabled(isRunningAll || runningID != nil)
                 Button {
                     runAll()
                 } label: {
-                    Label(isRunningAll ? "Running…" : "Run all \(CoachEvalPrompts.all.count)", systemImage: "play.fill")
+                    Label(isRunningAll ? "Running…" : "Run all \(requestCount) turns", systemImage: "play.fill")
                 }
                 .disabled(isRunningAll || runningID != nil)
                 Button {
@@ -45,7 +56,7 @@ struct CoachEvalView: View {
             }
             ForEach(CoachEvalPrompts.all) { prompt in
                 Section {
-                    Text(prompt.text)
+                    Text(prompt.displayText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -56,7 +67,7 @@ struct CoachEvalView: View {
                                 .foregroundStyle(.red)
                         } else {
                             CoachMarkdownText(text: result.reply, font: .callout)
-                            Text("\(result.tier == .privateCloud ? "Private Cloud Compute" : "On-device") · \(result.shape.rawValue) · \(String(format: "%.1f", result.seconds))s · \(CoachReplyPolish.wordCount(result.reply)) words")
+                            Text("\(result.tier == .privateCloud ? "Private Cloud Compute" : "On-device") · \(result.shape.rawValue) · reasoning: \(result.reasoningDepth?.rawValue ?? "light") · \(String(format: "%.1f", result.seconds))s · \(CoachReplyPolish.wordCount(result.reply)) words")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                             if let reason = result.fallbackReason, !reason.isEmpty {
@@ -84,7 +95,7 @@ struct CoachEvalView: View {
                                 }
                             }
                         }
-                        ForEach(prompt.rubric, id: \.self) { line in
+                        ForEach(CoachEvalPrompts.rubric(for: prompt), id: \.self) { line in
                             let key = "\(prompt.id)#\(line)"
                             Button {
                                 if checked.contains(key) { checked.remove(key) } else { checked.insert(key) }
@@ -126,6 +137,9 @@ struct CoachEvalView: View {
             let result = await coach.evaluate(
                 prompt: prompt.text,
                 promptID: prompt.id,
+                messages: prompt.messages,
+                forcedTier: prompt.forcedTier,
+                reasoningDepth: reasoningDepth,
                 todayRecord: todayRecord,
                 records: appState.recordStore.records,
                 goals: appState.smartGoalStore.goals,
@@ -146,6 +160,9 @@ struct CoachEvalView: View {
                 let result = await coach.evaluate(
                     prompt: prompt.text,
                     promptID: prompt.id,
+                    messages: prompt.messages,
+                    forcedTier: prompt.forcedTier,
+                    reasoningDepth: reasoningDepth,
                     todayRecord: todayRecord,
                     records: appState.recordStore.records,
                     goals: appState.smartGoalStore.goals,

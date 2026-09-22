@@ -159,14 +159,17 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(charter.contains("American Board of Lifestyle Medicine"))
         XCTAssertTrue(charter.contains("sleep, fiber, and exercise minutes"))
         XCTAssertTrue(charter.contains("That score is not the limit of an answer"))
-        XCTAssertTrue(charter.contains("\"\(CoachCharter.philosophy)\""))
-        XCTAssertTrue(charter.contains("Live it; never recite it"))
+        XCTAssertFalse(charter.contains(CoachCharter.philosophy), "A literal slogan becomes copy")
+        XCTAssertTrue(charter.contains("Meet the person with acceptance"))
         XCTAssertTrue(charter.contains("Never name the board unless someone asks"))
-        XCTAssertTrue(charter.contains("Answer what was asked"))
-        XCTAssertTrue(charter.contains("Facts about this person come from the tools"))
+        XCTAssertTrue(charter.contains("Answer directly"))
+        XCTAssertTrue(charter.contains("reflection alone is not enough"))
+        XCTAssertTrue(charter.contains("Use your own knowledge for general questions"))
+        XCTAssertTrue(charter.contains("when those facts would materially improve the answer"))
         XCTAssertTrue(charter.contains("Each tool's description says when it applies"))
         XCTAssertTrue(charter.contains("never claim something is saved"))
-        XCTAssertTrue(charter.contains("You do not diagnose, prescribe, or change a medicine"))
+        XCTAssertTrue(charter.contains("You may explain health conditions, tests, medicines, and treatments"))
+        XCTAssertTrue(charter.contains("Do not diagnose this person"))
         XCTAssertTrue(charter.contains(CoachSafetyGate.immediateHelpSentence))
         XCTAssertTrue(charter.contains("If they are in the US, add the 988"))
         XCTAssertTrue(charter.contains("Never praise weight loss as such"))
@@ -181,20 +184,24 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         ] {
             XCTAssertFalse(charter.contains(absent), absent)
         }
-        XCTAssertLessThan(charter.count, 1_400, "A short page, not a rulebook")
+        XCTAssertLessThan(charter.count, 1_900, "A short page, not a rulebook")
         // Principles, never scripts: no quoted example sentences a model could copy,
-        // except the one fixed crisis line and the philosophy.
+        // except the one fixed crisis line.
         let quoted = charter.components(separatedBy: "\"").enumerated().filter { $0.offset % 2 == 1 }.map(\.element)
-        let sentences = quoted.filter { $0.count > 24 && $0 != CoachSafetyGate.immediateHelpSentence && $0 != CoachCharter.philosophy }
+        let sentences = quoted.filter { $0.count > 24 && $0 != CoachSafetyGate.immediateHelpSentence }
         XCTAssertEqual(sentences, [], "Example sentences become scripts: \(sentences)")
 
-        // The biography stays out of the prompt. Both models share this page;
-        // a note about the person is a tool call, not standing context.
+        // The biography stays out of both prompts. The no-tools fallback says
+        // what it can actually know rather than pretending a tool is present.
         XCTAssertFalse(charter.contains("WHO THIS PERSON IS"))
         XCTAssertFalse(charter.contains("family physician"))
         XCTAssertEqual(CoachCharter.instructions(for: .privateCloud), charter)
         XCTAssertEqual(CoachCharter.instructions(for: .onDevice), CoachCharter.onDeviceInstructions)
-        XCTAssertEqual(CoachCharter.onDeviceInstructions, charter)
+        XCTAssertNotEqual(CoachCharter.onDeviceInstructions, charter)
+        XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("from your own knowledge"))
+        XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("App data, saved goals, and memory files are unavailable"))
+        XCTAssertFalse(CoachCharter.onDeviceInstructions.contains("Each tool's description"))
+        XCTAssertFalse(CoachCharter.onDeviceInstructions.contains(CoachCharter.philosophy))
 
         XCTAssertTrue(CoachCharter.acquaintanceContract().contains("what to call them"))
         XCTAssertTrue(CoachCharter.acquaintanceContract().contains("Every file has something now"))

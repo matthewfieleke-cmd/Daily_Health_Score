@@ -170,11 +170,13 @@ final class FoundationModelsCoach {
         recentTurns: [CoachChatTurn],
         live: CoachLiveContext,
         focus: CoachFocusContext? = nil,
+        forcedTier: CoachModelTier? = nil,
+        reasoningDepth: CoachReasoningDepth = .deep,
         context: CoachReplyContext
     ) async throws -> CoachReplyResult {
         #if canImport(FoundationModels)
         try ensureAvailable()
-        let tier = CoachModelProvider.preferredTier()
+        let tier = forcedTier ?? CoachModelProvider.preferredTier()
         let shape = CoachReplyShape.detect(message: userMessage, intent: CoachIntentClassifier.classify(userMessage))
         lastTierUsed = tier
         lastFailureReason = nil
@@ -236,7 +238,7 @@ final class FoundationModelsCoach {
                     session,
                     to: prompt(seedingTranscript: seed, budget: budget),
                     tier: .privateCloud,
-                    depth: .deep
+                    depth: reasoningDepth
                 )
             }
 
@@ -255,7 +257,11 @@ final class FoundationModelsCoach {
                     text = try await attempt(liveSession.session, seed: seed)
                 }
                 liveSession.turnsSeen += 1
-                if let threadID { sessions[threadID] = liveSession }
+                if let threadID {
+                    // Keep conversational continuity, but do not carry hidden
+                    // personal or changing app payloads into the next turn.
+                    sessions[threadID] = live.requiresFreshSession ? nil : liveSession
+                }
                 return finish(text, tier: .privateCloud, shape: shape, live: live, fallbackReason: nil)
             } catch {
                 if let threadID { sessions[threadID] = nil }

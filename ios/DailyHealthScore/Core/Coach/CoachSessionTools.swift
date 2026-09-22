@@ -33,7 +33,7 @@ enum CoachSessionTools {
 #if canImport(FoundationModels)
 struct CoachLookupTodayTool: Tool {
     let name = "lookupTodayHealth"
-    let description = "Today's Daily Health Score with sleep, fiber, exercise, this week's averages, HRV against their usual range, and computed SMART goal status. Call when the person asks about today or about their numbers."
+    let description = "Today's Daily Health Score with sleep, fiber, exercise, this week's averages, HRV against their usual range, and computed SMART goal status. Call only when the answer depends on today's record or this week's averages, not for general health advice."
     let context: CoachLiveContext
 
     @Generable
@@ -141,7 +141,7 @@ struct CoachLookupPersonTool: Tool {
 
 struct CoachBodyTrendTool: Tool {
     let name = "lookupWeightTrend"
-    let description = "The person's weight trend, BMI, age, and sex as shared from Apple Health. Call when weight, age, protein, or energy needs come up. Never guess an age instead of calling this."
+    let description = "The person's weight trend, BMI, age, sex, and a kilograms value for formulas, as shared from Apple Health. Call when weight, age, protein, or energy needs come up. Use kilograms for every per-kilogram calculation, speak in the person's preferred unit, and never guess an age."
     let context: CoachLiveContext
 
     @Generable
@@ -196,7 +196,7 @@ struct CoachRememberTool: Tool {
 
 struct CoachProposeGoalTool: Tool {
     let name = "proposeSMARTGoal"
-    let description = "Hand the person a SMART goal draft to review — a new goal, or an update to a saved one by exact goalID — once a concrete plan is agreed. Only one draft can be on screen at a time; a second call replaces the first. Nothing is saved until they save it."
+    let description = "Hand the person a SMART goal draft to review — a new goal, or an update to a saved one by exact goalID — once the action is clear. Details the person did not supply may be useful suggestions, but identify them as suggestions in your reply and invite changes. Only one draft can be on screen at a time; a second call replaces the first. Nothing is saved until they save it."
     let context: CoachLiveContext
 
     @Generable

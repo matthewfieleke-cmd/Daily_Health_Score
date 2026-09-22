@@ -30,12 +30,45 @@ enum CoachCalculator {
 
     /// The tool's reply: the expression restated with its result.
     static func answer(_ expression: String) -> String {
+        if let conversion = weightConversion(expression) {
+            return "\(format(conversion.input)) \(conversion.from) = \(format(conversion.output)) \(conversion.to)"
+        }
         do {
             let value = try evaluate(expression)
             return "\(expression.trimmingCharacters(in: .whitespacesAndNewlines)) = \(format(value))"
         } catch {
             return "Could not evaluate \"\(expression)\". Use numbers with + - * / ( ) and %; words for units are ignored."
         }
+    }
+
+    private static func weightConversion(
+        _ expression: String
+    ) -> (input: Double, from: String, output: Double, to: String)? {
+        let normalized = expression.lowercased()
+            .replacingOccurrences(of: "pounds", with: "lb")
+            .replacingOccurrences(of: "pound", with: "lb")
+            .replacingOccurrences(of: "lbs", with: "lb")
+            .replacingOccurrences(of: "kilograms", with: "kg")
+            .replacingOccurrences(of: "kilogram", with: "kg")
+        let pattern = #"(-?[0-9]+(?:\.[0-9]+)?)\s*(lb|kg)\s*(?:to|in)\s*(lb|kg)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(
+                in: normalized,
+                range: NSRange(normalized.startIndex..., in: normalized)
+              ),
+              let valueRange = Range(match.range(at: 1), in: normalized),
+              let fromRange = Range(match.range(at: 2), in: normalized),
+              let toRange = Range(match.range(at: 3), in: normalized),
+              let input = Double(normalized[valueRange]) else {
+            return nil
+        }
+        let from = String(normalized[fromRange])
+        let to = String(normalized[toRange])
+        guard from != to else {
+            return (input, from, input, to)
+        }
+        let output = from == "lb" ? input / 2.20462262 : input * 2.20462262
+        return (input, from, output, to)
     }
 
     // MARK: - Tokenizer

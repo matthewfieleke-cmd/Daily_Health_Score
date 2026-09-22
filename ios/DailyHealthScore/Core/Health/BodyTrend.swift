@@ -168,6 +168,9 @@ struct BodyTrend: Equatable, Sendable {
                 }
             }
             lines.append(line + ".")
+            lines.append(
+                "Calculation weight: \(BodyTrend.round1(smoothed)) kg. Use this kilograms value for every per-kilogram formula; speak to the person in \(unit == .pounds ? "pounds" : "kilograms")."
+            )
         }
         if let change = changeOverFourWeeks, let direction = direction4w {
             lines.append(changeSentence(change, direction: direction, period: "four weeks"))
@@ -182,9 +185,6 @@ struct BodyTrend: Equatable, Sendable {
             lines.append("BMI about \(bmi).")
         }
         guard !lines.isEmpty else { return "No weight or height data shared." }
-        if smoothedKilograms != nil || latestKilograms != nil {
-            lines.append("Speak in \(unit == .pounds ? "pounds" : "kilograms"); that is how this person weighs themselves.")
-        }
         return lines.joined(separator: " ")
     }
 
