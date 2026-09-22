@@ -9,6 +9,9 @@ final class CoachLiveContext {
     // MARK: - Facts the tools read
 
     var snapshot: CoachSnapshot?
+    /// Every stored day, for questions about a past day or stretch of days.
+    var records: [DailyRecord] = []
+    var todayKey: String = DateHelpers.localDateKey()
     var goals: [SMARTGoal] = []
     var activitiesByGoal: [UUID: [SMARTGoalActivity]] = [:]
     var memoryBlock: String = ""
@@ -47,6 +50,21 @@ final class CoachLiveContext {
 
     var todayPayload: String {
         snapshot?.promptBlock ?? "No live daily record is available right now. Say so; never invent numbers."
+    }
+
+    /// Any past day or window. Unreadable arguments get the dates back rather
+    /// than an empty answer, so the next call can land.
+    func daysPayload(startDate: String?, endDate: String?, startDaysAgo: Int?, endDaysAgo: Int?) -> String {
+        guard let window = CoachDayRange.resolve(
+            startDate: startDate,
+            endDate: endDate,
+            startDaysAgo: startDaysAgo,
+            endDaysAgo: endDaysAgo,
+            todayKey: todayKey
+        ) else {
+            return CoachDayRange.guidance(todayKey: todayKey)
+        }
+        return CoachDayRange.payload(records: records, window: window, todayKey: todayKey)
     }
 
     var goalsPayload: String {

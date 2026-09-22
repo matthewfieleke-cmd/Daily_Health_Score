@@ -160,6 +160,5 @@ final class CoachIntentTests: XCTestCase {
         XCTAssertTrue(CoachIntent.smallTalk.contract.contains("No metrics"))
         XCTAssertTrue(CoachIntent.education.contract.contains("Be concrete"))
         XCTAssertTrue(CoachIntent.education.contract.contains("consult your doctor"))
-        XCTAssertTrue(CoachIntent.planning.knowledgeTopics.contains(.motivationalInterviewing))
     }
 }

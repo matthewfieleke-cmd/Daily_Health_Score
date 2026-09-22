@@ -87,16 +87,6 @@ struct BodyTrend: Equatable, Sendable {
         return .steady
     }
 
-    /// WHO screening bands. A label, not a verdict; the charter says so too.
-    static func bmiBand(_ bmi: Double) -> String {
-        switch bmi {
-        case ..<18.5: return "below the usual range"
-        case 18.5..<25: return "in the usual range"
-        case 25..<30: return "in the overweight screening range"
-        default: return "in the obesity screening range"
-        }
-    }
-
     static func build(
         from measurements: BodyMeasurements,
         now: Date = Date(),
@@ -189,7 +179,7 @@ struct BodyTrend: Equatable, Sendable {
             lines.append("Not enough readings yet for a trend; say so if asked.")
         }
         if let bmi {
-            lines.append("BMI about \(bmi), \(BodyTrend.bmiBand(bmi)) — a screening number blind to build and muscle, never a verdict.")
+            lines.append("BMI about \(bmi).")
         }
         guard !lines.isEmpty else { return "No weight or height data shared." }
         if smoothedKilograms != nil || latestKilograms != nil {

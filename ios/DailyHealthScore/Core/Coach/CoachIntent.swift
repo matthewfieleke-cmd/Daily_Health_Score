@@ -112,17 +112,6 @@ enum CoachIntent: String, Equatable, Sendable {
         }
     }
 
-    var knowledgeTopics: [CoachKnowledgeTopic] {
-        switch self {
-        // HRV rides along because a question about their own HRV needs the
-        // interpretation guidance as much as the number.
-        case .dataLookup: return [.appScoring, .hrv]
-        case .education, .smallTalk, .general: return []
-        // Planning is where the righting reflex is strongest, so MI craft rides along.
-        case .planning: return [.behaviorChange, .habits, .motivationalInterviewing]
-        case .support: return [.lapses, .motivationalInterviewing, .dbtSkills]
-        }
-    }
 }
 
 /// Deterministic keyword routing. A phrase ending in a space requires a word
