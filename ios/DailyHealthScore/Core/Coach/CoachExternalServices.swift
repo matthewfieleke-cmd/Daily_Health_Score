@@ -2,6 +2,9 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
 
 /// Public food databases the Coach can consult. Requests carry a food name and
 /// nothing about the person. USDA first (label values, branded products), Open
@@ -19,26 +22,30 @@ enum CoachFoodService {
 
     struct LookupResult: Equatable {
         var facts: [CoachFoodFact]
-        /// Transport-level trouble, per source, so "approximate" can say why.
+        /// Transport-level trouble, per source, so an incomplete lookup says why.
         var failures: [String]
     }
 
     static func lookup(query: String, session: URLSession = .shared) async -> LookupResult {
+        async let usda = fetch(usdaSearchURL(query: query), session: session)
+        async let openFoodFacts = fetch(openFoodFactsSearchURL(query: query), session: session)
+        let (usdaResult, openFoodFactsResult) = await (usda, openFoodFacts)
+
+        var facts: [CoachFoodFact] = []
         var failures: [String] = []
-        switch await fetch(usdaSearchURL(query: query), session: session) {
+        switch usdaResult {
         case .success(let data):
-            let facts = USDAFoodParser.facts(fromSearchJSON: data, limit: 3)
-            if !facts.isEmpty { return LookupResult(facts: facts, failures: []) }
+            facts.append(contentsOf: USDAFoodParser.facts(fromSearchJSON: data, limit: 5))
         case .failure(let reason):
             failures.append("USDA: \(reason.description)")
         }
-        switch await fetch(openFoodFactsSearchURL(query: query), session: session) {
+        switch openFoodFactsResult {
         case .success(let data):
-            return LookupResult(facts: OpenFoodFactsParser.facts(fromSearchJSON: data, limit: 3), failures: failures)
+            facts.append(contentsOf: OpenFoodFactsParser.facts(fromSearchJSON: data, limit: 5))
         case .failure(let reason):
             failures.append("Open Food Facts: \(reason.description)")
         }
-        return LookupResult(facts: [], failures: failures)
+        return LookupResult(facts: rankedFacts(facts, query: query, limit: 5), failures: failures)
     }
 
     static func formatted(_ facts: [CoachFoodFact], query: String, failures: [String] = []) -> String {
@@ -49,11 +56,97 @@ enum CoachFoodService {
             return "No database match for \"\(query)\". Do not invent label values; ask for the label or a photo if exact numbers matter."
         }
         let lines = facts.enumerated().map { index, fact in "\(index + 1). \(fact.line)" }
+        let quality = matchQuality(facts, query: query)
+        let heading: String
+        let footer: String
+        switch quality {
+        case .exact:
+            heading = "Exact database match for \"\(query)\""
+            footer = "The package may have been reformulated; name the source and serving. Use the calculator for totals."
+        case .candidates:
+            heading = "Candidate database matches for \"\(query)\" — no exact current label is confirmed"
+            footer = "Do not use candidates in an exact total. Ask for the flavor, package label, or a photo when exact numbers matter."
+        case .none:
+            // Guarded above; retained so the classification stays total.
+            heading = "No database match for \"\(query)\""
+            footer = "Do not invent label values."
+        }
         return """
-        Matches for "\(query)" (label values; pick the one that fits what they described and say which):
+        \(heading):
         \(lines.joined(separator: "\n"))
-        Use the calculator for totals. Added sugar is listed only when the label reports it.
+        \(footer) Added sugar is listed only when the label reports it.
         """
+    }
+
+    enum MatchQuality: String, Equatable, Sendable {
+        case exact
+        case candidates
+        case none
+    }
+
+    static func matchQuality(_ facts: [CoachFoodFact], query: String) -> MatchQuality {
+        guard let first = facts.first else { return .none }
+        let queryWords = matchWords(query)
+        guard !queryWords.isEmpty else { return .candidates }
+        let firstWords = matchWords(first.name + " " + first.brand)
+        let coverage = Double(queryWords.intersection(firstWords).count) / Double(queryWords.count)
+        let extras = firstWords.subtracting(queryWords).count
+        guard coverage == 1, extras <= 2 else { return .candidates }
+
+        let competing = facts.dropFirst().filter {
+            let words = matchWords($0.name + " " + $0.brand)
+            return Double(queryWords.intersection(words).count) / Double(queryWords.count) == 1
+        }
+        if competing.contains(where: { !nutrientsAgree(first, $0) }) {
+            return .candidates
+        }
+        return .exact
+    }
+
+    static func rankedFacts(
+        _ facts: [CoachFoodFact],
+        query: String,
+        limit: Int
+    ) -> [CoachFoodFact] {
+        let queryWords = matchWords(query)
+        var seen = Set<String>()
+        return facts
+            .compactMap { fact -> (fact: CoachFoodFact, score: Double)? in
+                let key = "\(fact.name.lowercased())|\(fact.brand.lowercased())|\(fact.servingDescription.lowercased())|\(fact.source.lowercased())"
+                guard seen.insert(key).inserted else { return nil }
+                let words = matchWords(fact.name + " " + fact.brand)
+                let coverage = queryWords.isEmpty
+                    ? 0
+                    : Double(queryWords.intersection(words).count) / Double(queryWords.count)
+                let precision = words.isEmpty
+                    ? 0
+                    : Double(queryWords.intersection(words).count) / Double(words.count)
+                return (fact, coverage * 10 + precision)
+            }
+            .sorted { $0.score > $1.score }
+            .prefix(max(limit, 0))
+            .map { $0.fact }
+    }
+
+    private static func matchWords(_ text: String) -> Set<String> {
+        let ignored: Set<String> = ["brand", "food", "foods", "product"]
+        return Set(
+            text.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { $0.count >= 2 && !ignored.contains($0) }
+        )
+    }
+
+    private static func nutrientsAgree(_ lhs: CoachFoodFact, _ rhs: CoachFoodFact) -> Bool {
+        func agrees(_ a: Double?, _ b: Double?, tolerance: Double) -> Bool {
+            guard let a, let b else { return true }
+            return abs(a - b) <= tolerance
+        }
+        return agrees(lhs.calories, rhs.calories, tolerance: 10)
+            && agrees(lhs.proteinGrams, rhs.proteinGrams, tolerance: 2)
+            && agrees(lhs.fiberGrams, rhs.fiberGrams, tolerance: 2)
+            && agrees(lhs.totalSugarGrams, rhs.totalSugarGrams, tolerance: 2)
+            && agrees(lhs.fatGrams, rhs.fatGrams, tolerance: 2)
     }
 
     static func usdaSearchURL(query: String, key: String = CoachSecrets.usdaKey()) -> URL? {
@@ -110,8 +203,26 @@ enum CoachFoodService {
     }
 }
 
+struct CoachEvidenceRecord: Equatable, Sendable {
+    var pmid: String
+    var title: String
+    var journal: String
+    var year: String
+    var abstract: String
+
+    var line: String {
+        let publication = [journal, year].filter { !$0.isEmpty }.joined(separator: ", ")
+        let citation = publication.isEmpty
+            ? "\(title). PMID \(pmid)."
+            : "\(title). \(publication). PMID \(pmid)."
+        guard !abstract.isEmpty else { return citation }
+        return citation + "\nAbstract: " + abstract
+    }
+}
+
 /// PubMed, so "the evidence shows" can be followed by a citation that exists.
-/// Queries carry a topic and nothing about the person.
+/// XML keeps each PMID attached to its own title and abstract; loose text blocks
+/// previously allowed the model to pair a title with an unrelated PMID.
 enum CoachEvidenceService {
     static let requestTimeout: TimeInterval = 8
     static let baseURL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -126,15 +237,15 @@ enum CoachEvidenceService {
             ids = await search(term: cleaned, limit: limit, session: session)
         }
         guard !ids.isEmpty else {
-            return "PubMed returned nothing for \"\(cleaned)\". Answer from general knowledge and say no source was found."
+            return "No PubMed results for \"\(cleaned)\"."
         }
-        let abstracts = await fetchAbstracts(ids: ids, session: session)
-        guard !abstracts.isEmpty else {
-            return "PubMed matched PMIDs \(ids.joined(separator: ", ")) but the abstracts did not load. Cite by PMID only if you must."
+        let records = await fetchRecords(ids: ids, session: session)
+        guard !records.isEmpty else {
+            return "PubMed records unavailable for \"\(cleaned)\"."
         }
         return """
-        PubMed results for "\(cleaned)" (cite title, journal, year, PMID; quote findings, never invent numbers):
-        \(abstracts.joined(separator: "\n\n"))
+        PubMed results for "\(cleaned)":
+        \(records.enumerated().map { "\($0.offset + 1). \($0.element.line)" }.joined(separator: "\n\n"))
         """
     }
 
@@ -152,18 +263,19 @@ enum CoachEvidenceService {
         return PubMedParser.ids(fromSearchJSON: data)
     }
 
-    static func fetchAbstracts(ids: [String], session: URLSession) async -> [String] {
+    static func fetchRecords(ids: [String], session: URLSession) async -> [CoachEvidenceRecord] {
         var components = URLComponents(string: "\(baseURL)/efetch.fcgi")
         components?.queryItems = [
             URLQueryItem(name: "db", value: "pubmed"),
             URLQueryItem(name: "id", value: ids.joined(separator: ",")),
             URLQueryItem(name: "rettype", value: "abstract"),
-            URLQueryItem(name: "retmode", value: "text"),
+            URLQueryItem(name: "retmode", value: "xml"),
             URLQueryItem(name: "tool", value: "DailyHealthScore")
         ]
-        guard case .success(let data) = await CoachFoodService.fetch(components?.url, session: session),
-              let text = String(data: data, encoding: .utf8) else { return [] }
-        return PubMedParser.records(fromAbstractText: text)
+        guard case .success(let data) = await CoachFoodService.fetch(components?.url, session: session) else {
+            return []
+        }
+        return PubMedParser.records(fromXML: data)
     }
 }
 
@@ -175,19 +287,136 @@ enum PubMedParser {
         return ids
     }
 
-    /// efetch's plain-text abstracts separate records with two blank lines.
-    /// Each record is trimmed to a readable size for the prompt.
-    static func records(fromAbstractText text: String, maxCharacters: Int = 1_100) -> [String] {
-        text.components(separatedBy: "\n\n\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.count > 40 }
-            .prefix(3)
-            .map { record in
-                let collapsed = record
-                    .replacingOccurrences(of: "\n\n", with: "\n")
-                    .replacingOccurrences(of: "  ", with: " ")
-                guard collapsed.count > maxCharacters else { return collapsed }
-                return String(collapsed.prefix(maxCharacters)) + "…"
+    static func records(fromXML data: Data) -> [CoachEvidenceRecord] {
+        let delegate = PubMedXMLDelegate()
+        let parser = XMLParser(data: data)
+        parser.delegate = delegate
+        guard parser.parse() else { return [] }
+        return delegate.records
+    }
+}
+
+private final class PubMedXMLDelegate: NSObject, XMLParserDelegate {
+    private enum Field: Equatable {
+        case pmid
+        case title
+        case journal
+        case year
+        case medlineDate
+        case abstractText(label: String?)
+    }
+
+    private var stack: [String] = []
+    private var field: Field?
+    private var buffer = ""
+    private var current: CoachEvidenceRecord?
+    private var abstractParts: [String] = []
+    private(set) var records: [CoachEvidenceRecord] = []
+
+    func parser(
+        _ parser: XMLParser,
+        didStartElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?,
+        attributes attributeDict: [String: String] = [:]
+    ) {
+        stack.append(elementName)
+        if elementName == "PubmedArticle" {
+            current = CoachEvidenceRecord(pmid: "", title: "", journal: "", year: "", abstract: "")
+            abstractParts = []
+        }
+        guard current != nil, field == nil else { return }
+        switch elementName {
+        case "PMID" where current?.pmid.isEmpty == true:
+            begin(.pmid)
+        case "ArticleTitle":
+            begin(.title)
+        case "Title" where stack.dropLast().last == "Journal":
+            begin(.journal)
+        case "Year" where stack.contains("PubDate") && current?.year.isEmpty == true:
+            begin(.year)
+        case "MedlineDate" where stack.contains("PubDate") && current?.year.isEmpty == true:
+            begin(.medlineDate)
+        case "AbstractText":
+            begin(.abstractText(label: attributeDict["Label"]))
+        default:
+            break
+        }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        guard field != nil else { return }
+        buffer += string
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        didEndElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?
+    ) {
+        if let field, closes(field, elementName: elementName) {
+            commit(field, text: collapsed(buffer))
+            self.field = nil
+            buffer = ""
+        }
+        if elementName == "PubmedArticle", var record = current {
+            record.abstract = limitedAbstract(abstractParts.joined(separator: " "))
+            if !record.pmid.isEmpty, !record.title.isEmpty {
+                records.append(record)
             }
+            current = nil
+            abstractParts = []
+        }
+        if !stack.isEmpty { stack.removeLast() }
+    }
+
+    private func begin(_ field: Field) {
+        self.field = field
+        buffer = ""
+    }
+
+    private func closes(_ field: Field, elementName: String) -> Bool {
+        switch field {
+        case .pmid: return elementName == "PMID"
+        case .title: return elementName == "ArticleTitle"
+        case .journal: return elementName == "Title"
+        case .year: return elementName == "Year"
+        case .medlineDate: return elementName == "MedlineDate"
+        case .abstractText: return elementName == "AbstractText"
+        }
+    }
+
+    private func commit(_ field: Field, text: String) {
+        guard var record = current else { return }
+        switch field {
+        case .pmid:
+            record.pmid = text
+        case .title:
+            record.title = text
+        case .journal:
+            record.journal = text
+        case .year:
+            record.year = text
+        case .medlineDate:
+            record.year = String(text.prefix(4))
+        case .abstractText(let label):
+            let prefix = label.map { "\($0): " } ?? ""
+            if !text.isEmpty { abstractParts.append(prefix + text) }
+        }
+        current = record
+    }
+
+    private func collapsed(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    private func limitedAbstract(_ text: String, maxCharacters: Int = 1_100) -> String {
+        guard text.count > maxCharacters else { return text }
+        let prefix = text.prefix(maxCharacters - 1)
+        if let space = prefix.lastIndex(of: " ") {
+            return String(prefix[..<space]) + "…"
+        }
+        return String(prefix) + "…"
     }
 }

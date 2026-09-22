@@ -32,6 +32,11 @@ final class CoachLiveContext {
     /// Tool calls the model made, with only the arguments that affected the
     /// operation and a small outcome. Ephemeral: shown by the eval, never filed.
     private(set) var toolLog: [String] = []
+    /// Personal and changing app data should inform this answer, not linger as
+    /// hidden tool output in a long-lived model session. Food, evidence, and
+    /// arithmetic can remain for natural follow-ups.
+    private(set) var requiresFreshSession = false
+    private var evidenceSearches: [(words: Set<String>, matched: Bool?)] = []
 
     init() {}
 
@@ -41,6 +46,8 @@ final class CoachLiveContext {
         pendingCheckIn = nil
         proposalRejected = false
         toolLog = []
+        requiresFreshSession = false
+        evidenceSearches = []
     }
 
     func log(
@@ -68,6 +75,44 @@ final class CoachLiveContext {
             line += " · \(milliseconds) ms"
         }
         toolLog.append(line)
+        if Self.turnScopedTools.contains(tool) {
+            requiresFreshSession = true
+        }
+    }
+
+    private static let turnScopedTools: Set<String> = [
+        "lookupTodayHealth", "lookupDays", "lookupSMARTGoals",
+        "lookupWhatWeRemember", "lookupWeightTrend",
+        "rememberAboutPerson", "proposeSMARTGoal", "logGoalCheckIn"
+    ]
+
+    enum EvidenceSearchPermission: Equatable {
+        case search(index: Int)
+        case duplicate
+        case turnLimit
+    }
+
+    /// Reserve an evidence query before the network call. Near-duplicates are
+    /// stopped even when PCC launches them concurrently. One materially
+    /// different refinement is still available after a poor first search.
+    func beginEvidenceSearch(_ query: String) -> EvidenceSearchPermission {
+        let words = CoachMemoryLogic.substanceWords(in: query)
+        if evidenceSearches.contains(where: { Self.similarity(words, $0.words) >= 0.6 }) {
+            return .duplicate
+        }
+        guard evidenceSearches.count < 2 else { return .turnLimit }
+        evidenceSearches.append((words, nil))
+        return .search(index: evidenceSearches.count - 1)
+    }
+
+    func finishEvidenceSearch(index: Int, matched: Bool) {
+        guard evidenceSearches.indices.contains(index) else { return }
+        evidenceSearches[index].matched = matched
+    }
+
+    private static func similarity(_ lhs: Set<String>, _ rhs: Set<String>) -> Double {
+        guard !lhs.isEmpty, !rhs.isEmpty else { return 0 }
+        return Double(lhs.intersection(rhs).count) / Double(lhs.union(rhs).count)
     }
 
     // MARK: - Payloads
@@ -102,7 +147,11 @@ final class CoachLiveContext {
     }
 
     func personPayload(topic: String) -> String {
-        let notes = CoachMemoryLogic.promptBlock(items: memoryItems, relevantTo: topic)
+        let notes = CoachMemoryLogic.promptBlock(
+            items: memoryItems,
+            relevantTo: topic,
+            limit: 6
+        )
         let conversations = relevantConversationLines(topic: topic)
         var parts: [String] = []
         parts.append("SAVED NOTES:\n" + notes)
@@ -128,7 +177,7 @@ final class CoachLiveContext {
         let relevant = broad ? lines : lines.filter {
             !CoachMemoryLogic.substanceWords(in: $0).intersection(words).isEmpty
         }
-        return relevant.prefix(4).joined(separator: "\n")
+        return relevant.prefix(2).joined(separator: "\n")
     }
 
     // MARK: - Actions
