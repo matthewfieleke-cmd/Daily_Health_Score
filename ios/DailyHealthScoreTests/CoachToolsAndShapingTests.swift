@@ -93,7 +93,9 @@ final class CoachFoodDataTests: XCTestCase {
         XCTAssertEqual(facts[0].servingDescription, "45 g")
         XCTAssertEqual(facts[0].calories, 180)
         XCTAssertEqual(facts[0].proteinGrams, 10)
-        XCTAssertEqual(facts[0].fatGrams, 8, "Falls back to per-100 g when no serving value exists")
+        XCTAssertNil(facts[0].fatGrams, "A serving label must not mix in a per-100 g value")
+        XCTAssertTrue(facts[0].isPartialLabel)
+        XCTAssertTrue(facts[0].line.contains("partial label"))
         XCTAssertEqual(facts[0].source, "Open Food Facts")
     }
 
@@ -152,6 +154,39 @@ final class CoachFoodDataTests: XCTestCase {
         XCTAssertTrue(output.hasPrefix("Candidate database matches"))
         XCTAssertTrue(output.contains("Do not use candidates in an exact total"))
         XCTAssertEqual(CoachFoodService.matchQuality([], query: "anything"), .none)
+    }
+
+    func test_brandHitWithoutTheNamedProductIsNotACandidateLabel() {
+        let wrong = [
+            CoachFoodFact(
+                name: "Bircher Apple Cinnamon Almond Muesli", brand: "Seven Sundays",
+                servingDescription: "60 g", calories: 240, proteinGrams: 8,
+                fiberGrams: 7, totalSugarGrams: 7, addedSugarGrams: nil,
+                fatGrams: 9, carbGrams: 40, source: "USDA"
+            ),
+            CoachFoodFact(
+                name: "Cocoa Sunflower Cereal", brand: "Seven Sundays",
+                servingDescription: "40 g", calories: 160, proteinGrams: 5,
+                fiberGrams: 4, totalSugarGrams: 6, addedSugarGrams: nil,
+                fatGrams: 5, carbGrams: 27, source: "USDA"
+            )
+        ]
+        let query = "Seven Sundays Wildberry Protein Oats"
+        let ranked = CoachFoodService.rankedFacts(wrong, query: query, limit: 5)
+        XCTAssertEqual(CoachFoodService.matchQuality(ranked, query: query), .none)
+        let output = CoachFoodService.formatted(ranked, query: query)
+        XCTAssertTrue(output.hasPrefix("No database match"))
+        XCTAssertFalse(output.contains("Bircher"))
+
+        let exact = CoachFoodFact(
+            name: "Wildberry Protein Oats", brand: "Seven Sundays",
+            servingDescription: "60 g", calories: 230, proteinGrams: 10,
+            fiberGrams: 7, totalSugarGrams: 10, addedSugarGrams: 6,
+            fatGrams: 4.5, carbGrams: 38, source: "Open Food Facts"
+        )
+        let withExact = CoachFoodService.rankedFacts(wrong + [exact], query: query, limit: 5)
+        XCTAssertEqual(withExact.first?.name, "Wildberry Protein Oats")
+        XCTAssertEqual(CoachFoodService.matchQuality(withExact, query: query), .exact)
     }
 
     func test_urlsCarryOnlyTheFoodName() {
@@ -489,6 +524,22 @@ final class CoachLiveContextTests: XCTestCase {
     func test_toolNamesIncludeTheActions() async {
         for name in ["rememberAboutPerson", "proposeSMARTGoal", "logGoalCheckIn", "lookupTodayHealth", "lookupWhatWeRemember"] {
             XCTAssertTrue(CoachSessionTools.toolNames.contains(name), name)
+        }
+        for name in CoachLiveContext.turnScopedToolNames {
+            XCTAssertTrue(CoachSessionTools.toolNames.contains(name), name)
+        }
+    }
+
+    func test_onlyPersonalAndChangingToolsForceANewSession() async {
+        for name in CoachLiveContext.turnScopedToolNames {
+            let live = CoachLiveContext()
+            live.log(name)
+            XCTAssertTrue(live.requiresFreshSession, name)
+        }
+        for name in ["lookupFood", "searchEvidence", "calculate"] {
+            let live = CoachLiveContext()
+            live.log(name)
+            XCTAssertFalse(live.requiresFreshSession, name)
         }
     }
 

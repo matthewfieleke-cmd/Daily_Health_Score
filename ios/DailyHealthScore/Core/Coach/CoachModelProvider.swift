@@ -41,7 +41,10 @@ enum CoachModelProvider {
     }
 
     static func contextBudget(for tier: CoachModelTier) async -> CoachContextBudget {
-        CoachContextBudget.make(totalTokens: await contextTokens(for: tier))
+        CoachContextBudget.make(
+            totalTokens: await contextTokens(for: tier),
+            instructionCharacters: CoachCharter.instructions(for: tier).count
+        )
     }
 
     /// Cached so we do not ask the framework for the window on every message.

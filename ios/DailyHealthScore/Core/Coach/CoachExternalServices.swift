@@ -55,14 +55,17 @@ enum CoachFoodService {
             }
             return "No database match for \"\(query)\". Do not invent label values; ask for the label or a photo if exact numbers matter."
         }
-        let lines = facts.enumerated().map { index, fact in "\(index + 1). \(fact.line)" }
         let quality = matchQuality(facts, query: query)
+        if quality == .none {
+            return "No database match for \"\(query)\". Returned products matched a brand or generic word but not the named product. Do not invent label values; ask for the label or a photo if exact numbers matter."
+        }
+        let lines = facts.enumerated().map { index, fact in "\(index + 1). \(fact.line)" }
         let heading: String
         let footer: String
         switch quality {
         case .exact:
             heading = "Exact database match for \"\(query)\""
-            footer = "The package may have been reformulated; name the source and serving. Use the calculator for totals."
+            footer = "The package may have been reformulated; name the source and serving. Use the calculator for totals. Sum only nutrients listed for every item; when any label is partial, call the result a partial total and name what is missing."
         case .candidates:
             heading = "Candidate database matches for \"\(query)\" — no exact current label is confirmed"
             footer = "Do not use candidates in an exact total. Ask for the flavor, package label, or a photo when exact numbers matter."
@@ -89,13 +92,27 @@ enum CoachFoodService {
         let queryWords = matchWords(query)
         guard !queryWords.isEmpty else { return .candidates }
         let firstWords = matchWords(first.name + " " + first.brand)
-        let coverage = Double(queryWords.intersection(firstWords).count) / Double(queryWords.count)
-        let extras = firstWords.subtracting(queryWords).count
-        guard coverage == 1, extras <= 2 else { return .candidates }
+        let matchingBrand = facts
+            .map { matchWords($0.brand) }
+            .filter { !$0.isEmpty && $0.isSubset(of: queryWords) }
+            .max { $0.count < $1.count }
+        if let matchingBrand {
+            let productWords = queryWords.subtracting(matchingBrand)
+            guard !productWords.isEmpty else { return .candidates }
+            let productCoverage = Double(productWords.intersection(firstWords).count)
+                / Double(productWords.count)
+            if productCoverage < 0.35 { return .none }
+            guard productCoverage >= 0.75 else { return .candidates }
+        } else {
+            let coverage = Double(queryWords.intersection(firstWords).count)
+                / Double(queryWords.count)
+            guard coverage >= 0.75 else { return .candidates }
+            if !first.brand.isEmpty { return .candidates }
+        }
 
         let competing = facts.dropFirst().filter {
             let words = matchWords($0.name + " " + $0.brand)
-            return Double(queryWords.intersection(words).count) / Double(queryWords.count) == 1
+            return Double(queryWords.intersection(words).count) / Double(queryWords.count) >= 0.75
         }
         if competing.contains(where: { !nutrientsAgree(first, $0) }) {
             return .candidates
@@ -109,6 +126,10 @@ enum CoachFoodService {
         limit: Int
     ) -> [CoachFoodFact] {
         let queryWords = matchWords(query)
+        let isBrandedQuery = facts.contains {
+            let brand = matchWords($0.brand)
+            return !brand.isEmpty && brand.isSubset(of: queryWords)
+        }
         var seen = Set<String>()
         return facts
             .compactMap { fact -> (fact: CoachFoodFact, score: Double)? in
@@ -121,7 +142,10 @@ enum CoachFoodService {
                 let precision = words.isEmpty
                     ? 0
                     : Double(queryWords.intersection(words).count) / Double(words.count)
-                return (fact, coverage * 10 + precision)
+                let sourceFit = isBrandedQuery
+                    ? 0
+                    : (fact.brand.isEmpty ? 0.5 : -0.5)
+                return (fact, coverage * 10 + precision + sourceFit)
             }
             .sorted { $0.score > $1.score }
             .prefix(max(limit, 0))
@@ -129,7 +153,11 @@ enum CoachFoodService {
     }
 
     private static func matchWords(_ text: String) -> Set<String> {
-        let ignored: Set<String> = ["brand", "food", "foods", "product"]
+        let ignored: Set<String> = [
+            "and", "bar", "bars", "brand", "flavor", "flavored", "flavoured",
+            "food", "foods", "from", "organic", "product", "snack", "style",
+            "the", "with"
+        ]
         return Set(
             text.lowercased()
                 .components(separatedBy: CharacterSet.alphanumerics.inverted)
@@ -154,7 +182,7 @@ enum CoachFoodService {
         components?.queryItems = [
             URLQueryItem(name: "api_key", value: key),
             URLQueryItem(name: "query", value: query),
-            URLQueryItem(name: "pageSize", value: "5"),
+            URLQueryItem(name: "pageSize", value: "8"),
             URLQueryItem(name: "dataType", value: "Branded,Foundation,SR Legacy")
         ]
         return components?.url
@@ -167,7 +195,7 @@ enum CoachFoodService {
             URLQueryItem(name: "search_simple", value: "1"),
             URLQueryItem(name: "action", value: "process"),
             URLQueryItem(name: "json", value: "1"),
-            URLQueryItem(name: "page_size", value: "5"),
+            URLQueryItem(name: "page_size", value: "8"),
             URLQueryItem(name: "fields", value: "product_name,brands,nutriments,serving_size")
         ]
         return components?.url
@@ -187,11 +215,15 @@ enum CoachFoodService {
         }
     }
 
-    static func fetch(_ url: URL?, session: URLSession) async -> Result<Data, FetchFailure> {
+    static func fetch(
+        _ url: URL?,
+        session: URLSession,
+        accept: String = "application/json"
+    ) async -> Result<Data, FetchFailure> {
         guard let url else { return .failure(.badURL) }
         var request = URLRequest(url: url, timeoutInterval: requestTimeout)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else { return .failure(.transport("no HTTP response")) }
@@ -272,7 +304,11 @@ enum CoachEvidenceService {
             URLQueryItem(name: "retmode", value: "xml"),
             URLQueryItem(name: "tool", value: "DailyHealthScore")
         ]
-        guard case .success(let data) = await CoachFoodService.fetch(components?.url, session: session) else {
+        guard case .success(let data) = await CoachFoodService.fetch(
+            components?.url,
+            session: session,
+            accept: "application/xml"
+        ) else {
             return []
         }
         return PubMedParser.records(fromXML: data)

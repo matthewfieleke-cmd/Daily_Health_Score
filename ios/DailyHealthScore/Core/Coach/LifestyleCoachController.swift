@@ -417,6 +417,9 @@ final class LifestyleCoachController: ObservableObject {
         let evalThread = sequence.count > 1
             ? CoachThread(title: "Developer Eval", titleIsProvisional: false)
             : nil
+        // Eval can outlive its screen while a normal chat opens. Its pending
+        // actions and tool traces must never share the production turn bag.
+        let evalLive = CoachLiveContext()
         defer {
             if let evalThread {
                 model.forgetSession(for: evalThread.id)
@@ -433,7 +436,7 @@ final class LifestyleCoachController: ObservableObject {
 
             for (index, message) in sequence.enumerated() {
                 // A throwaway turn: tools see real app state, nothing is saved.
-                live.snapshot = todayRecord.map {
+                evalLive.snapshot = todayRecord.map {
                     CoachSnapshotBuilder.build(
                         today: $0,
                         records: records,
@@ -442,15 +445,15 @@ final class LifestyleCoachController: ObservableObject {
                         bodyTrend: bodyTrend
                     )
                 }
-                live.records = records
-                live.todayKey = todayRecord?.date ?? DateHelpers.localDateKey()
-                live.goals = goals
-                live.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
-                live.memoryItems = memory.effectiveMemories
-                live.recentConversations = memory.recentConversationsBlock()
-                live.bodyTrend = bodyTrend
-                live.focusedGoalID = nil
-                live.personsWords = (
+                evalLive.records = records
+                evalLive.todayKey = todayRecord?.date ?? DateHelpers.localDateKey()
+                evalLive.goals = goals
+                evalLive.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
+                evalLive.memoryItems = memory.effectiveMemories
+                evalLive.recentConversations = memory.recentConversationsBlock()
+                evalLive.bodyTrend = bodyTrend
+                evalLive.focusedGoalID = nil
+                evalLive.personsWords = (
                     [message]
                         + turns.filter { $0.role == .user }.suffix(6).map(\.text)
                 ).joined(separator: " ")
@@ -464,7 +467,7 @@ final class LifestyleCoachController: ObservableObject {
                 let result = try await model.reply(
                     to: message,
                     recentTurns: turns,
-                    live: live,
+                    live: evalLive,
                     forcedTier: forcedTier,
                     reasoningDepth: reasoningDepth,
                     context: context
