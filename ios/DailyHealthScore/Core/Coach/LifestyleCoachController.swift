@@ -389,6 +389,7 @@ final class LifestyleCoachController: ObservableObject {
         promptID: String,
         messages: [String]? = nil,
         forcedTier: CoachModelTier? = nil,
+        reasoningDepth: CoachReasoningDepth = .deep,
         todayRecord: DailyRecord?,
         records: [DailyRecord],
         goals: [SMARTGoal],
@@ -465,6 +466,7 @@ final class LifestyleCoachController: ObservableObject {
                     recentTurns: turns,
                     live: live,
                     forcedTier: forcedTier,
+                    reasoningDepth: reasoningDepth,
                     context: context
                 )
                 turns.append(
@@ -515,7 +517,8 @@ final class LifestyleCoachController: ObservableObject {
                     ? result.fallbackReason
                     : fallbackReasons.joined(separator: "; "),
                 draft: drafts.isEmpty ? nil : drafts.joined(separator: "; "),
-                toolsUsed: tools
+                toolsUsed: tools,
+                reasoningDepth: result.tier == .onDevice ? .light : reasoningDepth
             )
         } catch {
             let reason = model.lastFailureReason ?? error.localizedDescription

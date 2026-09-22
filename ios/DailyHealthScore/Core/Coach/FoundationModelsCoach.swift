@@ -171,6 +171,7 @@ final class FoundationModelsCoach {
         live: CoachLiveContext,
         focus: CoachFocusContext? = nil,
         forcedTier: CoachModelTier? = nil,
+        reasoningDepth: CoachReasoningDepth = .deep,
         context: CoachReplyContext
     ) async throws -> CoachReplyResult {
         #if canImport(FoundationModels)
@@ -237,7 +238,7 @@ final class FoundationModelsCoach {
                     session,
                     to: prompt(seedingTranscript: seed, budget: budget),
                     tier: .privateCloud,
-                    depth: .deep
+                    depth: reasoningDepth
                 )
             }
 

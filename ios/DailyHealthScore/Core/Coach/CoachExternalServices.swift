@@ -399,7 +399,7 @@ private final class PubMedXMLDelegate: NSObject, XMLParserDelegate {
         case .year:
             record.year = text
         case .medlineDate:
-            record.year = String(text.prefix(4))
+            record.year = firstFourDigitYear(in: text)
         case .abstractText(let label):
             let prefix = label.map { "\($0): " } ?? ""
             if !text.isEmpty { abstractParts.append(prefix + text) }
@@ -418,5 +418,18 @@ private final class PubMedXMLDelegate: NSObject, XMLParserDelegate {
             return String(prefix[..<space]) + "…"
         }
         return String(prefix) + "…"
+    }
+
+    private func firstFourDigitYear(in text: String) -> String {
+        let pattern = #"(?:19|20)[0-9]{2}"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(
+                in: text,
+                range: NSRange(text.startIndex..., in: text)
+              ),
+              let range = Range(match.range, in: text) else {
+            return ""
+        }
+        return String(text[range])
     }
 }

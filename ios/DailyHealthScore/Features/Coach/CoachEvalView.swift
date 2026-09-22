@@ -14,6 +14,7 @@ struct CoachEvalView: View {
     @State private var isRunningAll = false
     @State private var checked: Set<String> = []
     @State private var copied = false
+    @State private var reasoningDepth: CoachReasoningDepth = .deep
 
     private var todayRecord: DailyRecord? {
         appState.recordStore.records.first { $0.date == DateHelpers.localDateKey() }
@@ -31,6 +32,12 @@ struct CoachEvalView: View {
                     .foregroundStyle(.secondary)
                 Text(CoachModelProvider.serverQuotaSummary)
                     .font(.footnote.weight(.medium))
+                Picker("PCC reasoning", selection: $reasoningDepth) {
+                    Text("Moderate").tag(CoachReasoningDepth.moderate)
+                    Text("Deep").tag(CoachReasoningDepth.deep)
+                }
+                .pickerStyle(.segmented)
+                .disabled(isRunningAll || runningID != nil)
                 Button {
                     runAll()
                 } label: {
@@ -60,7 +67,7 @@ struct CoachEvalView: View {
                                 .foregroundStyle(.red)
                         } else {
                             CoachMarkdownText(text: result.reply, font: .callout)
-                            Text("\(result.tier == .privateCloud ? "Private Cloud Compute" : "On-device") · \(result.shape.rawValue) · \(String(format: "%.1f", result.seconds))s · \(CoachReplyPolish.wordCount(result.reply)) words")
+                            Text("\(result.tier == .privateCloud ? "Private Cloud Compute" : "On-device") · \(result.shape.rawValue) · reasoning: \(result.reasoningDepth?.rawValue ?? "light") · \(String(format: "%.1f", result.seconds))s · \(CoachReplyPolish.wordCount(result.reply)) words")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                             if let reason = result.fallbackReason, !reason.isEmpty {
@@ -132,6 +139,7 @@ struct CoachEvalView: View {
                 promptID: prompt.id,
                 messages: prompt.messages,
                 forcedTier: prompt.forcedTier,
+                reasoningDepth: reasoningDepth,
                 todayRecord: todayRecord,
                 records: appState.recordStore.records,
                 goals: appState.smartGoalStore.goals,
@@ -154,6 +162,7 @@ struct CoachEvalView: View {
                     promptID: prompt.id,
                     messages: prompt.messages,
                     forcedTier: prompt.forcedTier,
+                    reasoningDepth: reasoningDepth,
                     todayRecord: todayRecord,
                     records: appState.recordStore.records,
                     goals: appState.smartGoalStore.goals,

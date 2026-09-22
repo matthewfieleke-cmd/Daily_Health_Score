@@ -16,6 +16,8 @@ struct CoachEvalResult: Identifiable, Equatable, Sendable {
     var draft: String?
     /// Tools the model reached for, in order.
     var toolsUsed: [String] = []
+    /// Server reasoning selected for this run; on-device still uses light.
+    var reasoningDepth: CoachReasoningDepth?
 
     init(
         id: UUID = UUID(),
@@ -28,7 +30,8 @@ struct CoachEvalResult: Identifiable, Equatable, Sendable {
         error: String? = nil,
         fallbackReason: String? = nil,
         draft: String? = nil,
-        toolsUsed: [String] = []
+        toolsUsed: [String] = [],
+        reasoningDepth: CoachReasoningDepth? = nil
     ) {
         self.id = id
         self.promptID = promptID
@@ -41,6 +44,7 @@ struct CoachEvalResult: Identifiable, Equatable, Sendable {
         self.fallbackReason = fallbackReason
         self.draft = draft
         self.toolsUsed = toolsUsed
+        self.reasoningDepth = reasoningDepth
     }
 }
 
@@ -283,7 +287,8 @@ enum CoachEvalPrompts {
             var lines: [String] = []
             lines.append("## \(prompt?.title ?? result.promptID)")
             lines.append("Prompt: \(prompt?.displayText ?? "")")
-            lines.append("Model: \(result.tier.rawValue) · shape: \(result.shape.rawValue) · \(String(format: "%.1f", result.seconds))s · \(CoachReplyPolish.wordCount(result.reply)) words")
+            let reasoning = result.reasoningDepth.map { " · reasoning: \($0.rawValue)" } ?? ""
+            lines.append("Model: \(result.tier.rawValue) · shape: \(result.shape.rawValue)\(reasoning) · \(String(format: "%.1f", result.seconds))s · \(CoachReplyPolish.wordCount(result.reply)) words")
             if let reason = result.fallbackReason, !reason.isEmpty {
                 lines.append("Fell back to on-device because: \(reason)")
             }

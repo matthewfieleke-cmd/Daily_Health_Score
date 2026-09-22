@@ -189,7 +189,7 @@ final class CoachFoodDataTests: XCTestCase {
                   <AbstractText Label="BACKGROUND">Breakfast composition varies.</AbstractText>
                   <AbstractText Label="CONCLUSION">Protein and fiber reduced hunger.</AbstractText>
                 </Abstract>
-                <Journal><Title>Appetite</Title><JournalIssue><PubDate><MedlineDate>2019 Jan-Feb</MedlineDate></PubDate></JournalIssue></Journal>
+                <Journal><Title>Appetite</Title><JournalIssue><PubDate><MedlineDate>Winter 2019</MedlineDate></PubDate></JournalIssue></Journal>
               </Article>
             </MedlineCitation>
           </PubmedArticle>
@@ -403,10 +403,10 @@ final class CoachEvalPromptsTests: XCTestCase {
             CoachEvalPrompts.prompt(id: "on-device-general-medicine")?.forcedTier,
             .onDevice
         )
-        let result = CoachEvalResult(promptID: "stress-numbing", reply: "**Yes.**", tier: .privateCloud, shape: .howTo, memoryNotes: ["add · Likes & staples · stated: Yoga"], seconds: 12.3)
+        let result = CoachEvalResult(promptID: "stress-numbing", reply: "**Yes.**", tier: .privateCloud, shape: .howTo, memoryNotes: ["add · Likes & staples · stated: Yoga"], seconds: 12.3, reasoningDepth: .deep)
         let export = CoachEvalPrompts.export(results: [result])
         XCTAssertTrue(export.contains("## Stress numbing and Clash Royale"))
-        XCTAssertTrue(export.contains("Model: privateCloud · shape: howTo · 12.3s · 1 words"))
+        XCTAssertTrue(export.contains("Model: privateCloud · shape: howTo · reasoning: deep · 12.3s · 1 words"))
         XCTAssertTrue(export.contains("- [ ] "))
         XCTAssertTrue(export.contains("Claims, calculations, and citations are accurate"))
         let fellBack = CoachEvalResult(promptID: "data-question", reply: "7.1", tier: .onDevice, shape: .data, memoryNotes: [], seconds: 9.9, fallbackReason: "GenerationError.rateLimited")
