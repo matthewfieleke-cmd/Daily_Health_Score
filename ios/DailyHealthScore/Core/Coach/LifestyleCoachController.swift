@@ -239,14 +239,6 @@ final class LifestyleCoachController: ObservableObject {
         guard let thread = memory.openThread else { return }
 
         let todayKey = todayRecord?.date ?? DateHelpers.localDateKey()
-        // Past-day questions are resolved and compared in Swift, so the model
-        // never does date arithmetic.
-        let historyBlock = focusHistoryBlock(
-            message: trimmed,
-            records: records,
-            todayKey: todayKey,
-            focus: focus
-        )
         let context = CoachReplyContext(
             thread: thread,
             isFirstReply: isFirstReply,
@@ -264,6 +256,8 @@ final class LifestyleCoachController: ObservableObject {
                     bodyTrend: bodyTrend
                 )
             }
+            live.records = records
+            live.todayKey = todayKey
             live.goals = goals
             live.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
             live.memoryBlock = memory.promptMemoryBlock
@@ -278,7 +272,6 @@ final class LifestyleCoachController: ObservableObject {
                 recentTurns: memory.recentTurnsForPrompt(limit: CoachContextBudget.maxTranscriptTurns),
                 live: live,
                 focus: focus,
-                historyBlock: historyBlock,
                 context: context
             )
             guard chatGenerationID == generationID else { return }
@@ -417,6 +410,8 @@ final class LifestyleCoachController: ObservableObject {
                     today: $0, records: records, goals: goals, hrvSensitivity: hrvSensitivity, bodyTrend: bodyTrend
                 )
             }
+            live.records = records
+            live.todayKey = todayRecord?.date ?? DateHelpers.localDateKey()
             live.goals = goals
             live.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
             live.memoryBlock = memory.promptMemoryBlock
@@ -492,39 +487,4 @@ final class LifestyleCoachController: ObservableObject {
         memory.recordFeedback(target: target, useful: useful, goalId: goalId)
     }
 
-    private func focusHistoryBlock(
-        message: String,
-        records: [DailyRecord],
-        todayKey: String,
-        focus: CoachFocusContext?
-    ) -> String? {
-        if let focus, focus.isHistorical {
-            var parts = [focus.promptBlock]
-            if let start = focus.startDateKey, let end = focus.endDateKey, start != end {
-                let keys = records.map(\.date).filter { $0 >= start && $0 <= end }
-                if let range = CoachHistoryResolver.blockForDateKeys(
-                    keys,
-                    records: records,
-                    characterBudget: CoachContextBudget.maxHistoryCharacters
-                ) {
-                    parts.append(range)
-                }
-            } else if let start = focus.startDateKey {
-                if let day = CoachHistoryResolver.blockForDateKeys(
-                    [start],
-                    records: records,
-                    characterBudget: CoachContextBudget.maxHistoryCharacters
-                ) {
-                    parts.append(day)
-                }
-            }
-            return parts.joined(separator: "\n")
-        }
-        return CoachHistoryResolver.block(
-            message: message,
-            records: records,
-            todayKey: todayKey,
-            characterBudget: CoachContextBudget.maxHistoryCharacters
-        )
-    }
 }

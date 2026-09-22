@@ -12,10 +12,10 @@ enum CoachSessionTools {
     static func make(context: CoachLiveContext) -> [any Tool] {
         [
             CoachLookupTodayTool(context: context),
+            CoachLookupDaysTool(context: context),
             CoachLookupGoalsTool(context: context),
             CoachLookupPersonTool(context: context),
             CoachBodyTrendTool(context: context),
-            CoachSearchLifestyleTool(),
             CoachFoodLookupTool(),
             CoachEvidenceSearchTool(),
             CoachCalculatorTool(),
@@ -27,7 +27,7 @@ enum CoachSessionTools {
     #endif
 
     /// The names the charter refers to.
-    static let toolNames = "lookupTodayHealth, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, searchLifestyleMedicine, lookupFood, searchEvidence, calculate, rememberAboutPerson, proposeSMARTGoal, logGoalCheckIn"
+    static let toolNames = "lookupTodayHealth, lookupDays, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, lookupFood, searchEvidence, calculate, rememberAboutPerson, proposeSMARTGoal, logGoalCheckIn"
 }
 
 #if canImport(FoundationModels)
@@ -45,6 +45,34 @@ struct CoachLookupTodayTool: Tool {
     func call(arguments: Arguments) async throws -> String {
         await context.log("lookupTodayHealth")
         return await context.todayPayload
+    }
+}
+
+struct CoachLookupDaysTool: Tool {
+    let name = "lookupDays"
+    let description = "Sleep, fiber, exercise, the score, and sleep HRV for any past day or stretch of days, with the averages across the window and the days that have no record. Call for a question about a particular day, a week, a month, or any window other than today."
+    let context: CoachLiveContext
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "First day of the window as yyyy-MM-dd. Nil when counting back with startDaysAgo.")
+        var startDate: String?
+        @Guide(description: "Last day as yyyy-MM-dd. Nil for a single day, or when counting back with endDaysAgo.")
+        var endDate: String?
+        @Guide(description: "How many days back the window starts: 1 is yesterday, 7 is a week ago. Nil when giving dates.")
+        var startDaysAgo: Int?
+        @Guide(description: "How many days back the window ends: 0 is today, 1 is yesterday. Nil for a single day, or when giving dates.")
+        var endDaysAgo: Int?
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        await context.log("lookupDays")
+        return await context.daysPayload(
+            startDate: arguments.startDate,
+            endDate: arguments.endDate,
+            startDaysAgo: arguments.startDaysAgo,
+            endDaysAgo: arguments.endDaysAgo
+        )
     }
 }
 
@@ -96,27 +124,6 @@ struct CoachBodyTrendTool: Tool {
     func call(arguments: Arguments) async throws -> String {
         await context.log("lookupWeightTrend")
         return await context.bodyPayload
-    }
-}
-
-struct CoachSearchLifestyleTool: Tool {
-    let name = "searchLifestyleMedicine"
-    let description = "Guideline-aligned Lifestyle Medicine reference entries (nutrition, activity, sleep, stress, connection, substances, behavior change). Optional background; your own knowledge comes first."
-
-    @Generable
-    struct Arguments {
-        @Guide(description: "The lifestyle question to look up.")
-        var query: String
-    }
-
-    func call(arguments: Arguments) async throws -> String {
-        let block = LifestyleMedicineKnowledge.promptBlock(
-            query: arguments.query,
-            topics: [],
-            limit: 6,
-            characterBudget: 3500
-        )
-        return block.isEmpty ? "No matching reference entry." : block
     }
 }
 
