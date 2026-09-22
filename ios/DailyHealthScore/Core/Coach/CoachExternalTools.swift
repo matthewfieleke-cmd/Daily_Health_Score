@@ -7,7 +7,7 @@ import FoundationModels
 /// the model asks; the app performs the request and hands the text back.
 struct CoachFoodLookupTool: Tool {
     let name = "lookupFood"
-    let description = "Nutrition facts for a food or branded product from USDA FoodData Central and Open Food Facts: calories, protein, fiber, sugars, added sugars, fat, and minerals (sodium, potassium, calcium, iron, magnesium) per serving when listed. Call once per food or product the person named or asked about; not for foods you are merely recommending."
+    let description = "Nutrition facts for a food or branded product from USDA FoodData Central and Open Food Facts: calories, protein, fiber, sugars, added sugars, fat, and minerals (sodium, potassium, calcium, iron, magnesium) per serving when listed. Call once for each food you are about to give numbers for, even one you think you know; when nothing comes back, say so rather than estimating the label. Not needed for foods you are only recommending."
 
     @Generable
     struct Arguments {
@@ -22,7 +22,7 @@ struct CoachFoodLookupTool: Tool {
 
 struct CoachEvidenceSearchTool: Tool {
     let name = "searchEvidence"
-    let description = "PubMed search returning real studies with title, journal, year, PMID, and abstract. Use when a claim deserves a source; cite only what comes back."
+    let description = "PubMed search returning real studies with title, journal, year, PMID, and abstract. Call before attributing anything to research, the literature, or a study, and cite only what comes back. Your own expertise needs no citation; a citation needs this."
 
     @Generable
     struct Arguments {

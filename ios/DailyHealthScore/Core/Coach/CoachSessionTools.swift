@@ -26,14 +26,14 @@ enum CoachSessionTools {
     }
     #endif
 
-    /// The names the charter refers to.
+    /// The inventory, for tests and the eval screen.
     static let toolNames = "lookupTodayHealth, lookupDays, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, lookupFood, searchEvidence, calculate, rememberAboutPerson, proposeSMARTGoal, logGoalCheckIn"
 }
 
 #if canImport(FoundationModels)
 struct CoachLookupTodayTool: Tool {
     let name = "lookupTodayHealth"
-    let description = "Today's Daily Health Score with sleep, fiber, exercise, this week's averages, HRV against their usual range, and computed SMART goal status. Call when the person asks about their day, their numbers, or how they are doing."
+    let description = "Today's Daily Health Score with sleep, fiber, exercise, this week's averages, HRV against their usual range, and computed SMART goal status. Call when the person asks about today or about their numbers."
     let context: CoachLiveContext
 
     @Generable
@@ -112,7 +112,7 @@ struct CoachLookupPersonTool: Tool {
 
 struct CoachBodyTrendTool: Tool {
     let name = "lookupWeightTrend"
-    let description = "The person's weight trend, BMI, age, and sex as shared from Apple Health. Call when weight, age, protein or energy needs come up. Never for praise or judgment; never guess an age instead of calling this."
+    let description = "The person's weight trend, BMI, age, and sex as shared from Apple Health. Call when weight, age, protein, or energy needs come up. Never guess an age instead of calling this."
     let context: CoachLiveContext
 
     @Generable
@@ -131,7 +131,7 @@ struct CoachBodyTrendTool: Tool {
 
 struct CoachRememberTool: Tool {
     let name = "rememberAboutPerson"
-    let description = "Keep a dated note about this person in one of nine files. One full sentence with its context, in their own framing (a struggle they are working on is not a habit they keep), third person, under 240 characters; names, ages and jobs with an 'as of' month, their phrases in quotes. Never their metrics, the score, or your own advice. Only what they actually said."
+    let description = "Keep a dated note about this person in one of nine files. One full sentence with its context, in their own framing (a struggle they are working on is not a habit they keep), third person, under 240 characters, their phrases in quotes. Date a fact only when they gave the date; never invent a month. Never their metrics, the score, or your own advice. Only what they actually said."
     let context: CoachLiveContext
 
     @Generable
