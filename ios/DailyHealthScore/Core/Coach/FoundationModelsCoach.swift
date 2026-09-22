@@ -139,8 +139,8 @@ final class FoundationModelsCoach {
 
     /// One conversation per chat, held by the framework the way any assistant
     /// holds a thread. Rebuilt when the tier changes or after a context overflow;
-    /// seeded from the stored turns on a cold start. Who the person is stays in
-    /// the tools, so a new note does not throw the conversation away.
+    /// seeded from the stored turns on a cold start. A turn that reads personal
+    /// or changing app data is also rebuilt next time, from what the person saw.
     #if canImport(FoundationModels)
     private struct LiveSession {
         var session: LanguageModelSession

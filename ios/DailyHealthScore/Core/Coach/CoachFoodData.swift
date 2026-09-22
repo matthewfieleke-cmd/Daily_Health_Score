@@ -20,6 +20,19 @@ struct CoachFoodFact: Equatable, Sendable {
     var magnesiumMg: Double? = nil
     var source: String
 
+    var missingCoreNutrients: [String] {
+        [
+            ("calories", calories),
+            ("protein", proteinGrams),
+            ("fiber", fiberGrams),
+            ("sugars", totalSugarGrams),
+            ("fat", fatGrams),
+            ("carbohydrate", carbGrams)
+        ].compactMap { label, value in value == nil ? label : nil }
+    }
+
+    var isPartialLabel: Bool { !missingCoreNutrients.isEmpty }
+
     /// "Clif Oatmeal Raisin Walnut (Clif Bar) — per 68 g bar: 250 kcal · 10 g protein · 5 g fiber · 20 g sugars (14 g added) · 180 mg sodium — USDA"
     var line: String {
         var parts: [String] = []
@@ -44,7 +57,10 @@ struct CoachFoodFact: Equatable, Sendable {
         }
         let brandText = brand.isEmpty ? "" : " (\(brand))"
         let serving = servingDescription.isEmpty ? "per 100 g" : "per \(servingDescription)"
-        return "\(name)\(brandText) — \(serving): \(parts.isEmpty ? "no nutrient values listed" : parts.joined(separator: " · ")) — \(source)"
+        let partial = isPartialLabel
+            ? " — partial label (missing \(missingCoreNutrients.joined(separator: ", ")))"
+            : ""
+        return "\(name)\(brandText) — \(serving): \(parts.isEmpty ? "no nutrient values listed" : parts.joined(separator: " · ")) — \(source)\(partial)"
     }
 }
 
@@ -168,11 +184,11 @@ enum OpenFoodFactsParser {
             return nil
         }
         func value(_ base: String) -> Double? {
-            hasServing ? number("\(base)_serving") ?? number("\(base)_100g") : number("\(base)_100g")
+            hasServing ? number("\(base)_serving") : number("\(base)_100g")
         }
         // Open Food Facts lists minerals in grams; the label reads in milligrams.
         func milligrams(_ base: String) -> Double? {
-            let key = hasServing && nutriments["\(base)_serving"] != nil ? "\(base)_serving" : "\(base)_100g"
+            let key = hasServing ? "\(base)_serving" : "\(base)_100g"
             guard let raw = nutriments[key] else { return nil }
             let grams: Double?
             if let value = raw as? Double { grams = value }

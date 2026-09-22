@@ -75,12 +75,14 @@ final class CoachLiveContext {
             line += " · \(milliseconds) ms"
         }
         toolLog.append(line)
-        if Self.turnScopedTools.contains(tool) {
+        if Self.turnScopedToolNames.contains(tool) {
             requiresFreshSession = true
         }
     }
 
-    private static let turnScopedTools: Set<String> = [
+    /// Personal or changing app payloads that must not survive as hidden model
+    /// transcript after the answer that requested them.
+    static let turnScopedToolNames: Set<String> = [
         "lookupTodayHealth", "lookupDays", "lookupSMARTGoals",
         "lookupWhatWeRemember", "lookupWeightTrend",
         "rememberAboutPerson", "proposeSMARTGoal", "logGoalCheckIn"
