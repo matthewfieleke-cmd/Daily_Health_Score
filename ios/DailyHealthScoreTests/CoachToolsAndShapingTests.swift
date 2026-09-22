@@ -96,11 +96,16 @@ final class CoachFoodDataTests: XCTestCase {
     }
 
     func test_formattedResultsTellTheModelWhatToDoWithThem() {
-        XCTAssertTrue(CoachFoodService.formatted([], query: "unicorn bar").contains("label them approximate"))
+        let missing = CoachFoodService.formatted([], query: "unicorn bar")
+        XCTAssertTrue(missing.contains("No database match"))
+        XCTAssertTrue(missing.contains("Do not invent label values"))
+        XCTAssertTrue(missing.contains("label or a photo"))
+        XCTAssertFalse(missing.lowercased().contains("estimate"))
         let unavailable = CoachFoodService.formatted([], query: "unicorn bar", failures: ["USDA: HTTP 429 rate limited", "Open Food Facts: timed out"])
         XCTAssertTrue(unavailable.contains("Food lookup unavailable"))
         XCTAssertTrue(unavailable.contains("HTTP 429 rate limited"))
-        XCTAssertTrue(unavailable.contains("say the database did not respond"))
+        XCTAssertTrue(unavailable.contains("Say the database did not respond"))
+        XCTAssertTrue(unavailable.contains("Do not invent label values"))
         XCTAssertEqual(CoachFoodService.FetchFailure.http(429).description, "HTTP 429 rate limited")
         XCTAssertEqual(CoachFoodService.FetchFailure.http(503).description, "HTTP 503")
         let fact = CoachFoodFact(name: "Oats", brand: "", servingDescription: "40 g", calories: 150, proteinGrams: 5, fiberGrams: 4, totalSugarGrams: 1, addedSugarGrams: nil, fatGrams: nil, carbGrams: nil, source: "USDA FoodData Central")
@@ -416,5 +421,39 @@ final class CoachLiveContextTests: XCTestCase {
         for name in ["rememberAboutPerson", "proposeSMARTGoal", "logGoalCheckIn", "lookupTodayHealth", "lookupWhatWeRemember"] {
             XCTAssertTrue(CoachSessionTools.toolNames.contains(name), name)
         }
+    }
+
+    func test_toolTraceKeepsOnlyMeaningfulArgumentsAndOutcome() async {
+        let live = CoachLiveContext()
+        live.log(
+            "lookupFood",
+            detail: "  Seven Sundays\n\"Wildberry\" Protein Oats  ",
+            outcome: "match"
+        )
+        live.log("lookupTodayHealth", outcome: "success")
+        XCTAssertEqual(
+            live.toolLog,
+            [
+                "lookupFood(\"Seven Sundays 'Wildberry' Protein Oats\") → match",
+                "lookupTodayHealth → success"
+            ]
+        )
+    }
+
+    func test_personLookupScopesNotesAndRecentChatsToItsTopic() async {
+        let live = CoachLiveContext()
+        live.memoryItems = [
+            CoachMemoryItem(category: .routines, content: "Uses an AI scribe to finish patient notes at work.", provenance: .coachRecorded),
+            CoachMemoryItem(category: .likes, content: "Likes Wildberry Protein Oats.", provenance: .coachRecorded)
+        ]
+        live.recentConversations = """
+        - Today: "Patient confidence" — Felt more confident while seeing patients.
+        - Yesterday: "Breakfast" — Compared two oat products.
+        """
+        let payload = live.personPayload(topic: "patients at work")
+        XCTAssertTrue(payload.contains("AI scribe"))
+        XCTAssertTrue(payload.contains("Patient confidence"))
+        XCTAssertFalse(payload.contains("Wildberry"))
+        XCTAssertFalse(payload.contains("\"Breakfast\""))
     }
 }

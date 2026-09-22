@@ -14,7 +14,7 @@ final class CoachLiveContext {
     var todayKey: String = DateHelpers.localDateKey()
     var goals: [SMARTGoal] = []
     var activitiesByGoal: [UUID: [SMARTGoalActivity]] = [:]
-    var memoryBlock: String = ""
+    var memoryItems: [CoachMemoryItem] = []
     var recentConversations: String = ""
     var bodyTrend: BodyTrend?
     /// What the person has said in this exchange and recently; a new note has
@@ -29,7 +29,8 @@ final class CoachLiveContext {
     private(set) var pendingProposal: CoachGoalProposal?
     private(set) var pendingCheckIn: CoachGoalCheckInRequest?
     private(set) var proposalRejected = false
-    /// Tool calls the model made, for the eval screen.
+    /// Tool calls the model made, with only the arguments that affected the
+    /// operation and a small outcome. Ephemeral: shown by the eval, never filed.
     private(set) var toolLog: [String] = []
 
     init() {}
@@ -42,8 +43,31 @@ final class CoachLiveContext {
         toolLog = []
     }
 
-    func log(_ tool: String) {
-        toolLog.append(tool)
+    func log(
+        _ tool: String,
+        detail: String? = nil,
+        outcome: String? = nil,
+        startedAt: Date? = nil
+    ) {
+        var line = tool
+        if let detail {
+            let clean = detail
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\"", with: "'")
+                .split(whereSeparator: \.isWhitespace)
+                .joined(separator: " ")
+            if !clean.isEmpty {
+                line += "(\"\(String(clean.prefix(100)))\")"
+            }
+        }
+        if let outcome, !outcome.isEmpty {
+            line += " → \(outcome)"
+        }
+        if let startedAt {
+            let milliseconds = max(Int(Date().timeIntervalSince(startedAt) * 1_000), 0)
+            line += " · \(milliseconds) ms"
+        }
+        toolLog.append(line)
     }
 
     // MARK: - Payloads
@@ -77,12 +101,12 @@ final class CoachLiveContext {
         return text.isEmpty ? "No SMART goals saved." : text
     }
 
-    var personPayload: String {
-        let notes = memoryBlock.trimmingCharacters(in: .whitespacesAndNewlines)
-        let conversations = recentConversations.trimmingCharacters(in: .whitespacesAndNewlines)
+    func personPayload(topic: String) -> String {
+        let notes = CoachMemoryLogic.promptBlock(items: memoryItems, relevantTo: topic)
+        let conversations = relevantConversationLines(topic: topic)
         var parts: [String] = []
-        parts.append(notes.isEmpty ? "No notes yet." : "MEMORY FILES:\n" + notes)
-        if !conversations.isEmpty, conversations != "None yet." {
+        parts.append("SAVED NOTES:\n" + notes)
+        if !conversations.isEmpty {
             parts.append("RECENT CONVERSATIONS (other chats):\n" + conversations)
         }
         return parts.joined(separator: "\n\n")
@@ -90,6 +114,21 @@ final class CoachLiveContext {
 
     var bodyPayload: String {
         bodyTrend?.promptBlock ?? "No weight, height, age, or sex has been shared from Apple Health."
+    }
+
+    private func relevantConversationLines(topic: String) -> String {
+        let words = CoachMemoryLogic.substanceWords(in: topic)
+        guard !words.isEmpty else { return "" }
+        let normalized = topic.lowercased()
+        let broad = ["everything", "whole profile", "full profile", "all notes", "background"]
+            .contains { normalized.contains($0) }
+        let lines = recentConversations
+            .split(separator: "\n")
+            .map(String.init)
+        let relevant = broad ? lines : lines.filter {
+            !CoachMemoryLogic.substanceWords(in: $0).intersection(words).isEmpty
+        }
+        return relevant.prefix(4).joined(separator: "\n")
     }
 
     // MARK: - Actions

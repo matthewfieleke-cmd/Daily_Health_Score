@@ -16,9 +16,9 @@ enum CoachSessionTools {
             CoachLookupGoalsTool(context: context),
             CoachLookupPersonTool(context: context),
             CoachBodyTrendTool(context: context),
-            CoachFoodLookupTool(),
-            CoachEvidenceSearchTool(),
-            CoachCalculatorTool(),
+            CoachFoodLookupTool(context: context),
+            CoachEvidenceSearchTool(context: context),
+            CoachCalculatorTool(context: context),
             CoachRememberTool(context: context),
             CoachProposeGoalTool(context: context),
             CoachLogCheckInTool(context: context)
@@ -37,14 +37,15 @@ struct CoachLookupTodayTool: Tool {
     let context: CoachLiveContext
 
     @Generable
-    struct Arguments {
-        @Guide(description: "What you need the numbers for.")
-        var reason: String
-    }
+    struct Arguments {}
 
     func call(arguments: Arguments) async throws -> String {
-        await context.log("lookupTodayHealth")
-        return await context.todayPayload
+        let payload = await context.todayPayload
+        await context.log(
+            "lookupTodayHealth",
+            outcome: payload.hasPrefix("No live") ? "unavailable" : "success"
+        )
+        return payload
     }
 }
 
@@ -66,13 +67,32 @@ struct CoachLookupDaysTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
-        await context.log("lookupDays")
-        return await context.daysPayload(
+        let payload = await context.daysPayload(
             startDate: arguments.startDate,
             endDate: arguments.endDate,
             startDaysAgo: arguments.startDaysAgo,
             endDaysAgo: arguments.endDaysAgo
         )
+        let dates = [arguments.startDate, arguments.endDate].compactMap { $0 }
+        let offsets = [arguments.startDaysAgo, arguments.endDaysAgo].compactMap { $0 }
+        let detail: String?
+        if !dates.isEmpty {
+            detail = dates.joined(separator: " through ")
+        } else if !offsets.isEmpty {
+            detail = offsets.map(String.init).joined(separator: " through ") + " days ago"
+        } else {
+            detail = nil
+        }
+        let outcome: String
+        if payload.hasPrefix("No window") {
+            outcome = "invalid window"
+        } else if payload.contains("no record saved") || payload.contains("No days in this window") {
+            outcome = "no record"
+        } else {
+            outcome = "success"
+        }
+        await context.log("lookupDays", detail: detail, outcome: outcome)
+        return payload
     }
 }
 
@@ -82,20 +102,21 @@ struct CoachLookupGoalsTool: Tool {
     let context: CoachLiveContext
 
     @Generable
-    struct Arguments {
-        @Guide(description: "Which goal or question you are working on.")
-        var focus: String
-    }
+    struct Arguments {}
 
     func call(arguments: Arguments) async throws -> String {
-        await context.log("lookupSMARTGoals")
-        return await context.goalsPayload
+        let payload = await context.goalsPayload
+        await context.log(
+            "lookupSMARTGoals",
+            outcome: payload == "No SMART goals saved." ? "none saved" : "success"
+        )
+        return payload
     }
 }
 
 struct CoachLookupPersonTool: Tool {
     let name = "lookupWhatWeRemember"
-    let description = "Your dated notes about this person — who is in their life, their patterns and what helps, how they eat, their routines, their health, recent state — plus summaries of other recent chats. Call when knowing this person would change the answer. Leave it when a stranger would have gotten the same reply."
+    let description = "Relevant dated notes about this person — who is in their life, their patterns and what helps, how they eat, their routines, their health, recent state — plus matching summaries of other chats. Call when knowing this person would change the answer. Give the subject you need; only matching material comes back. Leave it when a stranger would have gotten the same reply."
     let context: CoachLiveContext
 
     @Generable
@@ -105,8 +126,16 @@ struct CoachLookupPersonTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
-        await context.log("lookupWhatWeRemember")
-        return await context.personPayload
+        let payload = await context.personPayload(topic: arguments.topic)
+        await context.log(
+            "lookupWhatWeRemember",
+            detail: arguments.topic,
+            outcome: payload.contains("No saved notes match this topic.")
+                && !payload.contains("RECENT CONVERSATIONS")
+                ? "no match"
+                : "success"
+        )
+        return payload
     }
 }
 
@@ -116,14 +145,15 @@ struct CoachBodyTrendTool: Tool {
     let context: CoachLiveContext
 
     @Generable
-    struct Arguments {
-        @Guide(description: "Why the trend is needed.")
-        var reason: String
-    }
+    struct Arguments {}
 
     func call(arguments: Arguments) async throws -> String {
-        await context.log("lookupWeightTrend")
-        return await context.bodyPayload
+        let payload = await context.bodyPayload
+        await context.log(
+            "lookupWeightTrend",
+            outcome: payload.hasPrefix("No weight") ? "unavailable" : "success"
+        )
+        return payload
     }
 }
 
@@ -149,14 +179,18 @@ struct CoachRememberTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
-        await context.log("rememberAboutPerson")
-        return await context.remember(
+        let result = await context.remember(
             operation: arguments.operation,
             section: arguments.section,
             text: arguments.text,
             replaces: arguments.replaces,
             basis: arguments.basis
         )
+        await context.log(
+            "rememberAboutPerson",
+            outcome: result == "Kept." ? "accepted" : "rejected"
+        )
+        return result
     }
 }
 
@@ -190,8 +224,7 @@ struct CoachProposeGoalTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
-        await context.log("proposeSMARTGoal")
-        return await context.propose(
+        let result = await context.propose(
             operation: arguments.operation,
             goalID: arguments.goalID,
             specificText: arguments.specificText,
@@ -203,6 +236,11 @@ struct CoachProposeGoalTool: Tool {
             expectedBarriers: arguments.expectedBarriers,
             fallbackAction: arguments.fallbackAction
         )
+        let outcome = result.hasPrefix("Not drafted")
+            ? "rejected"
+            : (result.hasPrefix("Replaced") ? "replaced" : "ready")
+        await context.log("proposeSMARTGoal", outcome: outcome)
+        return result
     }
 }
 
@@ -222,8 +260,16 @@ struct CoachLogCheckInTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
-        await context.log("logGoalCheckIn")
-        return await context.logCheckIn(goalID: arguments.goalID, when: arguments.when, note: arguments.note)
+        let result = await context.logCheckIn(
+            goalID: arguments.goalID,
+            when: arguments.when,
+            note: arguments.note
+        )
+        await context.log(
+            "logGoalCheckIn",
+            outcome: result.hasPrefix("Not offered") ? "rejected" : "ready"
+        )
+        return result
     }
 }
 #endif
