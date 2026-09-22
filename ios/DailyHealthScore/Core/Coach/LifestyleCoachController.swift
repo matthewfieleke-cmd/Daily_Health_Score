@@ -387,6 +387,8 @@ final class LifestyleCoachController: ObservableObject {
     func evaluate(
         prompt: String,
         promptID: String,
+        messages: [String]? = nil,
+        forcedTier: CoachModelTier? = nil,
         todayRecord: DailyRecord?,
         records: [DailyRecord],
         goals: [SMARTGoal],
@@ -396,51 +398,124 @@ final class LifestyleCoachController: ObservableObject {
     ) async -> CoachEvalResult {
         refreshAvailability()
         let started = Date()
+        let sequence = (messages ?? [prompt])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
         guard availability == .available else {
             return CoachEvalResult(
                 promptID: promptID, reply: "", tier: .onDevice, shape: .general, memoryNotes: [],
                 seconds: 0, error: availability.guidance
             )
         }
-        let context = CoachReplyContext(thread: nil, isFirstReply: true, emptyMemorySections: memory.emptySectionLabels)
-        do {
-            // A throwaway turn: the tools see the real app state, nothing is saved.
-            live.snapshot = todayRecord.map {
-                CoachSnapshotBuilder.build(
-                    today: $0, records: records, goals: goals, hrvSensitivity: hrvSensitivity, bodyTrend: bodyTrend
-                )
-            }
-            live.records = records
-            live.todayKey = todayRecord?.date ?? DateHelpers.localDateKey()
-            live.goals = goals
-            live.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
-            live.memoryItems = memory.effectiveMemories
-            live.recentConversations = memory.recentConversationsBlock()
-            live.bodyTrend = bodyTrend
-            live.focusedGoalID = nil
-            live.personsWords = prompt
-            let result = try await model.reply(
-                to: prompt,
-                recentTurns: [],
-                live: live,
-                context: context
+        guard !sequence.isEmpty else {
+            return CoachEvalResult(
+                promptID: promptID, reply: "", tier: .onDevice, shape: .general,
+                memoryNotes: [], seconds: 0, error: "No eval message."
             )
-            let notes = result.memoryUpdates.map { update in
-                "\(update.operation.rawValue) · \(update.section.label) · \(update.basis.rawValue): \(update.text.isEmpty ? update.replaces : update.text)"
+        }
+        let evalThread = sequence.count > 1
+            ? CoachThread(title: "Developer Eval", titleIsProvisional: false)
+            : nil
+        defer {
+            if let evalThread {
+                model.forgetSession(for: evalThread.id)
             }
-            let draft = result.goalProposal.map { proposal in
-                "\(proposal.isUpdate ? "update" : "create"): \(proposal.edit.specificText) × \(proposal.edit.targetCount)"
+        }
+        do {
+            var turns: [CoachChatTurn] = []
+            var transcript: [String] = []
+            var notes: [String] = []
+            var tools: [String] = []
+            var drafts: [String] = []
+            var fallbackReasons: [String] = []
+            var lastResult: CoachReplyResult?
+
+            for (index, message) in sequence.enumerated() {
+                // A throwaway turn: tools see real app state, nothing is saved.
+                live.snapshot = todayRecord.map {
+                    CoachSnapshotBuilder.build(
+                        today: $0,
+                        records: records,
+                        goals: goals,
+                        hrvSensitivity: hrvSensitivity,
+                        bodyTrend: bodyTrend
+                    )
+                }
+                live.records = records
+                live.todayKey = todayRecord?.date ?? DateHelpers.localDateKey()
+                live.goals = goals
+                live.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
+                live.memoryItems = memory.effectiveMemories
+                live.recentConversations = memory.recentConversationsBlock()
+                live.bodyTrend = bodyTrend
+                live.focusedGoalID = nil
+                live.personsWords = (
+                    [message]
+                        + turns.filter { $0.role == .user }.suffix(6).map(\.text)
+                ).joined(separator: " ")
+
+                turns.append(CoachChatTurn(role: .user, text: message))
+                let context = CoachReplyContext(
+                    thread: evalThread,
+                    isFirstReply: index == 0,
+                    emptyMemorySections: memory.emptySectionLabels
+                )
+                let result = try await model.reply(
+                    to: message,
+                    recentTurns: turns,
+                    live: live,
+                    forcedTier: forcedTier,
+                    context: context
+                )
+                turns.append(
+                    CoachChatTurn(
+                        role: .coach,
+                        text: result.message,
+                        modelTier: result.tier,
+                        fallbackReason: result.fallbackReason
+                    )
+                )
+                transcript.append(
+                    "User: \(message)\nCoach [\(result.tier.rawValue)]: \(result.message)"
+                )
+                notes.append(contentsOf: result.memoryUpdates.map { update in
+                    let detail = "\(update.operation.rawValue) · \(update.section.label) · \(update.basis.rawValue): \(update.text.isEmpty ? update.replaces : update.text)"
+                    return sequence.count == 1 ? detail : "Turn \(index + 1) · \(detail)"
+                })
+                tools.append(contentsOf: result.toolsUsed.map {
+                    sequence.count == 1 ? $0 : "Turn \(index + 1) · \($0)"
+                })
+                if let proposal = result.goalProposal {
+                    let detail = "\(proposal.isUpdate ? "update" : "create"): \(proposal.edit.specificText) × \(proposal.edit.targetCount)"
+                    drafts.append(sequence.count == 1 ? detail : "Turn \(index + 1) · \(detail)")
+                } else if result.proposalRejected {
+                    drafts.append(
+                        sequence.count == 1
+                            ? "rejected (needs clarification)"
+                            : "Turn \(index + 1) · rejected (needs clarification)"
+                    )
+                }
+                if let reason = result.fallbackReason, !reason.isEmpty {
+                    fallbackReasons.append("Turn \(index + 1): \(reason)")
+                }
+                lastResult = result
+            }
+
+            guard let result = lastResult else {
+                throw FoundationModelsCoach.CoachError.generationFailed("The eval returned no reply.")
             }
             return CoachEvalResult(
                 promptID: promptID,
-                reply: result.message,
+                reply: sequence.count == 1 ? result.message : transcript.joined(separator: "\n\n"),
                 tier: result.tier,
                 shape: result.shape,
                 memoryNotes: notes,
                 seconds: Date().timeIntervalSince(started),
-                fallbackReason: result.fallbackReason,
-                draft: draft ?? (result.proposalRejected ? "rejected (needs clarification)" : nil),
-                toolsUsed: result.toolsUsed
+                fallbackReason: fallbackReasons.isEmpty
+                    ? result.fallbackReason
+                    : fallbackReasons.joined(separator: "; "),
+                draft: drafts.isEmpty ? nil : drafts.joined(separator: "; "),
+                toolsUsed: tools
             )
         } catch {
             let reason = model.lastFailureReason ?? error.localizedDescription

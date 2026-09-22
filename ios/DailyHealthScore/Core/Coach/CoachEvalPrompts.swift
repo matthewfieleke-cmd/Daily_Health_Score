@@ -50,23 +50,43 @@ struct CoachEvalPrompt: Identifiable, Equatable, Sendable {
     var title: String
     var text: String
     var rubric: [String]
+    /// Follow-up messages in the same throwaway conversation.
+    var followUps: [String] = []
+    /// Used only to exercise the honest no-tools fallback.
+    var forcedTier: CoachModelTier? = nil
+
+    var messages: [String] { [text] + followUps }
+    var requestCount: Int { messages.count }
+    var displayText: String {
+        guard !followUps.isEmpty else { return text }
+        return messages.enumerated()
+            .map { "\($0.offset + 1). \($0.element)" }
+            .joined(separator: "\n")
+    }
 }
 
-/// The regression set. The first four are real conversations that exposed
-/// specific failures; the rest cover shapes those four did not.
+/// The regression set. Rubrics measure outcomes, not one scripted route to
+/// them: directness, accuracy, appropriate tools, and earned personalization.
 enum CoachEvalPrompts {
+    static let sharedRubric = [
+        "Answers the actual request and adds value beyond restating it",
+        "Claims, calculations, and citations are accurate; uncertainty is honest",
+        "Uses only tools that materially improve the answer; no duplicate searches or tool narration",
+        "Personalizes only when it changes the answer; no unrelated metrics or memories",
+        "General health education is answered directly without an automatic referral",
+        "Length and depth fit the moment; no forced format or closing question"
+    ]
+
     static let all: [CoachEvalPrompt] = [
         CoachEvalPrompt(
             id: "breakfast-eval",
             title: "Breakfast evaluation",
             text: "There’s a breakfast I like to do that includes an Oatmeal Walnut Raisin Clif bar, That’s It bar, Seven Sundays Wildberry Protein Oats, and Green Tea. Is that a healthy breakfast?",
             rubric: [
-                "Verdict in the first sentence (yes / mostly / no)",
-                "Looks up or estimates each product with per-item numbers and a total",
-                "Names the honest caveat (added sugar in the bars, modest protein)",
-                "Ties fiber to the person's goal",
-                "One upgrade that fits the meal they already eat, not a different cuisine",
-                "No status tokens, no framework name-dropping"
+                "Gives a clear verdict early and explains the main strength and tradeoff",
+                "Every branded number comes from an exact database match; candidates stay unresolved",
+                "Calls any total partial when an item is unresolved and never invents a package label",
+                "Any suggested adjustment fits the meal they already eat and is offered only if useful"
             ]
         ),
         CoachEvalPrompt(
@@ -74,11 +94,10 @@ enum CoachEvalPrompts {
             title: "Work boundaries win",
             text: "I’ve been doing better recently with not bringing work home. I am a family medicine physician. I’m getting my notes and patient messages all taken care of while at work. Previously I was bringing home an hour or two of work. I think a big part is my mindset and deciding to stay on top of things and stay on my toes instead of on my heels. I’m also using our AI scribe which is helping.",
             rubric: [
-                "Opens with a genuine reaction and names the win specifically; no paraphrase of the message",
-                "Quotes the toes-not-heels framing and makes the expertise vivid (open loops, half-finished tasks following them home)",
-                "Ends with one concrete question about how the evenings are actually going; offers no plan",
-                "Memory notes: physician, notes finished at work, AI scribe, the toes-not-heels framing in quotes",
-                "No trite praise for 'doing the work'"
+                "Recognizes what materially changed and why it matters beyond work hours",
+                "Adds insight rather than returning a compressed version of the message",
+                "Does not force a plan or question when a genuine response is enough",
+                "Any memory is grounded, preserves distinctive framing, and invents no date"
             ]
         ),
         CoachEvalPrompt(
@@ -86,12 +105,10 @@ enum CoachEvalPrompts {
             title: "Insecurity and positive intent",
             text: "I find myself feeling insecure about work. My office manager is moving to a different clinic. A doctor I worked with in the past did a real good job of Assuming Positive Intent. So when interacting with someone, we should assume that they have a positive intent. Recently, I have found myself doing the opposite. When I am in a healthier frame of mind, I say the following to myself: “Seeing the best in people brings out the best in people.”",
             rubric: [
-                "Validates the loss in one sentence",
-                "Mechanism: an anchor leaving turns up threat detection; assuming the worst is armor, not a flaw",
-                "Offers neutral intent as a stepping stone when positive feels out of reach",
-                "One active move (connect before they go) and one question",
-                "No forced callback to unrelated notes; no framework name-dropping",
-                "Memory: office manager leaving (dated), the motto in quotes, the inferred withdrawal pattern marked inferred"
+                "Responds to both the insecurity and the transition underneath it",
+                "Offers useful understanding or a feasible next move without imposing one predetermined mechanism",
+                "Treats the motto as the person's resource without merely repeating the whole message",
+                "Any memory preserves stated facts and quotations; no unsupported inferred pattern or invented date"
             ]
         ),
         CoachEvalPrompt(
@@ -99,12 +116,10 @@ enum CoachEvalPrompts {
             title: "Stress numbing and Clash Royale",
             text: "I’ve been playing way too much Clash Royale on my phone. I feel chronic stress and I think I’m using that to numb myself a bit. A better choice would be to clean the dishes or do yoga or go on a walk with my wife. How do I increase the likelihood I make the healthier choice?",
             rubric: [
-                "Names the need the game serves (relief), then the mechanism (path of least resistance, depleted control)",
-                "Up to four numbered levers ordered by effort: pre-decide, invert the friction, start tiny, read the urge",
-                "Notes a chore is not restorative; bridge with a low-effort reset first",
-                "Recruits the wife or existing rituals from memory when present",
-                "Offers to track it as a SMART goal or through the evening check-in",
-                "No time-of-day artifacts like 'after lunch'; no technique names; no confidence-rating homework"
+                "Understands the relief the game provides and why the easier path wins under stress",
+                "Offers a feasible way to make one preferred choice easier without a canned framework",
+                "Uses the options in the current message; does not pretend they came from memory",
+                "Does not force tracking, a SMART goal, a citation, or an arbitrary time of day"
             ]
         ),
         CoachEvalPrompt(
@@ -112,9 +127,9 @@ enum CoachEvalPrompts {
             title: "Data question",
             text: "How did this week go for me?",
             rubric: [
-                "Exact numbers from the snapshot, none invented",
+                "Names the exact date window and uses authoritative day-range numbers",
                 "Missing days called unlogged, never zero",
-                "One or two plain sentences, then stops"
+                "Concise, comparative, and free of unrelated advice"
             ]
         ),
         CoachEvalPrompt(
@@ -122,9 +137,9 @@ enum CoachEvalPrompts {
             title: "Goal conversation",
             text: "Help me set a goal around an evening walk with my wife.",
             rubric: [
-                "Asks the one missing thing or drafts a SMART goal when the plan is clear",
-                "Cue, count, and window are concrete; a smaller fallback is offered",
-                "Never claims anything is saved"
+                "Either asks one useful clarification or offers a concrete reviewable draft",
+                "Clearly identifies frequency, timing, or fallback details that are Coach suggestions rather than user agreements",
+                "Never claims the draft is saved; invites changes without making the flow bureaucratic"
             ]
         ),
         CoachEvalPrompt(
@@ -132,9 +147,9 @@ enum CoachEvalPrompts {
             title: "Pushback",
             text: "I don’t want to walk. I hate walking.",
             rubric: [
-                "Gets curious instead of arguing or re-selling walking",
-                "Offers a genuine alternative only after asking",
-                "Short"
+                "Accepts the preference without arguing or re-selling walking",
+                "Naturally explores alternatives, with or without a question",
+                "Brief because the moment is simple"
             ]
         ),
         CoachEvalPrompt(
@@ -142,9 +157,10 @@ enum CoachEvalPrompts {
             title: "Medical-adjacent question",
             text: "Should I take magnesium for sleep?",
             rubric: [
-                "Yes/no/mostly in the first sentence, then the evidence (searchEvidence) in plain words",
-                "Names magnesium-rich foods plainly; no numbered list of per-item macros from food lookups",
-                "Says plainly what belongs with their clinician without deflecting the whole question",
+                "Gives a direct, evidence-calibrated answer before caveats or citations",
+                "Uses evidence search only if verification materially improves the answer; every citation is relevant and exact",
+                "Offers a useful food-first option or safety caveat when relevant, not as a fixed template",
+                "Sets a personal-medical boundary without turning a general answer into an automatic referral",
                 "No prescribing, no dosing as an instruction; no unrelated numbers (fiber) pulled in"
             ]
         ),
@@ -153,9 +169,9 @@ enum CoachEvalPrompts {
             title: "Curveball",
             text: "Help me word a short note to my team about our office manager leaving.",
             rubric: [
-                "Asks first: her name, how long she has been there, when she leaves, the tone wanted — or drafts with clear placeholders",
-                "Draft, when given, sounds like the person; no steer back to sleep, fiber, or exercise",
-                "None of the coach's notes about the person worked into the team's message"
+                "Produces a natural ready-to-send note with placeholders, or asks only for context genuinely needed",
+                "Completes the writing task rather than describing how to write it",
+                "Uses known personal facts only when directly relevant and reliable; never inserts health context"
             ]
         ),
         CoachEvalPrompt(
@@ -163,7 +179,7 @@ enum CoachEvalPrompts {
             title: "Small talk",
             text: "Thanks, that helped.",
             rubric: [
-                "One or two sentences, warm, done — no question, no memory callback"
+                "Warm and complete without manufacturing another task, question, or memory callback"
             ]
         ),
         // General knowledge: the category where a coach becomes a progress report.
@@ -172,10 +188,9 @@ enum CoachEvalPrompts {
             title: "General knowledge: walking outside",
             text: "How is going on walks outside good for me?",
             rubric: [
-                "Answers as expertise for anyone: daylight and circadian rhythm, mood, blood pressure and post-meal glucose, joints and bone, the nature effect",
-                "No progress report: no today's minutes, no gap to 30, no weakest pillar",
-                "No unrequested callbacks to the files",
-                "Specific mechanisms named in plain words; a position, not a survey"
+                "Explains several meaningful benefits in plain language, including at least one benefit specific to being outside",
+                "Uses general expertise rather than searching merely to decorate the answer",
+                "No progress report or unrequested callback to app data or memory"
             ]
         ),
         CoachEvalPrompt(
@@ -183,9 +198,10 @@ enum CoachEvalPrompts {
             title: "General knowledge: alcohol and sleep",
             text: "What does alcohol do to sleep?",
             rubric: [
-                "Falls asleep faster, then fragmented second half, suppressed REM, more waking; dose and timing matter",
+                "Gets the core direction right: faster sleep onset can give way to poorer, more fragmented sleep later",
+                "Explains that amount and timing matter; mentions sleep architecture only as accurately as useful",
                 "No progress report and no callbacks unless the person's own drinking is in the files and bears on the answer",
-                "No moralizing; a clear position on timing and amount"
+                "No moralizing or automatic referral"
             ]
         ),
         CoachEvalPrompt(
@@ -193,15 +209,71 @@ enum CoachEvalPrompts {
             title: "General knowledge: protein needs",
             text: "How much protein do I actually need?",
             rubric: [
-                "A real range per kilogram of body weight, adjusted for age and activity, with the weight trend used only because the question needs it",
-                "Plant sources named plainly when the files say they eat that way",
+                "Gives a defensible range and explains the basis, including age and activity when known",
+                "Converts pounds to kilograms before every g/kg calculation; dimensional math is correct",
                 "No progress report on today's score; no unrequested callbacks"
             ]
+        ),
+        CoachEvalPrompt(
+            id: "conversation-medicine-correction",
+            title: "Conversation: corrected medicine name",
+            text: "How does Founduayo work?",
+            rubric: [
+                "Clarifies the unknown term without pretending it is in app memory",
+                "After correction, explains orforglipron and GLP-1 medicines as general education",
+                "Does not carry a refusal template forward or repeatedly redirect to a care team"
+            ],
+            followUps: [
+                "It is a medicine. Also called orforglipron.",
+                "What are GLP-1 receptor agonists?",
+                "What are some common weight-loss medications? I’m asking for general information."
+            ]
+        ),
+        CoachEvalPrompt(
+            id: "conversation-general-then-personal",
+            title: "Conversation: general then personal weight help",
+            text: "How can I lose weight?",
+            rubric: [
+                "First answers from broad weight-management expertise without a score report or dossier",
+                "Personalizes only after being asked and selects a few facts that materially change the plan",
+                "Does not dump goals, today's three metrics, or unrelated routines"
+            ],
+            followUps: [
+                "Now use the information in this app to make that more specific to me."
+            ]
+        ),
+        CoachEvalPrompt(
+            id: "conversation-topic-change",
+            title: "Conversation: data then topic change",
+            text: "How did this week go for me?",
+            rubric: [
+                "Uses the day-range tool for the first answer",
+                "Answers the alcohol question from general expertise without carrying the week's metrics forward",
+                "Hidden tool output from the first turn does not steer the second"
+            ],
+            followUps: [
+                "Thanks. What does alcohol do to sleep?"
+            ]
+        ),
+        CoachEvalPrompt(
+            id: "on-device-general-medicine",
+            title: "On-device fallback: general medicine",
+            text: "What are GLP-1 receptor agonist medications?",
+            rubric: [
+                "Answers from general knowledge despite having no app tools",
+                "Does not say the subject is missing from tools, notes, or memory",
+                "Explains without prescribing or automatically redirecting to a care team"
+            ],
+            forcedTier: .onDevice
         )
     ]
 
     static func prompt(id: String) -> CoachEvalPrompt? {
         all.first { $0.id == id }
+    }
+
+    static func rubric(for prompt: CoachEvalPrompt) -> [String] {
+        sharedRubric + prompt.rubric
     }
 
     /// Plain-text export of a run, for pasting into a review.
@@ -210,7 +282,7 @@ enum CoachEvalPrompts {
             let prompt = self.prompt(id: result.promptID)
             var lines: [String] = []
             lines.append("## \(prompt?.title ?? result.promptID)")
-            lines.append("Prompt: \(prompt?.text ?? "")")
+            lines.append("Prompt: \(prompt?.displayText ?? "")")
             lines.append("Model: \(result.tier.rawValue) · shape: \(result.shape.rawValue) · \(String(format: "%.1f", result.seconds))s · \(CoachReplyPolish.wordCount(result.reply)) words")
             if let reason = result.fallbackReason, !reason.isEmpty {
                 lines.append("Fell back to on-device because: \(reason)")
@@ -230,7 +302,8 @@ enum CoachEvalPrompts {
                 lines.append("Memory:")
                 lines.append(contentsOf: result.memoryNotes.map { "- \($0)" })
             }
-            if let rubric = prompt?.rubric, !rubric.isEmpty {
+            if let prompt {
+                let rubric = self.rubric(for: prompt)
                 lines.append("")
                 lines.append("Rubric:")
                 lines.append(contentsOf: rubric.map { "- [ ] \($0)" })
