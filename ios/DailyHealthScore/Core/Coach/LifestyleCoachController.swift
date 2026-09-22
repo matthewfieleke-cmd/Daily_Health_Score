@@ -476,7 +476,7 @@ final class LifestyleCoachController: ObservableObject {
                     )
                 )
                 transcript.append(
-                    "User: \(message)\nCoach [\(result.tier.rawValue)]: \(result.message)"
+                    "Turn \(index + 1) · Coach [\(result.tier.rawValue)]: \(result.message)"
                 )
                 notes.append(contentsOf: result.memoryUpdates.map { update in
                     let detail = "\(update.operation.rawValue) · \(update.section.label) · \(update.basis.rawValue): \(update.text.isEmpty ? update.replaces : update.text)"
