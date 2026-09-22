@@ -12,7 +12,7 @@ enum CoachFoodService {
 
     static func lookupText(query: String, session: URLSession = .shared) async -> String {
         let cleaned = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard cleaned.count >= 2 else { return "No food named. Ask what they ate, or estimate and label it approximate." }
+        guard cleaned.count >= 2 else { return "No food named. Ask which food or product they mean." }
         let result = await lookup(query: cleaned, session: session)
         return formatted(result.facts, query: cleaned, failures: result.failures)
     }
@@ -44,9 +44,9 @@ enum CoachFoodService {
     static func formatted(_ facts: [CoachFoodFact], query: String, failures: [String] = []) -> String {
         guard !facts.isEmpty else {
             if !failures.isEmpty {
-                return "Food lookup unavailable for \"\(query)\" (\(failures.joined(separator: "; "))). Estimate typical values, label them approximate, state the serving you assumed, and say the database did not respond."
+                return "Food lookup unavailable for \"\(query)\" (\(failures.joined(separator: "; "))). Say the database did not respond. Do not invent label values; ask for the label or a photo if exact numbers matter."
             }
-            return "No database match for \"\(query)\". Estimate typical values, label them approximate, and state the serving you assumed."
+            return "No database match for \"\(query)\". Do not invent label values; ask for the label or a photo if exact numbers matter."
         }
         let lines = facts.enumerated().map { index, fact in "\(index + 1). \(fact.line)" }
         return """

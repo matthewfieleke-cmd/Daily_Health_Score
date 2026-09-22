@@ -260,7 +260,7 @@ final class LifestyleCoachController: ObservableObject {
             live.todayKey = todayKey
             live.goals = goals
             live.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
-            live.memoryBlock = memory.promptMemoryBlock
+            live.memoryItems = memory.effectiveMemories
             live.recentConversations = memory.recentConversationsBlock()
             live.bodyTrend = bodyTrend
             live.focusedGoalID = focusedGoalID ?? thread.goalId
@@ -414,7 +414,7 @@ final class LifestyleCoachController: ObservableObject {
             live.todayKey = todayRecord?.date ?? DateHelpers.localDateKey()
             live.goals = goals
             live.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
-            live.memoryBlock = memory.promptMemoryBlock
+            live.memoryItems = memory.effectiveMemories
             live.recentConversations = memory.recentConversationsBlock()
             live.bodyTrend = bodyTrend
             live.focusedGoalID = nil

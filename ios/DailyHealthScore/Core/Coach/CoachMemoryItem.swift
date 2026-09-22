@@ -561,6 +561,75 @@ enum CoachMemoryLogic {
         return noteWords.count <= 4 ? overlap >= 1 : overlap >= 2
     }
 
+    /// Notes relevant to the subject the Coach asked about. A tool query should
+    /// narrow what comes back; returning the whole biography would make the
+    /// query another dummy argument and invite unrelated callbacks.
+    static func items(
+        relevantTo topic: String,
+        in items: [CoachMemoryItem],
+        at date: Date = Date(),
+        limit: Int = 12
+    ) -> [CoachMemoryItem] {
+        let query = topic.trimmingCharacters(in: .whitespacesAndNewlines)
+        let queryWords = substanceWords(in: query)
+        guard !queryWords.isEmpty, limit > 0 else { return [] }
+
+        let normalized = query.lowercased()
+        let broad = ["everything", "whole profile", "full profile", "all notes", "background"]
+            .contains { normalized.contains($0) }
+        let live = itemsByOverridingContradictions(items, at: date)
+        if broad { return Array(live.prefix(limit)) }
+
+        let direct: [(item: CoachMemoryItem, score: Int)] = live.compactMap { item in
+            let content = item.displayContent.lowercased()
+            let exactPhrase = content.contains(normalized) ? 8 : 0
+            let contentOverlap = substanceWords(in: content).intersection(queryWords).count
+            let score = exactPhrase + contentOverlap * 4
+            return score > 0 ? (item, score) : nil
+        }
+        let scored: [(item: CoachMemoryItem, score: Int)]
+        if !direct.isEmpty {
+            scored = direct
+        } else {
+            // A section hint is a fallback, never a reason to append an entire
+            // file after direct matches already answered the query.
+            scored = live.compactMap { item in
+                let sectionWords = substanceWords(
+                    in: "\(item.section.label) \(item.section.modelKey) \(item.section.promptHint)"
+                )
+                let score = sectionWords.intersection(queryWords).count
+                return score > 0 ? (item, score) : nil
+            }
+        }
+        return scored
+            .sorted {
+                $0.score == $1.score
+                    ? $0.item.createdAt > $1.item.createdAt
+                    : $0.score > $1.score
+            }
+            .prefix(limit)
+            .map { $0.item }
+    }
+
+    static func promptBlock(
+        items: [CoachMemoryItem],
+        relevantTo topic: String,
+        at date: Date = Date(),
+        limit: Int = 12,
+        calendar: Calendar = .current
+    ) -> String {
+        let relevant = self.items(relevantTo: topic, in: items, at: date, limit: limit)
+        guard !relevant.isEmpty else {
+            return "No saved notes match this topic."
+        }
+        return promptBlock(
+            items: relevant,
+            at: date,
+            perSectionLimit: limit,
+            calendar: calendar
+        )
+    }
+
     /// The durable files with nothing in them yet, in the order the intake
     /// asks about them. Recent is state, not a file to fill.
     static func emptySections(in items: [CoachMemoryItem]) -> [CoachMemorySection] {

@@ -115,6 +115,43 @@ final class CoachMemoryFilesLogicTests: XCTestCase {
         XCTAssertTrue(CoachMemoryLogic.promptBlock(items: [], sections: [.body]).contains("No notes in these files yet."))
     }
 
+    func test_topicRetrievalReturnsRelevantNotesInsteadOfTheBiography() {
+        let items = [
+            CoachMemoryItem(category: .people, content: "Wife is Maureen; sons Isaac and Caleb live at home.", provenance: .coachRecorded),
+            CoachMemoryItem(category: .patterns, content: "Conflict with his wife can make him assume negative intent.", provenance: .coachRecorded),
+            CoachMemoryItem(category: .likes, content: "Likes Seven Sundays Wildberry Protein Oats.", provenance: .coachRecorded),
+            CoachMemoryItem(category: .routines, content: "Uses an AI scribe to finish patient notes at work.", provenance: .coachRecorded),
+            CoachMemoryItem(category: .routines, content: "Drives fifty minutes each way and listens to audiobooks.", provenance: .coachRecorded),
+            CoachMemoryItem(category: .body, content: "Uses CPAP for sleep apnea.", provenance: .coachRecorded)
+        ]
+
+        let work = CoachMemoryLogic.promptBlock(items: items, relevantTo: "confidence with patients at work")
+        XCTAssertTrue(work.contains("AI scribe"))
+        XCTAssertFalse(work.contains("Maureen"))
+        XCTAssertFalse(work.contains("Wildberry"))
+        XCTAssertFalse(work.contains("CPAP"))
+        XCTAssertFalse(work.contains("audiobooks"))
+
+        let relationship = CoachMemoryLogic.promptBlock(items: items, relevantTo: "conflict with wife")
+        XCTAssertTrue(relationship.contains("Maureen"))
+        XCTAssertTrue(relationship.contains("negative intent"))
+        XCTAssertFalse(relationship.contains("Wildberry"))
+
+        let missing = CoachMemoryLogic.promptBlock(items: items, relevantTo: "swimming")
+        XCTAssertEqual(missing, "No saved notes match this topic.")
+    }
+
+    func test_broadMemoryTopicCanDeliberatelyReturnAllNotes() {
+        let items = [
+            CoachMemoryItem(category: .people, content: "Wife is Maureen.", provenance: .coachRecorded),
+            CoachMemoryItem(category: .likes, content: "Likes yoga.", provenance: .coachRecorded)
+        ]
+        let block = CoachMemoryLogic.promptBlock(items: items, relevantTo: "full profile")
+        XCTAssertTrue(block.contains("Maureen"))
+        XCTAssertTrue(block.contains("yoga"))
+        XCTAssertEqual(CoachMemoryLogic.items(relevantTo: "this person", in: items), [])
+    }
+
     /// A note comes from the person's words, never from the Coach's suggestion.
     func test_newNotesMustBeGroundedInThePersonsWords() {
         let spoken = "I've been doing better recently with not bringing work home. I'm using our AI scribe which is helping."
