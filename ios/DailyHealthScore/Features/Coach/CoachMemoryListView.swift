@@ -11,6 +11,7 @@ struct CoachMemoryListView: View {
     @State private var isAddingNote = false
     @State private var newNote = ""
     @State private var newNoteSection: CoachMemorySection = .aboutYou
+    @State private var background = ""
 
     private var store: CoachMemoryStore { appState.coach.memory }
 
@@ -46,6 +47,17 @@ struct CoachMemoryListView: View {
                 }
             } else {
                 List {
+                    if !background.isEmpty {
+                        Section {
+                            Text(background)
+                                .font(.subheadline)
+                                .textSelection(.enabled)
+                        } header: {
+                            Text("Background")
+                        } footer: {
+                            Text("What most changes your care. The notes below are the full record.")
+                        }
+                    }
                     if !store.recentChanges.isEmpty {
                         Section {
                             ForEach(store.recentChanges) { change in
@@ -69,6 +81,14 @@ struct CoachMemoryListView: View {
                 }
                 .listStyle(.insetGrouped)
             }
+        }
+        .task(id: store.memoryFingerprint) {
+            // A changed fingerprint no longer matches the stored paragraph.
+            // Clear it before the compile, so a retracted fact does not stay on screen.
+            background = appState.coach.memory.compiledProfile
+            appState.coach.refreshAvailability()
+            await appState.coach.compileProfileIfNeeded()
+            background = appState.coach.memory.compiledProfile
         }
         .navigationTitle("What your coach remembers")
         .navigationBarTitleDisplayMode(.inline)

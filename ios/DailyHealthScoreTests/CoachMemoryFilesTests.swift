@@ -235,6 +235,92 @@ final class CoachMemoryFilesLogicTests: XCTestCase {
         XCTAssertTrue(kept.contains("Brother lives nearby."))
         XCTAssertFalse(kept.contains("Maybe married?"))
     }
+
+    func test_profileSourceChangesWhenTheDayOrAConfirmationChanges() {
+        let entry = CoachMemoryFingerprint.ProfileSourceEntry(
+            id: "abc",
+            section: "body",
+            stated: false,
+            content: "Allergic to penicillin."
+        )
+        let inferred = CoachMemoryFingerprint.profileSource(generation: "2", day: "2026-09-23", entries: [entry])
+        var confirmed = entry
+        confirmed.stated = true
+        let stated = CoachMemoryFingerprint.profileSource(generation: "2", day: "2026-09-23", entries: [confirmed])
+        let nextDay = CoachMemoryFingerprint.profileSource(generation: "2", day: "2026-09-24", entries: [entry])
+        XCTAssertTrue(inferred.hasPrefix("2\n2026-09-23\n"))
+        XCTAssertTrue(inferred.contains("|inferred|"))
+        XCTAssertTrue(stated.contains("|stated|"))
+        XCTAssertNotEqual(inferred, stated)
+        XCTAssertNotEqual(inferred, nextDay)
+        XCTAssertNotEqual(CoachMemoryFingerprint.fingerprint(inferred), CoachMemoryFingerprint.fingerprint(stated))
+        XCTAssertNotEqual(CoachMemoryFingerprint.fingerprint(inferred), CoachMemoryFingerprint.fingerprint(nextDay))
+    }
+
+    func test_compilerEntryListKeepsDurableNotesAheadOfALongRecentFile() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 23, hour: 15))!
+        let allergy = CoachMemoryItem(
+            category: .recovery,
+            content: "Allergic to penicillin.",
+            provenance: .userStated,
+            createdAt: now,
+            confirmation: .confirmed
+        )
+        let spouse = CoachMemoryItem(
+            category: .people,
+            content: "Wife is Sarah.",
+            provenance: .userStated,
+            createdAt: now,
+            confirmation: .confirmed
+        )
+        var items = [allergy, spouse]
+        for index in 0..<8 {
+            items.append(CoachMemoryItem(
+                category: .checkIns,
+                content: "Recent note \(index) about a long clinic day, the drive home, and an audiobook.",
+                provenance: .coachRecorded,
+                createdAt: now.addingTimeInterval(Double(index))
+            ))
+        }
+        let list = CoachMemoryLogic.compilerEntryList(items: items, at: now, calendar: calendar, characterBudget: 160)
+        XCTAssertTrue(list.contains("Allergic to penicillin."))
+        XCTAssertTrue(list.contains("Wife is Sarah."))
+        XCTAssertFalse(list.contains("Recent note"))
+        XCTAssertEqual(CoachMemoryLogic.compilerEntryList(items: [], at: now, calendar: calendar), "None.")
+        let today = CoachMemoryLogic.compilerToday(now, calendar: calendar)
+        XCTAssertTrue(today.contains("2026"))
+        XCTAssertTrue(today.contains("Sep"))
+        XCTAssertTrue(today.contains("23"))
+    }
+
+    func test_backgroundCompileKeepsAPassageOnlyForTheNotesItWasWrittenFrom() {
+        let prompt = CoachCharter.backgroundCompilePrompt(
+            entryList: "abc | body | Sep 1 | stated | Allergic to penicillin.",
+            today: "Wed, Sep 23, 2026"
+        )
+        XCTAssertTrue(prompt.contains("Today is Wed, Sep 23, 2026."))
+        XCTAssertTrue(prompt.contains("Write the background."))
+        XCTAssertTrue(prompt.contains("Allergic to penicillin."))
+        XCTAssertFalse(prompt.contains("Compile the profile"))
+
+        let sentence = "Clinic days run long and notes pile up before lunch. "
+        let stored = CoachCharter.backgroundToStore(
+            compiled: String(repeating: sentence, count: 40),
+            sourceUnchanged: true,
+            notesAreEmpty: false
+        )
+        XCTAssertNotNil(stored)
+        XCTAssertLessThanOrEqual(stored?.count ?? 0, CoachCharter.backgroundCharacterBudget)
+        XCTAssertTrue(stored?.hasSuffix(".") == true)
+        XCTAssertNil(CoachCharter.backgroundToStore(compiled: "   ", sourceUnchanged: true, notesAreEmpty: false))
+        XCTAssertNil(CoachCharter.backgroundToStore(compiled: "Family physician.", sourceUnchanged: false, notesAreEmpty: false))
+        XCTAssertEqual(
+            CoachCharter.backgroundToStore(compiled: "Family physician.", sourceUnchanged: true, notesAreEmpty: true),
+            ""
+        )
+    }
 }
 
 @MainActor
@@ -506,6 +592,39 @@ final class CoachMemoryFilesStoreTests: XCTestCase {
         store.addNote(section: .likes, content: "Oatmeal for breakfast.")
         XCTAssertTrue(store.needsProfileCompile)
         XCTAssertEqual(store.compiledProfile, "", "A stale profile must not reach the prompt")
+    }
+
+    func test_confirmingAnInferenceInvalidatesTheCompiledBackground() {
+        let store = makeStore()
+        let added = store.applyCoachUpdates(
+            [CoachMemoryUpdate(
+                operation: .add,
+                section: .patterns,
+                text: "Seems to withdraw when Sarah travels.",
+                basis: .inferred
+            )],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        XCTAssertEqual(added.count, 1)
+        XCTAssertFalse(store.effectiveMemories[0].provenance.isStated)
+        store.saveCompiledProfile("He seems to withdraw when Sarah travels.")
+        XCTAssertFalse(store.needsProfileCompile)
+        store.confirmInference(store.effectiveMemories[0])
+        XCTAssertTrue(store.effectiveMemories[0].provenance.isStated)
+        XCTAssertTrue(store.needsProfileCompile)
+        XCTAssertEqual(store.compiledProfile, "")
+    }
+
+    func test_deletingTheLastNoteDiscardsTheCompiledBackground() {
+        let store = makeStore()
+        store.addNote(section: .aboutYou, content: "Family medicine physician, outpatient.")
+        store.saveCompiledProfile("Outpatient family physician.")
+        store.delete(store.effectiveMemories[0])
+        XCTAssertEqual(store.compiledProfile, "")
+        store.discardCompiledProfileIfNotesAreGone()
+        XCTAssertFalse(store.needsProfileCompile)
+        XCTAssertEqual(store.compiledProfile, "")
     }
 
     func test_focusLaunchTagsThePillarAndKeepsContext() {

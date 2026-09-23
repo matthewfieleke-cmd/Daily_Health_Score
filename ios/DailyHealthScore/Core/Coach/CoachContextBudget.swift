@@ -118,4 +118,16 @@ extension String {
         }
         return String(cut) + "…"
     }
+
+    /// Keeps whole sentences inside the budget. A first sentence that itself
+    /// does not fit is cut on a word, the same way a raw budget cut works.
+    func limitedToCoachSentences(_ budget: Int) -> String {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > budget, budget > 1 else { return trimmed }
+        let sentences = endingOnSentence(maxCharacters: budget)
+        if !sentences.isEmpty, sentences.count <= budget {
+            return sentences
+        }
+        return limitedToCoachBudget(budget)
+    }
 }
