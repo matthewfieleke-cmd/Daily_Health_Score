@@ -10,6 +10,12 @@ final class CoachChatMessageEntity {
     var threadId: UUID?
     /// Which model wrote a Coach turn; empty for user turns and older rows.
     var modelTierRaw: String = ""
+    /// Newline-separated JPEG file names. Empty on older rows and text-only turns.
+    var photoFileNamesRaw: String = ""
+
+    var photoFileNames: [String] {
+        photoFileNamesRaw.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+    }
 
     init(turn: CoachChatTurn) {
         id = turn.id
@@ -18,6 +24,7 @@ final class CoachChatMessageEntity {
         createdAt = turn.createdAt
         threadId = turn.threadId
         modelTierRaw = turn.modelTier?.rawValue ?? ""
+        photoFileNamesRaw = turn.photoFileNames.joined(separator: "\n")
     }
 
     func toTurn() -> CoachChatTurn? {
@@ -28,7 +35,8 @@ final class CoachChatMessageEntity {
             text: text,
             createdAt: createdAt,
             threadId: threadId,
-            modelTier: CoachModelTier(rawValue: modelTierRaw)
+            modelTier: CoachModelTier(rawValue: modelTierRaw),
+            photoFileNames: photoFileNames
         )
     }
 }

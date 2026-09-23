@@ -87,6 +87,8 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
     var modelTier: CoachModelTier?
     /// Why the server model did not write this turn, when it fell to on-device.
     var fallbackReason: String? = nil
+    /// JPEG file names in Coach photo storage. Empty for a text-only turn.
+    var photoFileNames: [String] = []
 
     init(
         id: UUID = UUID(),
@@ -95,7 +97,8 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
         createdAt: Date = Date(),
         threadId: UUID? = nil,
         modelTier: CoachModelTier? = nil,
-        fallbackReason: String? = nil
+        fallbackReason: String? = nil,
+        photoFileNames: [String] = []
     ) {
         self.id = id
         self.role = role
@@ -104,6 +107,7 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
         self.threadId = threadId
         self.modelTier = modelTier
         self.fallbackReason = fallbackReason
+        self.photoFileNames = photoFileNames
     }
 }
 

@@ -1,4 +1,6 @@
+import PhotosUI
 import SwiftUI
+import UIKit
 
 struct LifestyleCoachChatView: View {
     @EnvironmentObject private var appState: AppState
@@ -6,6 +8,13 @@ struct LifestyleCoachChatView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft = ""
+    @State private var pendingPhotos: [CoachPendingPhoto] = []
+    @State private var libraryItems: [PhotosPickerItem] = []
+    @State private var showPhotoSource = false
+    @State private var showLibrary = false
+    @State private var showCamera = false
+    @State private var isLoadingPhotos = false
+    @State private var photoError: String?
     @State private var focusedGoalID: UUID?
     @State private var planningGoal = false
     @State private var goalEdit: SMARTGoalEdit?
@@ -158,6 +167,7 @@ struct LifestyleCoachChatView: View {
                     if let thread = coach.memory.openThread {
                         Divider()
                         Button("Delete this chat", role: .destructive) {
+                            coach.forgetSession(for: thread.id)
                             coach.memory.deleteThread(thread.id)
                             dismiss()
                         }
@@ -183,6 +193,43 @@ struct LifestyleCoachChatView: View {
                 CoachMemoryListView()
                     .environmentObject(appState)
             }
+        }
+        .onDisappear {
+            // The library and camera covers can notify disappearance while the
+            // photos are still the message being composed.
+            guard !showCamera, !showLibrary, !showMemory, goalEdit == nil else { return }
+            let names = pendingPhotos.map(\.fileName)
+            pendingPhotos = []
+            CoachPhotoStore.delete(fileNames: names)
+        }
+        .confirmationDialog("Add a photo", isPresented: $showPhotoSource, titleVisibility: .visible) {
+            Button("Photo Library") { showLibrary = true }
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button("Take Photo") { showCamera = true }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .photosPicker(
+            isPresented: $showLibrary,
+            selection: $libraryItems,
+            maxSelectionCount: max(1, CoachPhotoStore.maxPerMessage - pendingPhotos.count),
+            matching: .images
+        )
+        .onChange(of: libraryItems) { _, items in
+            guard !items.isEmpty else { return }
+            let picked = items
+            libraryItems = []
+            Task { await addLibraryPhotos(picked) }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CoachCameraPicker(
+                onImageData: { data in
+                    showCamera = false
+                    addPreparedPhoto(data)
+                },
+                onCancel: { showCamera = false }
+            )
+            .ignoresSafeArea()
         }
         .onAppear {
             coach.refreshAvailability()
@@ -372,6 +419,7 @@ struct LifestyleCoachChatView: View {
         if coach.availability == .available,
            !coach.isChatBusy,
            draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           pendingPhotos.isEmpty,
            !suggestions.isEmpty,
            coach.memory.openThread?.kind != .acquaintance {
             ScrollView(.horizontal, showsIndicators: false) {
@@ -399,15 +447,19 @@ struct LifestyleCoachChatView: View {
 
     private func send(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !coach.isChatBusy else { return }
+        let photos = pendingPhotos
+        guard (!trimmed.isEmpty || !photos.isEmpty), !coach.isChatBusy, !isLoadingPhotos else { return }
         planningGoal = planningGoal || CoachGoalPlanning.isGoalConversation(
             message: trimmed, focusedGoalID: focusedGoalID, hasProposal: coach.goalProposal != nil
         )
         draft = ""
+        pendingPhotos = []
+        photoError = nil
         coach.beginChatSend()
         Task {
             await coach.sendChatMessage(
                 trimmed,
+                photoFileNames: photos.map(\.fileName),
                 todayRecord: todayRecord,
                 records: appState.recordStore.records,
                 goals: appState.smartGoalStore.goals,
@@ -421,47 +473,164 @@ struct LifestyleCoachChatView: View {
         }
     }
 
-    private var composer: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            TextField("Message your coach…", text: $draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(AppTheme.cardSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .focused($isInputFocused)
-                .lineLimit(1...5)
+    private var canSend: Bool {
+        let hasText = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return coach.availability == .available
+            && !coach.isChatBusy
+            && !isLoadingPhotos
+            && (hasText || !pendingPhotos.isEmpty)
+    }
 
-            Button {
-                send(draft)
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(AppTheme.primary)
+    private var composer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !pendingPhotos.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(pendingPhotos) { photo in
+                            ZStack(alignment: .topTrailing) {
+                                Image(uiImage: photo.image)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 64, height: 64)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                Button {
+                                    CoachPhotoStore.delete(fileNames: [photo.fileName])
+                                    pendingPhotos.removeAll { $0.id == photo.id }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 18))
+                                        .symbolRenderingMode(.palette)
+                                        .foregroundStyle(.white, Color.black.opacity(0.55))
+                                }
+                                .offset(x: 4, y: -4)
+                                .accessibilityLabel("Remove photo")
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+                }
             }
-            .disabled(
-                coach.isChatBusy
-                    || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    || coach.availability != .available
-            )
-            .accessibilityLabel("Send")
+            if let photoError {
+                Text(photoError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 16)
+            }
+            HStack(alignment: .bottom, spacing: 10) {
+                Button {
+                    showPhotoSource = true
+                } label: {
+                    if isLoadingPhotos {
+                        ProgressView()
+                            .frame(width: 28, height: 28)
+                    } else {
+                        Image(systemName: "photo")
+                            .font(.system(size: 22))
+                            .foregroundStyle(AppTheme.primary)
+                            .frame(width: 28, height: 28)
+                    }
+                }
+                .disabled(
+                    coach.isChatBusy
+                        || isLoadingPhotos
+                        || pendingPhotos.count >= CoachPhotoStore.maxPerMessage
+                        || coach.availability != .available
+                )
+                .accessibilityLabel("Add a photo")
+
+                TextField("Message your coach…", text: $draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(AppTheme.cardSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .focused($isInputFocused)
+                    .lineLimit(1...5)
+
+                Button {
+                    send(draft)
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(AppTheme.primary)
+                }
+                .disabled(!canSend)
+                .accessibilityLabel("Send")
+            }
+            .padding(.horizontal, 16)
         }
-        .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.ultraThinMaterial)
+    }
+
+    private func addLibraryPhotos(_ items: [PhotosPickerItem]) async {
+        isLoadingPhotos = true
+        photoError = nil
+        defer { isLoadingPhotos = false }
+        let room = CoachPhotoStore.maxPerMessage - pendingPhotos.count
+        guard room > 0 else { return }
+        for item in items.prefix(room) {
+            do {
+                let data: Data?
+                if let file = try await item.loadTransferable(type: CoachImageFile.self) {
+                    data = file.data
+                } else {
+                    data = try await item.loadTransferable(type: Data.self)
+                }
+                guard let data else {
+                    photoError = "That photo couldn't be read."
+                    continue
+                }
+                addPreparedPhoto(data)
+            } catch {
+                photoError = "That photo couldn't be read."
+            }
+        }
+    }
+
+    private func addPreparedPhoto(_ data: Data) {
+        let room = CoachPhotoStore.maxPerMessage - pendingPhotos.count
+        guard room > 0 else { return }
+        guard let jpeg = CoachPhotoPrep.jpegData(from: data), let image = UIImage(data: jpeg) else {
+            photoError = "That photo couldn't be read."
+            return
+        }
+        do {
+            let name = try CoachPhotoStore.saveJPEG(jpeg)
+            pendingPhotos.append(CoachPendingPhoto(id: UUID(), fileName: name, image: image))
+            photoError = nil
+        } catch {
+            photoError = "That photo couldn't be saved."
+        }
     }
 
     private func bubble(for turn: CoachChatTurn) -> some View {
         HStack(alignment: .bottom, spacing: 8) {
             if turn.role == .user {
                 Spacer(minLength: 40)
-                Text(turn.text)
-                    .font(.body)
-                    .foregroundStyle(Color.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(AppTheme.primary)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                VStack(alignment: .trailing, spacing: 6) {
+                    ForEach(turn.photoFileNames, id: \.self) { name in
+                        if let url = CoachPhotoStore.fileURL(named: name),
+                           let image = UIImage(contentsOfFile: url.path) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: 220, maxHeight: 220)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .accessibilityLabel("Photo you sent")
+                        }
+                    }
+                    if !turn.text.isEmpty {
+                        Text(turn.text)
+                            .font(.body)
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(AppTheme.primary)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                }
             } else {
                 Image("DHSLifestyleCoach")
                     .resizable()
@@ -502,6 +671,16 @@ struct LifestyleCoachChatView: View {
                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
             }
         }
+    }
+}
+
+struct CoachPendingPhoto: Identifiable, Equatable {
+    var id: UUID
+    var fileName: String
+    var image: UIImage
+
+    static func == (lhs: CoachPendingPhoto, rhs: CoachPendingPhoto) -> Bool {
+        lhs.id == rhs.id && lhs.fileName == rhs.fileName
     }
 }
 

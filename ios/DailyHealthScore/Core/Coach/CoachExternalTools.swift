@@ -7,7 +7,7 @@ import FoundationModels
 /// the model asks; the app performs the request and hands the text back.
 struct CoachFoodLookupTool: Tool {
     let name = "lookupFood"
-    let description = "Nutrition facts for a food or branded product from USDA FoodData Central and Open Food Facts: calories, protein, fiber, sugars, added sugars, fat, and minerals per serving when listed. Call once for each food you are about to give numbers for, even one you think you know. The result says exact, candidates, or none. Candidate items do not belong in an exact total; ask for the package label when exact numbers matter. Not needed for foods you are only recommending."
+    let description = "Nutrition facts for a food or branded product from USDA FoodData Central and Open Food Facts: calories, protein, fiber, sugars, added sugars, fat, and minerals per serving when listed. Call once for each food you are about to give numbers for, even one you think you know. The result says exact, candidates, or none. Candidate items do not belong in an exact total. \(CoachFoodService.attachedPhotoGuidance) Not needed for foods you are only recommending."
     let context: CoachLiveContext
 
     @Generable
