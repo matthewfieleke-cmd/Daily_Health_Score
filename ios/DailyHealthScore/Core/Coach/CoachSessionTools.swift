@@ -3,6 +3,9 @@ import Foundation
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
+#if canImport(Vision)
+import Vision
+#endif
 
 /// What the Coach can reach for during a reply, and what it can ask the app to
 /// do. Facts are read live from the context so a long-lived session never sees
@@ -10,7 +13,7 @@ import FoundationModels
 enum CoachSessionTools {
     #if canImport(FoundationModels)
     static func make(context: CoachLiveContext) -> [any Tool] {
-        [
+        var tools: [any Tool] = [
             CoachLookupTodayTool(context: context),
             CoachLookupDaysTool(context: context),
             CoachLookupGoalsTool(context: context),
@@ -23,11 +26,25 @@ enum CoachSessionTools {
             CoachProposeGoalTool(context: context),
             CoachLogCheckInTool(context: context)
         ]
+        // Exact digits and barcodes are what the model is weak at reading.
+        // The tools are on every server session so a photo later in the chat
+        // can use them without rebuilding the session.
+        #if canImport(Vision)
+        tools.append(OCRTool(
+            name: "readTextInPhoto",
+            description: "Read the text in an attached photo, such as a nutrition label, menu, or note. Use when exact words or numbers in the photo matter."
+        ))
+        tools.append(BarcodeReaderTool(
+            name: "readBarcodeInPhoto",
+            description: "Read a barcode or QR code in an attached photo. Use when a package code would identify the product."
+        ))
+        #endif
+        return tools
     }
     #endif
 
     /// The inventory, for tests and the eval screen.
-    static let toolNames = "lookupTodayHealth, lookupDays, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, lookupFood, searchEvidence, calculate, rememberAboutPerson, proposeSMARTGoal, logGoalCheckIn"
+    static let toolNames = "lookupTodayHealth, lookupDays, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, lookupFood, searchEvidence, calculate, rememberAboutPerson, proposeSMARTGoal, logGoalCheckIn, readTextInPhoto, readBarcodeInPhoto"
 }
 
 #if canImport(FoundationModels)

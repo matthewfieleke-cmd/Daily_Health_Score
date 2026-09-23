@@ -167,6 +167,7 @@ final class FoundationModelsCoach {
     /// and actions; it decides what this message needs.
     func reply(
         to userMessage: String,
+        photoFileNames: [String] = [],
         recentTurns: [CoachChatTurn],
         live: CoachLiveContext,
         focus: CoachFocusContext? = nil,
@@ -200,14 +201,16 @@ final class FoundationModelsCoach {
             framing.append(focus.promptBlock.limitedToCoachBudget(CoachContextBudget.maxHistoryCharacters))
         }
 
-        func prompt(seedingTranscript turns: [CoachChatTurn]?, budget: CoachContextBudget) -> String {
-            var parts: [String] = []
-            if let turns, !turns.isEmpty {
-                parts.append("EARLIER IN THIS CHAT (oldest first):\n" + Self.transcriptBlock(turns, maxTurns: budget.transcriptTurns, maxCharactersPerTurn: budget.transcriptCharactersPerTurn))
-            }
-            parts.append(contentsOf: framing)
-            parts.append(userMessage)
-            return parts.joined(separator: "\n\n")
+        func pieces(seeding turns: [CoachChatTurn]?, budget: CoachContextBudget) -> [CoachPromptPiece] {
+            CoachPrompt.pieces(
+                userMessage: userMessage,
+                currentPhotoFileNames: photoFileNames,
+                earlierTurns: turns,
+                includeEarlierPhotos: turns != nil,
+                framing: framing,
+                maxEarlierTurns: budget.transcriptTurns,
+                maxCharactersPerTurn: budget.transcriptCharactersPerTurn
+            )
         }
 
         // Server: a persistent session per chat.
@@ -234,9 +237,9 @@ final class FoundationModelsCoach {
             }
 
             func attempt(_ session: LanguageModelSession, seed: [CoachChatTurn]?) async throws -> String {
-                try await CoachModelProvider.respondText(
+                try await CoachModelProvider.respondPieces(
                     session,
-                    to: prompt(seedingTranscript: seed, budget: budget),
+                    pieces: pieces(seeding: seed, budget: budget),
                     tier: .privateCloud,
                     depth: reasoningDepth
                 )
@@ -267,6 +270,7 @@ final class FoundationModelsCoach {
                 if let threadID { sessions[threadID] = nil }
                 return try await onDeviceReply(
                     userMessage: userMessage,
+                    photoFileNames: photoFileNames,
                     recentTurns: recentTurns,
                     framing: framing,
                     live: live,
@@ -279,6 +283,7 @@ final class FoundationModelsCoach {
 
         return try await onDeviceReply(
             userMessage: userMessage,
+            photoFileNames: photoFileNames,
             recentTurns: recentTurns,
             framing: framing,
             live: live,
@@ -298,6 +303,7 @@ final class FoundationModelsCoach {
     /// relaxed, then the app answers.
     private func onDeviceReply(
         userMessage: String,
+        photoFileNames: [String],
         recentTurns: [CoachChatTurn],
         framing: [String],
         live: CoachLiveContext,
@@ -316,13 +322,19 @@ final class FoundationModelsCoach {
         let halfBudget = CoachContextBudget.make(totalTokens: fullBudget.totalTokens / 2, instructionCharacters: instructions.count)
         let history = Array(recentTurns.dropLast(recentTurns.last?.role == .user ? 1 : 0))
 
-        func prompt(budget: CoachContextBudget) -> String {
-            var parts: [String] = []
-            let turns = Self.transcriptBlock(history, maxTurns: min(budget.transcriptTurns, 6), maxCharactersPerTurn: budget.transcriptCharactersPerTurn)
-            if !turns.isEmpty { parts.append("EARLIER IN THIS CHAT (oldest first):\n" + turns) }
-            parts.append(contentsOf: framing.map { $0.limitedToCoachBudget(budget.historyCharacters) })
-            parts.append(userMessage)
-            return parts.joined(separator: "\n\n")
+        func pieces(budget: CoachContextBudget) -> [CoachPromptPiece] {
+            // The small window gets the current photo and a note that earlier
+            // ones existed. It does not get the vision tools; their schemas
+            // would crowd the window, and this model can see the image itself.
+            CoachPrompt.pieces(
+                userMessage: userMessage,
+                currentPhotoFileNames: photoFileNames,
+                earlierTurns: history,
+                includeEarlierPhotos: false,
+                framing: framing.map { $0.limitedToCoachBudget(budget.historyCharacters) },
+                maxEarlierTurns: min(budget.transcriptTurns, 6),
+                maxCharactersPerTurn: budget.transcriptCharactersPerTurn
+            )
         }
 
         var lastError: Error? = firstError
@@ -330,8 +342,6 @@ final class FoundationModelsCoach {
             if permissive {
                 guard let declined = lastError ?? firstError, Self.isContentDecline(declined) else { break }
             }
-            // No tools on the small model: eleven schemas would eat a 4K window,
-            // and it answers from the recent turns instead.
             let session = CoachModelProvider.makeSession(
                 tier: .onDevice,
                 instructions: instructions,
@@ -339,7 +349,7 @@ final class FoundationModelsCoach {
                 permissiveGuardrails: permissive
             )
             do {
-                let text = try await CoachModelProvider.respondText(session, to: prompt(budget: budget), tier: .onDevice, depth: .light)
+                let text = try await CoachModelProvider.respondPieces(session, pieces: pieces(budget: budget), tier: .onDevice, depth: .light)
                 return finish(text, tier: .onDevice, shape: shape, live: live, fallbackReason: fallbackReason)
             } catch {
                 lastError = error

@@ -113,6 +113,36 @@ extension CoachModelProvider {
         return try await session.respond(to: prompt, contextOptions: contextOptions(for: depth)).content
     }
 
+    /// Text and photos. A photo is an image attachment labeled for the vision
+    /// tools; a missing file is left out rather than failing the whole reply.
+    static func respondPieces(
+        _ session: LanguageModelSession,
+        pieces: [CoachPromptPiece],
+        tier: CoachModelTier,
+        depth: CoachReasoningDepth
+    ) async throws -> String {
+        let prompt = modelPrompt(from: pieces)
+        guard tier == .privateCloud else {
+            return try await session.respond(to: prompt).content
+        }
+        return try await session.respond(to: prompt, contextOptions: contextOptions(for: depth)).content
+    }
+
+    private static func modelPrompt(from pieces: [CoachPromptPiece]) -> Prompt {
+        Prompt {
+            for piece in pieces {
+                if case .text(let text) = piece {
+                    text
+                }
+                if case .photo(let fileName, let label) = piece,
+                   let url = CoachPhotoStore.fileURL(named: fileName),
+                   FileManager.default.fileExists(atPath: url.path) {
+                    Attachment(imageURL: url).label(label)
+                }
+            }
+        }
+    }
+
     private static func contextOptions(for depth: CoachReasoningDepth) -> ContextOptions {
         switch depth {
         case .light: return ContextOptions(reasoningLevel: .light)

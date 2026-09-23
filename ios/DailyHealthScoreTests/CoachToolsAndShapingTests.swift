@@ -103,7 +103,7 @@ final class CoachFoodDataTests: XCTestCase {
         let missing = CoachFoodService.formatted([], query: "unicorn bar")
         XCTAssertTrue(missing.contains("No database match"))
         XCTAssertTrue(missing.contains("Do not invent label values"))
-        XCTAssertTrue(missing.contains("label or a photo"))
+        XCTAssertTrue(missing.contains(CoachFoodService.attachedPhotoGuidance))
         XCTAssertFalse(missing.lowercased().contains("estimate"))
         let unavailable = CoachFoodService.formatted([], query: "unicorn bar", failures: ["USDA: HTTP 429 rate limited", "Open Food Facts: timed out"])
         XCTAssertTrue(unavailable.contains("Food lookup unavailable"))
@@ -153,6 +153,7 @@ final class CoachFoodDataTests: XCTestCase {
         let output = CoachFoodService.formatted([fruit], query: "That's It bar")
         XCTAssertTrue(output.hasPrefix("Candidate database matches"))
         XCTAssertTrue(output.contains("Do not use candidates in an exact total"))
+        XCTAssertTrue(output.contains(CoachFoodService.attachedPhotoGuidance))
         XCTAssertEqual(CoachFoodService.matchQuality([], query: "anything"), .none)
     }
 
@@ -622,5 +623,123 @@ final class CoachLiveContextTests: XCTestCase {
         XCTAssertTrue(payload.contains("Work one"))
         XCTAssertTrue(payload.contains("Work two"))
         XCTAssertFalse(payload.contains("Work three"))
+    }
+}
+
+final class CoachPhotoPromptTests: XCTestCase {
+    func test_aContinuingTurnSendsOnlyTheNewMessage() {
+        let pieces = CoachPrompt.pieces(
+            userMessage: "hello",
+            currentPhotoFileNames: [],
+            earlierTurns: nil,
+            includeEarlierPhotos: true,
+            framing: [],
+            maxEarlierTurns: 10,
+            maxCharactersPerTurn: 100
+        )
+        XCTAssertEqual(pieces, [.text("hello")])
+    }
+
+    func test_aPhotoWithoutWordsIsTheMessage() {
+        let one = CoachPrompt.pieces(
+            userMessage: "  ",
+            currentPhotoFileNames: ["a.jpg"],
+            earlierTurns: nil,
+            includeEarlierPhotos: false,
+            framing: ["Started from sleep."],
+            maxEarlierTurns: 4,
+            maxCharactersPerTurn: 100
+        )
+        XCTAssertEqual(one, [
+            .text("Started from sleep."),
+            .text("The person sent this photo."),
+            .photo(fileName: "a.jpg", label: "photo-1")
+        ])
+        let two = CoachPrompt.pieces(
+            userMessage: "",
+            currentPhotoFileNames: ["a.jpg", "b.jpg"],
+            earlierTurns: nil,
+            includeEarlierPhotos: false,
+            framing: [],
+            maxEarlierTurns: 4,
+            maxCharactersPerTurn: 100
+        )
+        XCTAssertEqual(two, [
+            .text("The person sent these photos."),
+            .photo(fileName: "a.jpg", label: "photo-1"),
+            .photo(fileName: "b.jpg", label: "photo-2")
+        ])
+    }
+
+    func test_wordsAndAPhotoStayTogether() {
+        let pieces = CoachPrompt.pieces(
+            userMessage: "What does this label say?",
+            currentPhotoFileNames: ["label.jpg"],
+            earlierTurns: nil,
+            includeEarlierPhotos: false,
+            framing: [],
+            maxEarlierTurns: 4,
+            maxCharactersPerTurn: 100
+        )
+        XCTAssertEqual(pieces, [
+            .text("What does this label say?"),
+            .photo(fileName: "label.jpg", label: "photo-1")
+        ])
+    }
+
+    func test_aNewSessionReattachesTheNewestEarlierPhotos() {
+        let earlier = (1...5).map { index in
+            CoachChatTurn(role: .user, text: "turn \(index)", photoFileNames: ["file-\(index).jpg"])
+        }
+        let pieces = CoachPrompt.pieces(
+            userMessage: "what about this",
+            currentPhotoFileNames: ["current.jpg"],
+            earlierTurns: earlier,
+            includeEarlierPhotos: true,
+            framing: [],
+            maxEarlierTurns: 10,
+            maxCharactersPerTurn: 200
+        )
+        let labels = pieces.compactMap { piece -> String? in
+            if case .photo(_, let label) = piece { return label }
+            return nil
+        }
+        XCTAssertEqual(labels, ["earlier-1", "earlier-2", "earlier-3", "earlier-4", "photo-1"])
+        let texts = pieces.compactMap { piece -> String? in
+            if case .text(let text) = piece { return text }
+            return nil
+        }
+        XCTAssertTrue(texts.contains { $0.contains("turn 1") && $0.contains("[a photo was attached]") })
+        XCTAssertTrue(texts.contains { $0 == "User: turn 5" })
+        XCTAssertTrue(texts.contains("what about this"))
+    }
+
+    func test_onDeviceHistoryNotesAPhotoItDoesNotResend() {
+        let earlier = [CoachChatTurn(role: .user, text: "this label", photoFileNames: ["old.jpg"])]
+        let pieces = CoachPrompt.pieces(
+            userMessage: "and the protein?",
+            currentPhotoFileNames: [],
+            earlierTurns: earlier,
+            includeEarlierPhotos: false,
+            framing: [],
+            maxEarlierTurns: 6,
+            maxCharactersPerTurn: 200
+        )
+        XCTAssertFalse(pieces.contains { if case .photo = $0 { return true } else { return false } })
+        XCTAssertTrue(pieces.contains(.text("User: this label [a photo was attached]")))
+        XCTAssertTrue(pieces.contains(.text("and the protein?")))
+    }
+
+    func test_photoFilesRoundTripAndRejectOtherNames() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let name = try CoachPhotoStore.saveJPEG(Data([0xFF, 0xD8, 0xFF]), directory: folder)
+        let url = try XCTUnwrap(CoachPhotoStore.fileURL(named: name, directory: folder))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertNil(CoachPhotoStore.fileURL(named: "../secret.jpg", directory: folder))
+        XCTAssertNil(CoachPhotoStore.fileURL(named: "notes.txt", directory: folder))
+        CoachPhotoStore.delete(fileNames: [name, "../secret.jpg"], directory: folder)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertTrue(folder.path.hasPrefix(FileManager.default.temporaryDirectory.path))
     }
 }

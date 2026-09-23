@@ -22,6 +22,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Daily Health Score uses the camera so you can send a photo to DHS Lifestyle Coach.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Daily Health Score reads your sleep, dietary fiber, exercise minutes, workouts, and heart rate variability from Apple Health to calculate your daily score and show sleep HRV trends. Weight, height, BMI, date of birth, and sex are read only so DHS Lifestyle Coach can talk about trends with you and never has to guess your age; they never affect the score. Data stays on your device.</string>
 	<key>NSHealthUpdateUsageDescription</key>

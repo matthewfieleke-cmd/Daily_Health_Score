@@ -231,9 +231,15 @@ final class CoachMemoryStore: ObservableObject {
         if let open = openThreadID, threads.contains(where: { $0.id == open }) {
             threadID = open
         } else {
+            let opener: String?
+            if turn.role == .user {
+                opener = turn.text.isEmpty && !turn.photoFileNames.isEmpty ? "Photo" : turn.text
+            } else {
+                opener = nil
+            }
             threadID = createThread(
                 from: pendingSeed ?? CoachThreadSeed(),
-                firstUserText: turn.role == .user ? turn.text : nil,
+                firstUserText: opener,
                 at: turn.createdAt
             )
             pendingSeed = nil
@@ -268,7 +274,9 @@ final class CoachMemoryStore: ObservableObject {
 
     func deleteThread(_ id: UUID) {
         let messages = (try? modelContext.fetch(FetchDescriptor<CoachChatMessageEntity>())) ?? []
-        for message in messages where message.threadId == id {
+        let removed = messages.filter { $0.threadId == id }
+        CoachPhotoStore.delete(fileNames: removed.flatMap(\.photoFileNames))
+        for message in removed {
             modelContext.delete(message)
         }
         let descriptor = FetchDescriptor<CoachThreadEntity>(predicate: #Predicate { $0.id == id })
@@ -291,6 +299,7 @@ final class CoachMemoryStore: ObservableObject {
     /// Every chat goes; the memory files stay.
     func deleteAllChats() {
         let messages = (try? modelContext.fetch(FetchDescriptor<CoachChatMessageEntity>())) ?? []
+        CoachPhotoStore.delete(fileNames: messages.flatMap(\.photoFileNames))
         for message in messages { modelContext.delete(message) }
         let rows = (try? modelContext.fetch(FetchDescriptor<CoachThreadEntity>())) ?? []
         for row in rows { modelContext.delete(row) }
@@ -836,7 +845,8 @@ final class CoachMemoryStore: ObservableObject {
         thread.lastMessageAt = max(turn.createdAt, thread.lastMessageAt)
         thread.updatedAt = turn.createdAt
         thread.messageCount += 1
-        thread.preview = CoachThreadLogic.preview(from: turn.text)
+        let previewText = turn.text.isEmpty && !turn.photoFileNames.isEmpty ? "Photo" : turn.text
+        thread.preview = CoachThreadLogic.preview(from: previewText)
         upsertThread(thread)
     }
 

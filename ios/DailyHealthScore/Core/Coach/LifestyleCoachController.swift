@@ -189,6 +189,7 @@ final class LifestyleCoachController: ObservableObject {
 
     func sendChatMessage(
         _ text: String,
+        photoFileNames: [String] = [],
         todayRecord: DailyRecord?,
         records: [DailyRecord],
         goals: [SMARTGoal] = [],
@@ -200,7 +201,7 @@ final class LifestyleCoachController: ObservableObject {
         bodyTrend: BodyTrend? = nil
     ) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty || !photoFileNames.isEmpty else { return }
         if !isChatBusy {
             beginChatSend()
         }
@@ -213,7 +214,7 @@ final class LifestyleCoachController: ObservableObject {
         if case .escalate(let message) = disposition {
             goalProposal = nil
             pendingGoalCheckIn = nil
-            memory.append(CoachChatTurn(role: .user, text: trimmed))
+            memory.append(CoachChatTurn(role: .user, text: trimmed, photoFileNames: photoFileNames))
             memory.append(CoachChatTurn(role: .coach, text: message))
             chatError = nil
             if chatGenerationID == generationID { isChatBusy = false }
@@ -224,6 +225,7 @@ final class LifestyleCoachController: ObservableObject {
 
         refreshAvailability()
         guard availability == .available else {
+            CoachPhotoStore.delete(fileNames: photoFileNames)
             chatError = availability.guidance
             if chatGenerationID == generationID { isChatBusy = false }
             return
@@ -235,7 +237,7 @@ final class LifestyleCoachController: ObservableObject {
         defer { if chatGenerationID == generationID { isChatBusy = false } }
 
         let isFirstReply = !memory.turns.contains { $0.role == .user }
-        memory.append(CoachChatTurn(role: .user, text: trimmed))
+        memory.append(CoachChatTurn(role: .user, text: trimmed, photoFileNames: photoFileNames))
         guard let thread = memory.openThread else { return }
 
         let todayKey = todayRecord?.date ?? DateHelpers.localDateKey()
@@ -269,6 +271,7 @@ final class LifestyleCoachController: ObservableObject {
 
             let result = try await model.reply(
                 to: trimmed,
+                photoFileNames: photoFileNames,
                 recentTurns: memory.recentTurnsForPrompt(limit: CoachContextBudget.maxTranscriptTurns),
                 live: live,
                 focus: focus,
@@ -300,7 +303,10 @@ final class LifestyleCoachController: ObservableObject {
                 }
             }
             // Filing happens after the reply is on screen and costs no quota.
-            await fileChat(threadID: thread.id, userMessage: trimmed, reply: result.message)
+            let filingText = trimmed.isEmpty
+                ? (photoFileNames.count > 1 ? "The person sent photos." : "The person sent a photo.")
+                : trimmed
+            await fileChat(threadID: thread.id, userMessage: filingText, reply: result.message)
             await compileProfileIfNeeded()
         } catch {
             guard chatGenerationID == generationID else { return }
