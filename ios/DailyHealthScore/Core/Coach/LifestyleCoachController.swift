@@ -23,6 +23,15 @@ final class LifestyleCoachController: ObservableObject {
     @Published private(set) var isHousekeeping = false
     private var checkInGenerationID = UUID()
     private var chatGenerationID = UUID()
+    /// One on-device background compile at a time. A second caller waits,
+    /// then compiles again only if the notes moved while the first one ran.
+    private var profileCompileFlight: ProfileCompileFlight?
+
+    private struct ProfileCompileFlight {
+        var id: UUID
+        var key: String
+        var task: Task<Void, Never>
+    }
 
     /// Goals changed: re-evaluate the card on the next Home visit without
     /// dropping what is on screen. The cache key ignores progress, so a Done
@@ -233,6 +242,9 @@ final class LifestyleCoachController: ObservableObject {
 
         let memoryRevisionAtStart = memory.memoryRevision
         chatError = nil
+        // A stale biography must not answer this message. Compile first when
+        // the notes have changed; the composer is already showing the wait.
+        await compileProfileIfNeeded()
         pendingGoalCheckIn = nil
         defer { if chatGenerationID == generationID { isChatBusy = false } }
 
@@ -275,6 +287,7 @@ final class LifestyleCoachController: ObservableObject {
                 recentTurns: memory.recentTurnsForPrompt(limit: CoachContextBudget.maxTranscriptTurns),
                 live: live,
                 focus: focus,
+                personBackground: memory.compiledProfile,
                 context: context
             )
             guard chatGenerationID == generationID else { return }
@@ -359,14 +372,57 @@ final class LifestyleCoachController: ObservableObject {
         }
     }
 
-    /// Rebuilds the compiled profile when the entries changed. On-device.
+    /// Rebuilds the compiled background when the entries changed. On-device.
+    /// Callers that overlap — chat, the Home card, the memory screen — share
+    /// one compile. A result is stored only for the notes that were compiled.
     func compileProfileIfNeeded() async {
-        guard availability == .available, memory.needsProfileCompile else { return }
+        memory.discardCompiledProfileIfNotesAreGone()
+        guard availability == .available else { return }
+        defer { memory.discardCompiledProfileIfNotesAreGone() }
+
+        if let current = profileCompileFlight {
+            await current.task.value
+            let replacement = profileCompileFlight
+            if let replacement, replacement.id != current.id {
+                await compileProfileIfNeeded()
+                return
+            }
+            if replacement?.id == current.id {
+                profileCompileFlight = nil
+            }
+            // Same notes and a miss: leave it stale and let the next visit try.
+            // A newer picture compiles once, below.
+            guard memory.memoryFingerprint != current.key, memory.needsProfileCompile else { return }
+        }
+
+        guard memory.needsProfileCompile else { return }
+        let key = memory.memoryFingerprint
+        let entries = memory.compilerEntryList
+        let id = UUID()
+        let task = Task { @MainActor in
+            await self.storeCompiledProfile(entryList: entries, key: key)
+        }
+        profileCompileFlight = ProfileCompileFlight(id: id, key: key, task: task)
+        await task.value
+        if profileCompileFlight?.id == id {
+            profileCompileFlight = nil
+        }
+        if memory.memoryFingerprint != key, memory.needsProfileCompile {
+            await compileProfileIfNeeded()
+        }
+    }
+
+    private func storeCompiledProfile(entryList: String, key: String) async {
         do {
-            let profile = try await model.compileProfile(entryList: memory.entryList)
-            memory.saveCompiledProfile(profile)
+            let profile = try await model.compileProfile(entryList: entryList)
+            guard let stored = CoachCharter.backgroundToStore(
+                compiled: profile,
+                sourceUnchanged: memory.memoryFingerprint == key,
+                notesAreEmpty: memory.effectiveMemories.isEmpty
+            ) else { return }
+            memory.saveCompiledProfile(stored)
         } catch {
-            // The card can be written without a compiled profile; the files stay in the tool.
+            // The card and the chat can go out without a background; the files stay in the tool.
         }
     }
 
@@ -431,6 +487,7 @@ final class LifestyleCoachController: ObservableObject {
                 model.forgetSession(for: evalThread.id)
             }
         }
+        await compileProfileIfNeeded()
         do {
             var turns: [CoachChatTurn] = []
             var transcript: [String] = []
@@ -473,6 +530,7 @@ final class LifestyleCoachController: ObservableObject {
                 let result = try await model.reply(
                     to: message,
                     recentTurns: turns,
+                    personBackground: memory.compiledProfile,
                     live: evalLive,
                     forcedTier: forcedTier,
                     reasoningDepth: reasoningDepth,

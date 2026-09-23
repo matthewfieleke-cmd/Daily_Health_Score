@@ -493,6 +493,23 @@ struct CoachFileReviewOperation: Equatable, Sendable {
 }
 
 enum CoachMemoryFingerprint {
+    struct ProfileSourceEntry: Equatable, Sendable {
+        var id: String
+        var section: String
+        var stated: Bool
+        var content: String
+    }
+
+    /// The picture a compiled background was written from. A new day, a
+    /// confirmation, or an edited note changes it, so yesterday's paragraph
+    /// is not served as today's.
+    static func profileSource(generation: String, day: String, entries: [ProfileSourceEntry]) -> String {
+        let lines = entries.map { entry in
+            "\(entry.id)|\(entry.section)|\(entry.stated ? "stated" : "inferred")|\(entry.content)"
+        }
+        return ([generation, day] + lines).joined(separator: "\n")
+    }
+
     static func fingerprint(_ content: String) -> String {
         let normalized = normalize(content)
         var hash: UInt64 = 5381
@@ -722,13 +739,60 @@ enum CoachMemoryLogic {
         return date.formatted(style)
     }
 
+    /// A date the compiler can compare with each note's date, year included.
+    static func compilerToday(_ date: Date = Date(), calendar: Calendar = .current) -> String {
+        var style = Date.FormatStyle(locale: Locale(identifier: "en_US"), calendar: calendar, timeZone: calendar.timeZone)
+        style = style.weekday(.abbreviated).month(.abbreviated).day().year()
+        return date.formatted(style)
+    }
+
+    static func entryLine(for item: CoachMemoryItem, at date: Date, calendar: Calendar) -> String {
+        let stated = item.provenance.isStated ? "stated" : "inferred"
+        return "\(item.id.uuidString.prefix(8)) | \(item.section.modelKey) | \(entryDate(item.createdAt, now: date, calendar: calendar)) | \(stated) | \(item.displayContent)"
+    }
+
     /// Entries as a compact list for the on-device filing and review passes.
     static func entryList(items: [CoachMemoryItem], at date: Date = Date(), calendar: Calendar = .current) -> String {
         let live = itemsByOverridingContradictions(items, at: date).sorted { $0.createdAt > $1.createdAt }
         if live.isEmpty { return "None." }
-        return live.map { item in
-            "\(item.id.uuidString.prefix(8)) | \(item.section.modelKey) | \(entryDate(item.createdAt, now: date, calendar: calendar)) | \(item.provenance.isStated ? "stated" : "inferred") | \(item.displayContent)"
-        }.joined(separator: "\n")
+        return live.map { entryLine(for: $0, at: date, calendar: calendar) }.joined(separator: "\n")
+    }
+
+    /// Notes for the background compiler. One newest note from each file,
+    /// then the next, so a long Recent file cannot push a durable fact out
+    /// of the window. Whole lines only.
+    static func compilerEntryList(
+        items: [CoachMemoryItem],
+        at date: Date = Date(),
+        calendar: Calendar = .current,
+        characterBudget: Int = 9_000
+    ) -> String {
+        let live = itemsByOverridingContradictions(items, at: date)
+        guard !live.isEmpty, characterBudget > 0 else { return "None." }
+        let grouped = CoachMemorySection.allCases.map { section in
+            live.filter { $0.section == section }.sorted { $0.createdAt > $1.createdAt }
+        }
+        var cursors = Array(repeating: 0, count: grouped.count)
+        var lines: [String] = []
+        var used = 0
+        var progressed = true
+        while progressed {
+            progressed = false
+            for index in grouped.indices {
+                guard cursors[index] < grouped[index].count else { continue }
+                let line = entryLine(for: grouped[index][cursors[index]], at: date, calendar: calendar)
+                let cost = line.count + (lines.isEmpty ? 0 : 1)
+                if used + cost > characterBudget {
+                    cursors[index] = grouped[index].count
+                    continue
+                }
+                lines.append(line)
+                used += cost
+                cursors[index] += 1
+                progressed = true
+            }
+        }
+        return lines.isEmpty ? "None." : lines.joined(separator: "\n")
     }
 
     /// Finds the note a model update refers to. Exact text first, then containment,

@@ -191,9 +191,30 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         let sentences = quoted.filter { $0.count > 24 && $0 != CoachSafetyGate.immediateHelpSentence }
         XCTAssertEqual(sentences, [], "Example sentences become scripts: \(sentences)")
 
-        // The biography stays out of both prompts. The no-tools fallback says
-        // what it can actually know rather than pretending a tool is present.
+        // The charter page stays free of a biography. A compiled background can
+        // be appended for Private Cloud Compute; the no-tools fallback cannot
+        // see it, and says so.
         XCTAssertFalse(charter.contains("WHO THIS PERSON IS"))
+        XCTAssertEqual(CoachCharter.instructions(for: .privateCloud, background: "   "), charter)
+        let background = CoachCharter.instructions(
+            for: .privateCloud,
+            background: "Outpatient family physician. Clinic days run long, and notes pile up."
+        )
+        XCTAssertTrue(background.hasPrefix(charter))
+        XCTAssertTrue(background.contains("Background on this person, from their notes:"))
+        XCTAssertTrue(background.contains("Clinic days run long"))
+        XCTAssertFalse(background.contains("only when"))
+        XCTAssertFalse(background.contains("use a detail"))
+        XCTAssertEqual(
+            CoachCharter.instructions(for: .onDevice, background: "Clinic days run long."),
+            CoachCharter.onDeviceInstructions
+        )
+        XCTAssertTrue(CoachCharter.profileInstructions.contains("most changes the care"))
+        XCTAssertTrue(CoachCharter.profileInstructions.contains("seeming or possible"))
+        XCTAssertTrue(CoachCharter.profileInstructions.contains("No advice"))
+        XCTAssertFalse(CoachCharter.profileInstructions.contains("paragraph per file"))
+        XCTAssertFalse(CoachCharter.profileInstructions.contains("Keep every specific"))
+        XCTAssertEqual(CoachCharter.profileCompilerGeneration, "2")
         XCTAssertFalse(charter.contains("family physician"))
         XCTAssertEqual(CoachCharter.instructions(for: .privateCloud), charter)
         XCTAssertEqual(CoachCharter.instructions(for: .onDevice), CoachCharter.onDeviceInstructions)

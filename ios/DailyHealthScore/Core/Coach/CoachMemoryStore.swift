@@ -519,11 +519,23 @@ final class CoachMemoryStore: ObservableObject {
 
     // MARK: - Compiled profile and housekeeping
 
-    /// Fingerprint of the live entries, so the compiled profile is rebuilt only
-    /// when something changed.
+    /// Fingerprint of the live entries plus the calendar day. The background
+    /// is rebuilt when a note, its statedness, or the day changes.
     var memoryFingerprint: String {
         let live = effectiveMemories.sorted { $0.id.uuidString < $1.id.uuidString }
-        return CoachMemoryFingerprint.fingerprint(live.map { "\($0.id.uuidString)|\($0.section.rawValue)|\($0.content)" }.joined(separator: "\n"))
+        let body = CoachMemoryFingerprint.profileSource(
+            generation: CoachCharter.profileCompilerGeneration,
+            day: DateHelpers.localDateKey(),
+            entries: live.map {
+                CoachMemoryFingerprint.ProfileSourceEntry(
+                    id: $0.id.uuidString,
+                    section: $0.section.rawValue,
+                    stated: $0.provenance.isStated,
+                    content: $0.content
+                )
+            }
+        )
+        return CoachMemoryFingerprint.fingerprint(body)
     }
 
     var compiledProfile: String {
@@ -546,6 +558,19 @@ final class CoachMemoryStore: ObservableObject {
         objectWillChange.send()
     }
 
+    /// Deletes a compiled paragraph after the last note is gone, so the
+    /// biography does not stay in the store under a key that no longer matches.
+    func discardCompiledProfileIfNotesAreGone() {
+        guard effectiveMemories.isEmpty else { return }
+        let state = fetchOrCreateState()
+        guard !state.compiledProfile.isEmpty else { return }
+        state.compiledProfile = ""
+        state.compiledProfileKey = memoryFingerprint
+        state.updatedAt = Date()
+        try? modelContext.save()
+        objectWillChange.send()
+    }
+
     /// Housekeeping runs at most daily and only once the files have some weight.
     func shouldReviewFiles(now: Date = Date()) -> Bool {
         guard effectiveMemories.count >= 6 else { return false }
@@ -562,6 +587,11 @@ final class CoachMemoryStore: ObservableObject {
 
     var entryList: String {
         CoachMemoryLogic.entryList(items: memories)
+    }
+
+    /// The compiler's list: every file is represented before Recent can crowd it.
+    var compilerEntryList: String {
+        CoachMemoryLogic.compilerEntryList(items: memories)
     }
 
     /// Applies the review pass. Every operation is logged and undoable; stated

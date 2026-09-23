@@ -84,7 +84,7 @@ final class FoundationModelsCoach {
             \(trend?.promptBlock ?? "TREND FACTS: none today.")
 
             WHO THEY ARE (orientation for this card; use a detail only when it fits today):
-            \(profile.isEmpty ? "None yet." : profile.limitedToCoachBudget(budget.profileCharacters))
+            \(profile.isEmpty ? "None yet." : profile.limitedToCoachSentences(budget.profileCharacters))
 
             \(CoachCharter.checkInContract(kind: kind, hasTrend: trend != nil))
             """
@@ -138,14 +138,18 @@ final class FoundationModelsCoach {
     // MARK: - Chat
 
     /// One conversation per chat, held by the framework the way any assistant
-    /// holds a thread. Rebuilt when the tier changes or after a context overflow;
-    /// seeded from the stored turns on a cold start. A turn that reads personal
-    /// or changing app data is also rebuilt next time, from what the person saw.
+    /// holds a thread. Rebuilt when the tier changes, the background changes,
+    /// or after a context overflow; seeded from the stored turns on a cold
+    /// start. A turn that reads personal or changing app data is also rebuilt
+    /// next time, from what the person saw.
     #if canImport(FoundationModels)
     private struct LiveSession {
         var session: LanguageModelSession
         var tier: CoachModelTier
         var turnsSeen: Int
+        /// The background baked into this session's instructions. A different
+        /// background means the notes changed, so the session starts over.
+        var background: String
     }
     private var sessions: [UUID: LiveSession] = [:]
     #endif
@@ -173,6 +177,7 @@ final class FoundationModelsCoach {
         focus: CoachFocusContext? = nil,
         forcedTier: CoachModelTier? = nil,
         reasoningDepth: CoachReasoningDepth = .deep,
+        personBackground: String = "",
         context: CoachReplyContext
     ) async throws -> CoachReplyResult {
         #if canImport(FoundationModels)
@@ -215,7 +220,8 @@ final class FoundationModelsCoach {
 
         // Server: a persistent session per chat.
         if tier == .privateCloud {
-            let instructions = CoachCharter.instructions(for: .privateCloud)
+            let background = CoachCharter.trimmedBackground(personBackground)
+            let instructions = CoachCharter.instructions(for: .privateCloud, background: background)
             let budget = CoachContextBudget.make(
                 totalTokens: await CoachModelProvider.contextTokens(for: .privateCloud),
                 instructionCharacters: instructions.count
@@ -223,16 +229,22 @@ final class FoundationModelsCoach {
             let threadID = context.thread?.id
             var seed: [CoachChatTurn]? = nil
             var liveSession: LiveSession
-            if let threadID, let existing = sessions[threadID], existing.tier == .privateCloud {
+            if let threadID,
+               let existing = sessions[threadID],
+               existing.tier == .privateCloud,
+               existing.background == background {
                 liveSession = existing
             } else {
-                // Cold start: the stored turns (minus the message being sent) seed
-                // the first prompt; from here on the session carries the thread.
+                // Cold start, or the background changed: the stored turns (minus
+                // the message being sent) seed the first prompt. From here the
+                // session carries the thread, and the background stays in its
+                // instructions rather than being repeated every turn.
                 seed = Array(recentTurns.dropLast(recentTurns.last?.role == .user ? 1 : 0))
                 liveSession = LiveSession(
                     session: CoachModelProvider.makeSession(tier: .privateCloud, instructions: instructions, tools: CoachSessionTools.make(context: live)),
                     tier: .privateCloud,
-                    turnsSeen: 0
+                    turnsSeen: 0,
+                    background: background
                 )
             }
 
@@ -253,7 +265,7 @@ final class FoundationModelsCoach {
                     // The thread outgrew the window: start a fresh session seeded
                     // with the recent turns and continue.
                     let fresh = CoachModelProvider.makeSession(tier: .privateCloud, instructions: instructions, tools: CoachSessionTools.make(context: live))
-                    liveSession = LiveSession(session: fresh, tier: .privateCloud, turnsSeen: 0)
+                    liveSession = LiveSession(session: fresh, tier: .privateCloud, turnsSeen: 0, background: background)
                     text = try await attempt(fresh, seed: Array(recentTurns.suffix(8).dropLast(recentTurns.last?.role == .user ? 1 : 0)))
                 } catch where !Self.isContentDecline(error) {
                     // A server hiccup is usually gone a second later.
@@ -443,22 +455,19 @@ final class FoundationModelsCoach {
         #endif
     }
 
-    /// One paragraph per file, on-device. Empty when there is nothing to compile.
+    /// A short health background, on-device. Empty when there is nothing to compile.
     func compileProfile(entryList: String) async throws -> String {
         #if canImport(FoundationModels)
         try ensureAvailable()
         guard entryList != "None." else { return "" }
-        let prompt = """
-        ENTRIES (id | file | date | stated/inferred | note):
-        \(entryList.limitedToCoachBudget(9_000))
-
-        Compile the profile.
-        """
         let text = try await CoachModelProvider
             .makeSession(tier: .onDevice, instructions: CoachCharter.profileInstructions)
-            .respond(to: prompt)
+            .respond(to: CoachCharter.backgroundCompilePrompt(
+                entryList: entryList,
+                today: CoachMemoryLogic.compilerToday()
+            ))
             .content
-        return CoachMarkdown.plainText(text).trimmedForCoach().limitedToCoachBudget(3_000)
+        return CoachCharter.trimmedBackground(CoachMarkdown.plainText(text))
         #else
         throw CoachError.unavailable(.unavailable)
         #endif

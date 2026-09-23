@@ -95,4 +95,14 @@ final class CoachContextBudgetTests: XCTestCase {
         XCTAssertLessThanOrEqual(long.limitedToCoachBudget(20).count, 20)
         XCTAssertTrue(long.limitedToCoachBudget(20).hasSuffix("…"))
     }
+
+    func test_sentenceTrimKeepsWholeSentencesInsideTheBudget() {
+        let prose = "Sleep is short. Movement is open. Fiber is still ahead today and this sentence is the one that should be cut."
+        XCTAssertEqual(prose.limitedToCoachSentences(40), "Sleep is short. Movement is open.")
+        let words = String(repeating: "alpha ", count: 30)
+        let cut = words.limitedToCoachSentences(40)
+        XCTAssertLessThanOrEqual(cut.count, 40)
+        XCTAssertTrue(cut.hasSuffix("…"))
+        XCTAssertEqual("short".limitedToCoachSentences(50), "short")
+    }
 }
