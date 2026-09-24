@@ -72,6 +72,16 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(snapshot.goalsBlock.contains("Exercise goal 30 min/day"))
         XCTAssertTrue(snapshot.promptBlock.contains("USER'S GOALS"))
         XCTAssertTrue(snapshot.promptBlock.contains("BELOW GOAL by 3.2 g"))
+        let facts = snapshot.toolFacts
+        XCTAssertTrue(facts.contains("Fiber: 36.8 g of a 40 g goal."))
+        XCTAssertTrue(facts.contains("Sleep: 7.2 h of a 7.5 h goal."))
+        XCTAssertTrue(facts.contains("Exercise: 71 min of a 30 min goal."))
+        XCTAssertFalse(facts.contains("TIME RULES"))
+        XCTAssertFalse(facts.contains("WEAKEST"))
+        XCTAssertFalse(facts.contains("BELOW GOAL"))
+        XCTAssertFalse(facts.contains("SMART"))
+        XCTAssertFalse(facts.contains("BODY"))
+        XCTAssertFalse(facts.contains("repeat them"))
     }
 
     func test_minimalBlockKeepsDateAndGoalsButHidesMetrics() {
@@ -166,7 +176,7 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(charter.contains("reflection alone is not enough"))
         XCTAssertTrue(charter.contains("Use your own knowledge for general questions"))
         XCTAssertTrue(charter.contains("when those facts would materially improve the answer"))
-        XCTAssertTrue(charter.contains("Each tool's description says when it applies"))
+        XCTAssertFalse(charter.contains("Each tool's description says when it applies"))
         XCTAssertTrue(charter.contains("never claim something is saved"))
         XCTAssertTrue(charter.contains("You may explain health conditions, tests, medicines, and treatments"))
         XCTAssertTrue(charter.contains("Do not diagnose this person"))
@@ -191,20 +201,17 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         let sentences = quoted.filter { $0.count > 24 && $0 != CoachSafetyGate.immediateHelpSentence }
         XCTAssertEqual(sentences, [], "Example sentences become scripts: \(sentences)")
 
-        // The charter page stays free of a biography. A compiled background can
-        // be appended for Private Cloud Compute; the no-tools fallback cannot
-        // see it, and says so.
+        // The charter page stays free of a biography. A compiled summary stays
+        // on the memory screen and is not pasted into the session.
         XCTAssertFalse(charter.contains("WHO THIS PERSON IS"))
         XCTAssertEqual(CoachCharter.instructions(for: .privateCloud, background: "   "), charter)
         let background = CoachCharter.instructions(
             for: .privateCloud,
             background: "Outpatient family physician. Clinic days run long, and notes pile up."
         )
-        XCTAssertTrue(background.hasPrefix(charter))
-        XCTAssertTrue(background.contains("Background on this person, from their notes:"))
-        XCTAssertTrue(background.contains("Clinic days run long"))
-        XCTAssertFalse(background.contains("only when"))
-        XCTAssertFalse(background.contains("use a detail"))
+        XCTAssertEqual(background, charter)
+        XCTAssertFalse(background.contains("Background on this person"))
+        XCTAssertFalse(background.contains("Clinic days run long"))
         XCTAssertEqual(
             CoachCharter.instructions(for: .onDevice, background: "Clinic days run long."),
             CoachCharter.onDeviceInstructions
@@ -224,12 +231,8 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertFalse(CoachCharter.onDeviceInstructions.contains("Each tool's description"))
         XCTAssertFalse(CoachCharter.onDeviceInstructions.contains(CoachCharter.philosophy))
 
-        XCTAssertTrue(CoachCharter.acquaintanceContract().contains("what to call them"))
-        XCTAssertTrue(CoachCharter.acquaintanceContract().contains("Every file has something now"))
-        let intake = CoachCharter.acquaintanceContract(emptyFiles: ["People", "Body & health"])
-        XCTAssertTrue(intake.contains("The file to ask toward next: People."))
-        XCTAssertTrue(intake.contains("one\nthing per message") || intake.contains("one thing per message"))
-        XCTAssertTrue(intake.contains("rememberAboutPerson"))
+        XCTAssertFalse(charter.contains("GETTING ACQUAINTED"))
+        XCTAssertFalse(charter.contains("rememberAboutPerson"))
         let morning = CoachCharter.checkInContract(kind: .morning, hasTrend: true)
         XCTAssertTrue(morning.contains("healthLine"))
         XCTAssertTrue(morning.contains("question"))

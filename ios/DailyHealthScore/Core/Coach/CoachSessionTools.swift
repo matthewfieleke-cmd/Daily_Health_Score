@@ -7,6 +7,24 @@ import FoundationModels
 import Vision
 #endif
 
+/// What each tool returns. A description names the result. Whether this
+/// message needs the tool is the model's judgment.
+enum CoachToolCopy {
+    static let lookupTodayHealth = "Today's Daily Health Score: sleep, fiber, exercise, this week's averages, and sleep HRV when nights have been recorded."
+    static let lookupDays = "Sleep, fiber, exercise, the score, and sleep HRV for a past day or a stretch of days, with the averages across the window and the days that have no record. Give dates as yyyy-MM-dd, or count back from today with startDaysAgo and endDaysAgo."
+    static let lookupSMARTGoals = "Saved SMART goals with exact goalIDs, progress, pace, deadlines, and cues, including a draft saved earlier in the chat. A goal this chat was opened on is marked SELECTED."
+    static let lookupWhatWeRemember = "Dated notes about this person that match a topic, and summaries of other chats that match it. The topic chooses which notes come back."
+    static let lookupWeightTrend = "Weight trend, BMI, age, and sex shared from Apple Health, and a kilograms figure for formulas. Age is included only when Health shared it."
+    static let lookupFood = "Nutrition facts for a food or branded product from USDA FoodData Central and Open Food Facts: calories, protein, fiber, sugars, added sugars, fat, and minerals per serving when listed. The result says exact, candidates, or none. A number stated for a food should be one of these results. Candidate items are not an exact total. A food that is only being recommended does not need a lookup."
+    static let searchEvidence = "PubMed records with title, journal, year, PMID, and abstract kept together. Call when the person asks for evidence or a citation, or when a current, unfamiliar, or precise claim needs verification. Ordinary explanations should use your own expertise. A keyword match is evidence only when the study actually answers the question; cite only what comes back."
+    static let calculate = "Exact arithmetic and weight conversion. Use for any total, difference, percentage, unit conversion, or per-kilogram figure instead of computing in prose, e.g. '250 + 230 + 100', '20 / 50 * 100', or '268.7 lb to kg'. A g/kg formula must use kilograms, never pounds."
+    static let rememberAboutPerson = "Stores one sentence this person said, under 240 characters, in one file: aboutYou, people, patterns, coaching, goals, likes, routines, body, or recent. Their framing, third person. stated means they said it; inferred means it is a read of what they said. Only what they said, not a metric, the score, or advice. An update or removal names the existing note."
+    static let proposeSMARTGoal = "Hands the person a SMART goal draft to review — a new goal, or an update to a saved one by exact goalID — once the action is clear. Details the person did not supply may be useful suggestions, but identify them as suggestions in your reply and invite changes. Only one draft can be on screen at a time; a second call replaces the first. Nothing is saved until they save it."
+    static let logGoalCheckIn = "Asks them to confirm a check-in on a saved SMART goal for today or yesterday, after they said they completed that action. The goalID is the one on the saved goals. It is not logged until they confirm."
+    static let readTextInPhoto = "Read the text in an attached photo, such as a nutrition label, menu, or note. Use when exact words or numbers in the photo matter."
+    static let readBarcodeInPhoto = "Read a barcode or QR code in an attached photo. Use when a package code would identify the product."
+}
+
 /// What the Coach can reach for during a reply, and what it can ask the app to
 /// do. Facts are read live from the context so a long-lived session never sees
 /// stale numbers; actions land in the context for the app to validate and show.
@@ -32,11 +50,11 @@ enum CoachSessionTools {
         #if canImport(Vision)
         tools.append(OCRTool(
             name: "readTextInPhoto",
-            description: "Read the text in an attached photo, such as a nutrition label, menu, or note. Use when exact words or numbers in the photo matter."
+            description: CoachToolCopy.readTextInPhoto
         ))
         tools.append(BarcodeReaderTool(
             name: "readBarcodeInPhoto",
-            description: "Read a barcode or QR code in an attached photo. Use when a package code would identify the product."
+            description: CoachToolCopy.readBarcodeInPhoto
         ))
         #endif
         return tools
@@ -50,7 +68,7 @@ enum CoachSessionTools {
 #if canImport(FoundationModels)
 struct CoachLookupTodayTool: Tool {
     let name = "lookupTodayHealth"
-    let description = "Today's Daily Health Score with sleep, fiber, exercise, this week's averages, HRV against their usual range, and computed SMART goal status. Call only when the answer depends on today's record or this week's averages, not for general health advice."
+    let description = CoachToolCopy.lookupTodayHealth
     let context: CoachLiveContext
 
     @Generable
@@ -68,7 +86,7 @@ struct CoachLookupTodayTool: Tool {
 
 struct CoachLookupDaysTool: Tool {
     let name = "lookupDays"
-    let description = "Sleep, fiber, exercise, the score, and sleep HRV for any past day or stretch of days, with the averages across the window and the days that have no record. Call for a question about a particular day, a week, a month, or any window other than today."
+    let description = CoachToolCopy.lookupDays
     let context: CoachLiveContext
 
     @Generable
@@ -115,7 +133,7 @@ struct CoachLookupDaysTool: Tool {
 
 struct CoachLookupGoalsTool: Tool {
     let name = "lookupSMARTGoals"
-    let description = "Saved SMART goals with exact goalIDs, progress, pace, deadlines, and cues. Call when goals come up, before proposing a change, and before offering to log a check-in. This list is the truth about what is saved, including a draft they saved earlier in the chat."
+    let description = CoachToolCopy.lookupSMARTGoals
     let context: CoachLiveContext
 
     @Generable
@@ -133,7 +151,7 @@ struct CoachLookupGoalsTool: Tool {
 
 struct CoachLookupPersonTool: Tool {
     let name = "lookupWhatWeRemember"
-    let description = "Relevant dated notes about this person — who is in their life, their patterns and what helps, how they eat, their routines, their health, recent state — plus matching summaries of other chats. Call when knowing this person would change the answer. Give the subject you need; only matching material comes back. Leave it when a stranger would have gotten the same reply."
+    let description = CoachToolCopy.lookupWhatWeRemember
     let context: CoachLiveContext
 
     @Generable
@@ -147,8 +165,8 @@ struct CoachLookupPersonTool: Tool {
         await context.log(
             "lookupWhatWeRemember",
             detail: arguments.topic,
-            outcome: payload.contains("No saved notes match this topic.")
-                && !payload.contains("RECENT CONVERSATIONS")
+            outcome: payload.hasPrefix("No saved notes match this topic.")
+                && !payload.contains("\n- ")
                 ? "no match"
                 : "success"
         )
@@ -158,7 +176,7 @@ struct CoachLookupPersonTool: Tool {
 
 struct CoachBodyTrendTool: Tool {
     let name = "lookupWeightTrend"
-    let description = "The person's weight trend, BMI, age, sex, and a kilograms value for formulas, as shared from Apple Health. Call when weight, age, protein, or energy needs come up. Use kilograms for every per-kilogram calculation, speak in the person's preferred unit, and never guess an age."
+    let description = CoachToolCopy.lookupWeightTrend
     let context: CoachLiveContext
 
     @Generable
@@ -178,7 +196,7 @@ struct CoachBodyTrendTool: Tool {
 
 struct CoachRememberTool: Tool {
     let name = "rememberAboutPerson"
-    let description = "Keep a dated note about this person in one of nine files. One full sentence with its context, in their own framing (a struggle they are working on is not a habit they keep), third person, under 240 characters, their phrases in quotes. Date a fact only when they gave the date; never invent a month. Never their metrics, the score, or your own advice. Only what they actually said."
+    let description = CoachToolCopy.rememberAboutPerson
     let context: CoachLiveContext
 
     @Generable
@@ -205,7 +223,7 @@ struct CoachRememberTool: Tool {
         )
         await context.log(
             "rememberAboutPerson",
-            outcome: result == "Kept." ? "accepted" : "rejected"
+            outcome: result == "On file." ? "accepted" : "rejected"
         )
         return result
     }
@@ -213,7 +231,7 @@ struct CoachRememberTool: Tool {
 
 struct CoachProposeGoalTool: Tool {
     let name = "proposeSMARTGoal"
-    let description = "Hand the person a SMART goal draft to review — a new goal, or an update to a saved one by exact goalID — once the action is clear. Details the person did not supply may be useful suggestions, but identify them as suggestions in your reply and invite changes. Only one draft can be on screen at a time; a second call replaces the first. Nothing is saved until they save it."
+    let description = CoachToolCopy.proposeSMARTGoal
     let context: CoachLiveContext
 
     @Generable
@@ -263,7 +281,7 @@ struct CoachProposeGoalTool: Tool {
 
 struct CoachLogCheckInTool: Tool {
     let name = "logGoalCheckIn"
-    let description = "Offer to record a check-in on a saved SMART goal, only when the person clearly said they completed that action today or yesterday. Call lookupSMARTGoals first; that list is what is saved. Never say the check-in is already logged."
+    let description = CoachToolCopy.logGoalCheckIn
     let context: CoachLiveContext
 
     @Generable

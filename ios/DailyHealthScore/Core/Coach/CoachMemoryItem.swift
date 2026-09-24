@@ -647,6 +647,35 @@ enum CoachMemoryLogic {
         )
     }
 
+    /// Matching notes for a tool result. Sentences only: file headings turn
+    /// the list into an assignment.
+    static func matchingNotes(
+        items: [CoachMemoryItem],
+        relevantTo topic: String,
+        at date: Date = Date(),
+        limit: Int = 6,
+        calendar: Calendar = .current
+    ) -> String {
+        let relevant = self.items(relevantTo: topic, in: items, at: date, limit: limit)
+        guard !relevant.isEmpty else {
+            return "No saved notes match this topic."
+        }
+        return relevant.map { item in
+            var line = "\(entryDate(item.createdAt, now: date, calendar: calendar)): \(item.displayContent)"
+            if item.provenance.isStated {
+                line += " (stated)"
+            } else if item.provenance == .coachNoted || item.provenance.yieldsToConfirmed {
+                line += " (inferred)"
+            }
+            if item.section.isStateFile,
+               let days = calendar.dateComponents([.day], from: item.createdAt, to: date).day,
+               days > recentWindowDays {
+                line += " (older)"
+            }
+            return line
+        }.joined(separator: "\n")
+    }
+
     /// The durable files with nothing in them yet, in the order the intake
     /// asks about them. Recent is state, not a file to fill.
     static func emptySections(in items: [CoachMemoryItem]) -> [CoachMemorySection] {

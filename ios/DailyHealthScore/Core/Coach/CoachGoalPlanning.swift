@@ -122,8 +122,8 @@ enum CoachGoalPlanning {
             if a != b { return a }
             return a ? lhs.endDate < rhs.endDate : lhs.endDate > rhs.endDate
         }
-        var lines = ["CURRENT GOALS (live saved state; overrides chat memory):"]
-        if goals.isEmpty { lines.append("No saved SMART goals. You can help create one without Health data.") }
+        var lines = ["Saved SMART goals:"]
+        if goals.isEmpty { lines.append("No SMART goals saved.") }
         for goal in ordered.prefix(4) {
             let marker = goal.id == focusedGoalID ? "SELECTED " : ""
             lines.append("\(marker)goalID=\(goal.id.uuidString); theme=\(goal.relevantTheme.rawValue); target=\(goal.targetCount); end=\(goal.endDate.formatted(date: .abbreviated, time: .shortened)); status=\(goal.status.rawValue).")
@@ -139,9 +139,9 @@ enum CoachGoalPlanning {
             )
             lines.append(contentsOf: history)
         }
-        if goals.count > 4 { lines.append("\(goals.count - 4) more goals are not shown. Ask the user to open a goal to work on it specifically.") }
+        if goals.count > 4 { lines.append("\(goals.count - 4) more goals are not shown.") }
         if let focusedGoalID, !goals.contains(where: { $0.id == focusedGoalID }) {
-            lines.append("The selected goal was deleted. Do not reconstruct or update it from memory.")
+            lines.append("The selected goal is no longer saved.")
         }
         if let previousProposal {
             let edit = previousProposal.edit

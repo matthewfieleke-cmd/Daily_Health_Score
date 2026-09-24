@@ -100,6 +100,25 @@ struct CoachFocusContext: Identifiable, Equatable, Sendable {
         lines.append("Missing Health data is unlogged, not zero activity and not invented behavior.")
         return lines.joined(separator: "\n")
     }
+
+    /// What they tapped, once, at the start of a chat. The numbers they were
+    /// looking at, without instructions about how to answer.
+    var openingFact: String {
+        var lines = ["Opened from \(title)."]
+        if let metricName {
+            lines.append("Metric: \(metricName)\(unit.map { " (\($0))" } ?? "").")
+        }
+        if let startDateKey, let endDateKey, startDateKey != endDateKey {
+            lines.append("Selected period: \(DateHelpers.formatDisplayDate(startDateKey)) through \(DateHelpers.formatDisplayDate(endDateKey)).")
+        } else if let startDateKey {
+            lines.append("Selected date: \(DateHelpers.formatDisplayDate(startDateKey)).")
+        }
+        if !valueSummary.isEmpty { lines.append(valueSummary) }
+        if !freshness.isEmpty, !freshness.contains("Do not") {
+            lines.append(freshness)
+        }
+        return lines.joined(separator: "\n")
+    }
 }
 
 enum CoachFocusContextBuilder {

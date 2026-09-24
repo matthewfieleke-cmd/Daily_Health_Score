@@ -148,8 +148,6 @@ final class LifestyleCoachController: ObservableObject {
         }
         defer { if checkInGenerationID == generationID { isGeneratingCheckIn = false } }
 
-        await compileProfileIfNeeded()
-
         do {
             let snapshot = CoachSnapshotBuilder.build(
                 today: record,
@@ -164,7 +162,6 @@ final class LifestyleCoachController: ObservableObject {
             let generated = try await model.generateCheckIn(
                 kind: kind,
                 snapshot: snapshot,
-                profile: memory.compiledProfile,
                 goalRows: rows,
                 trend: trend,
                 goalPaceDirective: SMARTGoalPace.directive(goals: goals, now: now, calendar: calendar),
@@ -242,9 +239,6 @@ final class LifestyleCoachController: ObservableObject {
 
         let memoryRevisionAtStart = memory.memoryRevision
         chatError = nil
-        // A stale biography must not answer this message. Compile first when
-        // the notes have changed; the composer is already showing the wait.
-        await compileProfileIfNeeded()
         pendingGoalCheckIn = nil
         defer { if chatGenerationID == generationID { isChatBusy = false } }
 
@@ -255,8 +249,7 @@ final class LifestyleCoachController: ObservableObject {
         let todayKey = todayRecord?.date ?? DateHelpers.localDateKey()
         let context = CoachReplyContext(
             thread: thread,
-            isFirstReply: isFirstReply,
-            emptyMemorySections: memory.emptySectionLabels
+            isFirstReply: isFirstReply
         )
 
         do {
@@ -287,7 +280,6 @@ final class LifestyleCoachController: ObservableObject {
                 recentTurns: memory.recentTurnsForPrompt(limit: CoachContextBudget.maxTranscriptTurns),
                 live: live,
                 focus: focus,
-                personBackground: memory.compiledProfile,
                 context: context
             )
             guard chatGenerationID == generationID else { return }
@@ -487,7 +479,6 @@ final class LifestyleCoachController: ObservableObject {
                 model.forgetSession(for: evalThread.id)
             }
         }
-        await compileProfileIfNeeded()
         do {
             var turns: [CoachChatTurn] = []
             var transcript: [String] = []
@@ -524,8 +515,7 @@ final class LifestyleCoachController: ObservableObject {
                 turns.append(CoachChatTurn(role: .user, text: message))
                 let context = CoachReplyContext(
                     thread: evalThread,
-                    isFirstReply: index == 0,
-                    emptyMemorySections: memory.emptySectionLabels
+                    isFirstReply: index == 0
                 )
                 let result = try await model.reply(
                     to: message,
@@ -533,7 +523,6 @@ final class LifestyleCoachController: ObservableObject {
                     live: evalLive,
                     forcedTier: forcedTier,
                     reasoningDepth: reasoningDepth,
-                    personBackground: memory.compiledProfile,
                     context: context
                 )
                 turns.append(

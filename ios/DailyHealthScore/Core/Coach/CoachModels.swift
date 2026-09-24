@@ -235,6 +235,56 @@ struct CoachSnapshot: Equatable, Sendable {
         return lines.joined(separator: "\n")
     }
 
+    /// Today's numbers for a chat tool. The Home card keeps `promptBlock`,
+    /// including its scheduling rules and status labels. A conversation gets
+    /// the figures without those orders, and without goals or weight, which
+    /// have their own tools.
+    var toolFacts: String {
+        var lines: [String] = []
+        lines.append("Today, \(todayDisplay).")
+        lines.append(String(format: "Score: %.1f of 10.", totalScore))
+        for metric in metrics {
+            lines.append(Self.toolFactLine(metric))
+        }
+        var weekly = ["\(weekDaysWithData) of 7 days have records"]
+        if let weekAvgScore {
+            weekly.append(String(format: "average score %.1f", weekAvgScore))
+        }
+        if let weekAvgSleep {
+            weekly.append(String(format: "average sleep %.1f h", weekAvgSleep))
+        }
+        if let weekAvgFiber {
+            weekly.append(String(format: "average fiber %.0f g", weekAvgFiber))
+        }
+        if let weekAvgExercise {
+            weekly.append(String(format: "average exercise %.0f min", weekAvgExercise))
+        }
+        lines.append("This week: \(weekly.joined(separator: "; ")).")
+        lines.append("Fiber logged on \(fiberDaysLoggedInWeek) of 7 days.")
+        if let hrvSummary {
+            lines.append(Self.plainHRVFact(hrvSummary))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func toolFactLine(_ metric: CoachMetricStatus) -> String {
+        let valueDecimals = metric.unit == "min" ? 0 : 1
+        let goalDecimals = metric.unit == "min" || metric.goal.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 1
+        let valueText = String(format: "%.\(valueDecimals)f", metric.value)
+        let goalText = String(format: "%.\(goalDecimals)f", metric.goal)
+        if metric.level == .missing {
+            return "\(metric.name): no record today. Goal \(goalText) \(metric.unit)."
+        }
+        return "\(metric.name): \(valueText) \(metric.unit) of a \(goalText) \(metric.unit) goal."
+    }
+
+    /// The HRV sentence without the orders appended for the Home card.
+    private static func plainHRVFact(_ summary: String) -> String {
+        summary
+            .replacingOccurrences(of: " Do not interpret single nights.", with: "")
+            .replacingOccurrences(of: " Night-to-night swings of 10–20% are normal; never diagnose from this.", with: "")
+    }
+
     /// Date, clock, and goals as facts for chat — no scheduling rules, which
     /// belong to the Home card, not to a conversation.
     var chatContextBlock: String {

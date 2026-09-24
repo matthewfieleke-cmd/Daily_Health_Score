@@ -139,6 +139,16 @@ final class CoachMemoryFilesLogicTests: XCTestCase {
 
         let missing = CoachMemoryLogic.promptBlock(items: items, relevantTo: "swimming")
         XCTAssertEqual(missing, "No saved notes match this topic.")
+
+        let notes = CoachMemoryLogic.matchingNotes(items: items, relevantTo: "conflict with wife")
+        XCTAssertTrue(notes.contains("Maureen"))
+        XCTAssertTrue(notes.contains("negative intent"))
+        XCTAssertFalse(notes.contains("PEOPLE"))
+        XCTAssertFalse(notes.contains("Write down"))
+        XCTAssertEqual(
+            CoachMemoryLogic.matchingNotes(items: items, relevantTo: "swimming"),
+            "No saved notes match this topic."
+        )
     }
 
     func test_broadMemoryTopicCanDeliberatelyReturnAllNotes() {
