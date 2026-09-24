@@ -43,9 +43,5 @@
 	</dict>
 	<key>UILaunchScreen</key>
 	<dict/>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>healthkit</string>
-	</array>
 </dict>
 </plist>
