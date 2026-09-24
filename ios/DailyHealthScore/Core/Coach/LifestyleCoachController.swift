@@ -530,10 +530,10 @@ final class LifestyleCoachController: ObservableObject {
                 let result = try await model.reply(
                     to: message,
                     recentTurns: turns,
-                    personBackground: memory.compiledProfile,
                     live: evalLive,
                     forcedTier: forcedTier,
                     reasoningDepth: reasoningDepth,
+                    personBackground: memory.compiledProfile,
                     context: context
                 )
                 turns.append(
