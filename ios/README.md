@@ -66,7 +66,7 @@ Debug installs from Xcode 27 also copy that companion into `PlugIns/` so the on-
 
 After `xcodegen generate`, confirm **DailyHealthScore → Build Phases → Embed Watch Content**: Destination **Products Directory**, Subpath contains `Watch` — not “Plugins and Foundation…”. You should also see **Mirror Watch companion into PlugIns for Debug device install**.
 
-`xcodegen generate` clears **Team**. Set Team again on **DailyHealthScore**, **DailyHealthScoreWatch**, and **DailyHealthScoreWatchWidgets** (not Tests). Enable App Group `group.com.dailyhealthscore.app.mf` on those three, and **HealthKit** on the Watch and widget targets (iPhone already has it). On **DailyHealthScore** also add **Access to models on Private Cloud Compute** if Signing complains. Do not add Background Modes. After generate, confirm the widget Info plist has `WKAppBundleIdentifier` = `com.dailyhealthscore.app.mf.watchkitapp`.
+`xcodegen generate` clears **Team**. Set Team again on **DailyHealthScore**, **DailyHealthScoreWatch**, and **DailyHealthScoreWatchWidgets** (not Tests). Enable App Group `group.com.dailyhealthscore.app.mf` on those three, and **HealthKit** on the Watch and widget targets (iPhone already has it). On **DailyHealthScore** also add **Access to models on Private Cloud Compute** if Signing complains. Do not add Background Modes. `healthkit` is not a valid background mode and App Store Connect rejects it. Health updates use the HealthKit background-delivery entitlement, which is already on the iPhone app. After generate, confirm the widget Info plist has `WKAppBundleIdentifier` = `com.dailyhealthscore.app.mf.watchkitapp`.
 
 Then, on a **newly paired Ultra 4** (or any Watch that will not take the app):
 

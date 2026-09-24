@@ -73,6 +73,9 @@ class BundleIDAlignmentTests(unittest.TestCase):
         self.assertFalse(watch["WKWatchOnlyApp"])
         self.assertTrue(watch["WKApplication"])
         self.assertFalse(watch["WKRunsIndependentlyOfCompanionApp"])
+        self.assertNotIn("UIBackgroundModes", iphone)
+        iphone_ent = _plist(IOS / "DailyHealthScore" / "DailyHealthScore.entitlements")
+        self.assertTrue(iphone_ent["com.apple.developer.healthkit.background-delivery"])
 
     def test_widget_declares_watch_app_bundle_and_healthkit(self) -> None:
         widget = _plist(IOS / "DailyHealthScoreWatchWidgets" / "Info.plist")
