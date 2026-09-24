@@ -56,7 +56,7 @@ Do **not** `git stash pop` afterward. `main` already has the Private Cloud Compu
 
 ## Watch companion (Series 10 / Ultra 4)
 
-The Watch app is a companion of the iPhone app (not independent). Apple Watch Ultra 4 ships with **watchOS 27** and the **S11** chip. Pairing requires **iOS 27** on iPhone. **watchOS 27 hides Watch apps that do not include a 64-bit (`arm64`) slice**, so the Watch and widget targets are pinned to `arm64`.
+The Watch app is a companion of the iPhone app (not independent). Apple Watch Ultra 4 ships with **watchOS 27** and the **S11** chip. Pairing requires **iOS 27** on iPhone. **watchOS 27 hides Watch apps that do not include a 64-bit (`arm64`) slice**, and an upload whose Watch minimum is 26 is rejected without an `arm64_32` slice. The Watch and widget targets ship both, with `ONLY_ACTIVE_ARCH` off so a connected watch cannot thin the archive.
 
 Apple’s App Store layout is:
 
