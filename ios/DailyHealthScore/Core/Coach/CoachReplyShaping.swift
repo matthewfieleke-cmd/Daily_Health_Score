@@ -70,23 +70,6 @@ enum CoachReasoningDepth: String, CaseIterable, Equatable, Sendable {
 }
 
 enum CoachReplyPolish {
-    static func sentences(in text: String) -> [String] {
-        var result: [String] = []
-        var current = ""
-        for character in text {
-            current.append(character)
-            if character == "." || character == "!" || character == "?" || character == "\n" {
-                let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty { result.append(trimmed) }
-                current = ""
-            }
-        }
-        let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !tail.isEmpty { result.append(tail) }
-        return result
-    }
-
-    /// Prompt block, or nil when the chat has no suggestions yet.
     private static let statusTokens = [
         "GOAL EXCEEDED", "BELOW GOAL", "GOAL MET", "NO DATA"
     ]
@@ -125,41 +108,15 @@ enum CoachReplyPolish {
         return cleaned
     }
 
-    /// Strips status tokens the model was told never to print, removes leaked
-    /// output fields, and caps runaway length at a sentence boundary well past
-    /// the charter ceiling.
-    static func polish(_ text: String, maxWords: Int = CoachCharter.maxReplyWords) -> String {
+    /// Strips status tokens and leaked output fields. Length is the model's
+    /// judgment; a reply is not cut to a word count.
+    static func polish(_ text: String) -> String {
         var cleaned = stripLeakedFields(text)
         for token in statusTokens {
             cleaned = cleaned.replacingOccurrences(of: " — \(token)", with: "")
             cleaned = cleaned.replacingOccurrences(of: "— \(token)", with: "")
             cleaned = cleaned.replacingOccurrences(of: token, with: "")
         }
-        cleaned = cleaned.replacingOccurrences(of: "  ", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        let hardCap = maxWords + maxWords / 3
-        guard wordCount(cleaned) > hardCap else { return cleaned }
-        // Cut at paragraph boundaries so lists and breaks survive; only a single
-        // oversized paragraph is cut at a sentence.
-        var kept: [String] = []
-        var count = 0
-        for paragraph in cleaned.components(separatedBy: "\n\n") {
-            let words = wordCount(paragraph)
-            if count + words > maxWords {
-                if kept.isEmpty {
-                    var sentences: [String] = []
-                    for sentence in Self.sentences(in: paragraph) {
-                        let sentenceWords = wordCount(sentence)
-                        if count + sentenceWords > maxWords, !sentences.isEmpty { break }
-                        sentences.append(sentence)
-                        count += sentenceWords
-                    }
-                    kept.append(sentences.joined(separator: " "))
-                }
-                break
-            }
-            kept.append(paragraph)
-            count += words
-        }
-        return kept.joined(separator: "\n\n")
+        return cleaned.replacingOccurrences(of: "  ", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

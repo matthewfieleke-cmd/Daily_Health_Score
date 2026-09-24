@@ -161,6 +161,9 @@ final class CoachFocusContextTests: XCTestCase {
         XCTAssertTrue(focus.isHistorical)
         XCTAssertTrue(focus.promptBlock.contains("2026"))
         XCTAssertTrue(focus.promptBlock.contains("not today") || focus.promptBlock.contains("historical") || focus.promptBlock.contains("Do not silently switch"))
+        XCTAssertTrue(focus.openingFact.contains("Opened from"))
+        XCTAssertFalse(focus.openingFact.contains("Do not"))
+        XCTAssertFalse(focus.openingFact.contains("SELECTED COACHING"))
         XCTAssertFalse(focus.promptBlock.contains("September 10") && focus.valueSummary.contains("today's"))
     }
 

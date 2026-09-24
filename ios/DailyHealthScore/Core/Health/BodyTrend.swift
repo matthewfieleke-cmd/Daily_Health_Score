@@ -156,21 +156,19 @@ struct BodyTrend: Equatable, Sendable {
         var lines: [String] = []
         let person = [ageYears.map { "age \($0)" }, biologicalSex].compactMap { $0 }
         if !person.isEmpty {
-            lines.append("Person: \(person.joined(separator: ", ")) per Health — the only source for either; never guess an age.")
+            lines.append("Person: \(person.joined(separator: ", ")) per Health.")
         }
         if let smoothed = smoothedKilograms ?? latestKilograms {
             var line = "Weight: about \(unit.text(fromKilograms: smoothed)), seven-day average"
             if let days = daysSinceLatest {
                 if days > BodyTrend.staleAfterDays {
-                    line += "; the last reading is \(days) days old, so treat it as background"
+                    line += "; the last reading is \(days) days old"
                 } else if days > 0 {
                     line += "; last reading \(days) day\(days == 1 ? "" : "s") ago"
                 }
             }
             lines.append(line + ".")
-            lines.append(
-                "Calculation weight: \(BodyTrend.round1(smoothed)) kg. Use this kilograms value for every per-kilogram formula; speak to the person in \(unit == .pounds ? "pounds" : "kilograms")."
-            )
+            lines.append("Calculation weight: \(BodyTrend.round1(smoothed)) kg.")
         }
         if let change = changeOverFourWeeks, let direction = direction4w {
             lines.append(changeSentence(change, direction: direction, period: "four weeks"))
@@ -179,7 +177,7 @@ struct BodyTrend: Equatable, Sendable {
             lines.append(changeSentence(change, direction: direction, period: "twelve weeks"))
         }
         if changeOverFourWeeks == nil, changeOverTwelveWeeks == nil, readingCount > 0 {
-            lines.append("Not enough readings yet for a trend; say so if asked.")
+            lines.append("Not enough readings yet for a trend.")
         }
         if let bmi {
             lines.append("BMI about \(bmi).")

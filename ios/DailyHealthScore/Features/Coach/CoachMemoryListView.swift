@@ -53,9 +53,9 @@ struct CoachMemoryListView: View {
                                 .font(.subheadline)
                                 .textSelection(.enabled)
                         } header: {
-                            Text("Background")
+                            Text("Summary")
                         } footer: {
-                            Text("What most changes your care. The notes below are the full record.")
+                            Text("A summary of the notes below. Coach is not given this.")
                         }
                     }
                     if !store.recentChanges.isEmpty {

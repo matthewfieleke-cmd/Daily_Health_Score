@@ -120,7 +120,7 @@ final class CoachLiveContext {
     // MARK: - Payloads
 
     var todayPayload: String {
-        snapshot?.promptBlock ?? "No live daily record is available right now. Say so; never invent numbers."
+        snapshot?.toolFacts ?? "No live daily record is available right now."
     }
 
     /// Any past day or window. Unreadable arguments get the dates back rather
@@ -149,18 +149,14 @@ final class CoachLiveContext {
     }
 
     func personPayload(topic: String) -> String {
-        let notes = CoachMemoryLogic.promptBlock(
+        let notes = CoachMemoryLogic.matchingNotes(
             items: memoryItems,
             relevantTo: topic,
             limit: 6
         )
         let conversations = relevantConversationLines(topic: topic)
-        var parts: [String] = []
-        parts.append("SAVED NOTES:\n" + notes)
-        if !conversations.isEmpty {
-            parts.append("RECENT CONVERSATIONS (other chats):\n" + conversations)
-        }
-        return parts.joined(separator: "\n\n")
+        guard !conversations.isEmpty else { return notes }
+        return notes + "\n\n" + conversations
     }
 
     var bodyPayload: String {
@@ -194,7 +190,7 @@ final class CoachLiveContext {
             return "Not kept: notes must come from what the person actually said, not from your own suggestions."
         }
         pendingMemoryUpdates.append(update)
-        return "Kept."
+        return "On file."
     }
 
     func propose(

@@ -48,20 +48,16 @@ enum CoachFoodService {
         return LookupResult(facts: rankedFacts(facts, query: query, limit: 5), failures: failures)
     }
 
-    /// Said on every food result. A photo already in the chat is the label;
-    /// asking for one is only for the turn that does not have it.
-    static let attachedPhotoGuidance = "If a photo of the label is already attached, read that photo and use the text and barcode tools when the digits or the code matter. Ask for a photo only when none is attached."
-
     static func formatted(_ facts: [CoachFoodFact], query: String, failures: [String] = []) -> String {
         guard !facts.isEmpty else {
             if !failures.isEmpty {
-                return "Food lookup unavailable for \"\(query)\" (\(failures.joined(separator: "; "))). Say the database did not respond. Do not invent label values. \(attachedPhotoGuidance)"
+                return "Food lookup unavailable for \"\(query)\" (\(failures.joined(separator: "; "))). No label values were returned."
             }
-            return "No database match for \"\(query)\". Do not invent label values. \(attachedPhotoGuidance)"
+            return "No database match for \"\(query)\". Do not invent label values."
         }
         let quality = matchQuality(facts, query: query)
         if quality == .none {
-            return "No database match for \"\(query)\". Returned products matched a brand or generic word but not the named product. Do not invent label values. \(attachedPhotoGuidance)"
+            return "No database match for \"\(query)\". Returned products matched a brand or generic word but not the named product. Do not invent label values."
         }
         let lines = facts.enumerated().map { index, fact in "\(index + 1). \(fact.line)" }
         let heading: String
@@ -69,14 +65,14 @@ enum CoachFoodService {
         switch quality {
         case .exact:
             heading = "Exact database match for \"\(query)\""
-            footer = "The package may have been reformulated; name the source and serving. Use the calculator for totals. Sum only nutrients listed for every item; when any label is partial, call the result a partial total and name what is missing. \(attachedPhotoGuidance)"
+            footer = "The package may have been reformulated."
         case .candidates:
             heading = "Candidate database matches for \"\(query)\" — no exact current label is confirmed"
-            footer = "Do not use candidates in an exact total. \(attachedPhotoGuidance)"
+            footer = "Do not use candidates in an exact total."
         case .none:
             // Guarded above; retained so the classification stays total.
             heading = "No database match for \"\(query)\""
-            footer = "Do not invent label values. \(attachedPhotoGuidance)"
+            footer = "Do not invent label values."
         }
         return """
         \(heading):

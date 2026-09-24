@@ -6,9 +6,6 @@ struct CoachReplyContext: Equatable, Sendable {
     var thread: CoachThread?
     /// No Coach reply exists yet in this chat (openers do not count).
     var isFirstReply: Bool
-    /// Memory files with nothing in them yet; the intake asks toward these.
-    var emptyMemorySections: [String] = []
-    var isAcquaintance: Bool { thread?.kind == .acquaintance }
 }
 
 /// A logged check-in the Coach heard in chat, waiting for the person to confirm.

@@ -119,9 +119,9 @@ final class CoachGoalPlanningTests: XCTestCase {
         let context = CoachGoalPlanning.context(
             goals: [], focusedGoalID: original.id, previousProposal: draft, now: now
         )
-        XCTAssertTrue(context.contains("selected goal was deleted"))
+        XCTAssertTrue(context.contains("no longer saved"))
         XCTAssertTrue(context.contains("UNSAVED DRAFT"))
-        XCTAssertTrue(context.contains("without Health data"))
+        XCTAssertTrue(context.contains("No SMART goals saved."))
     }
 
     func test_goalCacheKeyChangesWithProgressAndPlanButNotInputOrder() {

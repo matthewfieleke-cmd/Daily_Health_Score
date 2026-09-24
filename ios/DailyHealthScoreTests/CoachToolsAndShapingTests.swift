@@ -103,19 +103,21 @@ final class CoachFoodDataTests: XCTestCase {
         let missing = CoachFoodService.formatted([], query: "unicorn bar")
         XCTAssertTrue(missing.contains("No database match"))
         XCTAssertTrue(missing.contains("Do not invent label values"))
-        XCTAssertTrue(missing.contains(CoachFoodService.attachedPhotoGuidance))
+        XCTAssertFalse(missing.contains("Ask for a photo"))
         XCTAssertFalse(missing.lowercased().contains("estimate"))
         let unavailable = CoachFoodService.formatted([], query: "unicorn bar", failures: ["USDA: HTTP 429 rate limited", "Open Food Facts: timed out"])
         XCTAssertTrue(unavailable.contains("Food lookup unavailable"))
         XCTAssertTrue(unavailable.contains("HTTP 429 rate limited"))
-        XCTAssertTrue(unavailable.contains("Say the database did not respond"))
-        XCTAssertTrue(unavailable.contains("Do not invent label values"))
+        XCTAssertTrue(unavailable.contains("No label values were returned"))
+        XCTAssertFalse(unavailable.contains("Do not invent label values"))
         XCTAssertEqual(CoachFoodService.FetchFailure.http(429).description, "HTTP 429 rate limited")
         XCTAssertEqual(CoachFoodService.FetchFailure.http(503).description, "HTTP 503")
         let fact = CoachFoodFact(name: "Oats", brand: "", servingDescription: "40 g", calories: 150, proteinGrams: 5, fiberGrams: 4, totalSugarGrams: 1, addedSugarGrams: nil, fatGrams: nil, carbGrams: nil, source: "USDA FoodData Central")
         let text = CoachFoodService.formatted([fact], query: "oats")
         XCTAssertTrue(text.contains("1. Oats — per 40 g: 150 kcal · 5 g protein · 4 g fiber · 1 g sugars"))
-        XCTAssertTrue(text.contains("calculator"))
+        XCTAssertTrue(text.contains("reformulated"))
+        XCTAssertFalse(text.contains("calculator"))
+        XCTAssertFalse(text.contains("Ask for a photo"))
     }
 
     func test_foodMatchesDistinguishExactCandidatesAndConflicts() {
@@ -153,7 +155,7 @@ final class CoachFoodDataTests: XCTestCase {
         let output = CoachFoodService.formatted([fruit], query: "That's It bar")
         XCTAssertTrue(output.hasPrefix("Candidate database matches"))
         XCTAssertTrue(output.contains("Do not use candidates in an exact total"))
-        XCTAssertTrue(output.contains(CoachFoodService.attachedPhotoGuidance))
+        XCTAssertFalse(output.contains("Ask for a photo"))
         XCTAssertEqual(CoachFoodService.matchQuality([], query: "anything"), .none)
     }
 
@@ -305,20 +307,21 @@ final class BodyTrendTests: XCTestCase {
         XCTAssertEqual(pounds.unit, .pounds)
         XCTAssertTrue(pounds.promptBlock.contains("269.2 lb"), pounds.promptBlock)
         XCTAssertTrue(pounds.promptBlock.contains("Calculation weight: 122.1 kg"))
-        XCTAssertTrue(pounds.promptBlock.contains("speak to the person in pounds"))
+        XCTAssertFalse(pounds.promptBlock.contains("speak to the person"))
         XCTAssertEqual(pounds.bmi ?? 0, 36.5, accuracy: 0.1, "BMI is unit-free")
 
         measurements.unit = .kilograms
         let kilos = BodyTrend.build(from: measurements, now: now, calendar: calendar)!
         XCTAssertTrue(kilos.promptBlock.contains("122.1 kg"))
-        XCTAssertTrue(kilos.promptBlock.contains("speak to the person in kilograms"))
+        XCTAssertTrue(kilos.promptBlock.contains("Calculation weight: 122.1 kg"))
 
         var withPerson = measurements
         withPerson.ageYears = 43
         withPerson.biologicalSex = "male"
         let person = BodyTrend.build(from: withPerson, now: now, calendar: calendar)!
         XCTAssertTrue(person.promptBlock.contains("Person: age 43, male per Health"))
-        XCTAssertTrue(person.promptBlock.contains("never guess an age"))
+        XCTAssertFalse(person.promptBlock.contains("never guess an age"))
+        XCTAssertTrue(CoachToolCopy.lookupWeightTrend.contains("only when Health shared it"))
         let ageOnly = BodyTrend.build(from: BodyMeasurements(ageYears: 43), now: now, calendar: calendar)
         XCTAssertNotNil(ageOnly, "Age alone is worth carrying")
         XCTAssertFalse(ageOnly!.promptBlock.contains("Calculation weight"), "No weight, no unit sentence")
@@ -411,16 +414,40 @@ final class CoachReplyShapingTests: XCTestCase {
         XCTAssertTrue(FoundationModelsCoach.describe(FakeOverflowError()).contains("4097 tokens"))
     }
 
-    func test_polishStripsTokensAndCapsRunawayLength() {
+    func test_polishStripsTokensAndKeepsTheReply() {
         XCTAssertEqual(CoachReplyPolish.polish("Fiber is at 7 g — BELOW GOAL by 33 g today."), "Fiber is at 7 g by 33 g today.")
         let paragraph = Array(repeating: "Ten words in this sentence to fill space right here.", count: 12).joined(separator: " ")
         let long = Array(repeating: paragraph, count: 6).joined(separator: "\n\n")
         XCTAssertGreaterThan(CoachReplyPolish.wordCount(long), 600)
-        let polished = CoachReplyPolish.polish(long)
-        XCTAssertLessThanOrEqual(CoachReplyPolish.wordCount(polished), CoachCharter.maxReplyWords)
-        XCTAssertTrue(polished.contains("\n\n"), "Paragraph breaks survive the cut")
+        XCTAssertEqual(CoachReplyPolish.polish(long), long)
         let short = "Yes — mostly.\n\n- one\n- two"
         XCTAssertEqual(CoachReplyPolish.polish(short), short)
+    }
+
+    func test_toolDescriptionsNameTheResult() {
+        for copy in [
+            CoachToolCopy.lookupTodayHealth,
+            CoachToolCopy.lookupDays,
+            CoachToolCopy.lookupSMARTGoals,
+            CoachToolCopy.lookupWhatWeRemember,
+            CoachToolCopy.lookupWeightTrend,
+            CoachToolCopy.lookupFood,
+            CoachToolCopy.rememberAboutPerson,
+            CoachToolCopy.logGoalCheckIn
+        ] {
+            XCTAssertFalse(copy.contains("Call when"), copy)
+            XCTAssertFalse(copy.contains("Call only"), copy)
+            XCTAssertFalse(copy.contains("Call for"), copy)
+            XCTAssertFalse(copy.contains("Call once"), copy)
+        }
+        XCTAssertFalse(CoachToolCopy.lookupWhatWeRemember.contains("stranger"))
+        XCTAssertFalse(CoachToolCopy.lookupTodayHealth.contains("SMART"))
+        XCTAssertTrue(CoachToolCopy.lookupFood.contains("only being recommended"))
+        XCTAssertFalse(CoachToolCopy.lookupFood.contains("Ask for a photo"))
+        XCTAssertTrue(CoachToolCopy.searchEvidence.contains("Ordinary explanations should use your own expertise"))
+        XCTAssertTrue(CoachToolCopy.calculate.contains("instead of computing in prose"))
+        XCTAssertFalse(CoachToolCopy.logGoalCheckIn.contains("lookupSMARTGoals"))
+        XCTAssertTrue(CoachToolCopy.proposeSMARTGoal.contains("Nothing is saved until they save it"))
     }
 }
 
@@ -473,7 +500,7 @@ final class CoachLiveContextTests: XCTestCase {
         live.personsWords = "Call me Matt. I am a Family Medicine physician. I work Monday, Tuesday, Wednesday, Friday."
         XCTAssertEqual(
             live.remember(operation: "add", section: "aboutYou", text: "Family Medicine physician; clinic days Monday, Tuesday, Wednesday, Friday as of September 2026.", replaces: "", basis: "stated"),
-            "Kept."
+            "On file."
         )
         XCTAssertTrue(live.remember(operation: "add", section: "patterns", text: "Finds tracking food helpful for staying steady.", replaces: "", basis: "inferred").hasPrefix("Not kept: notes must come from"))
         XCTAssertTrue(live.remember(operation: "zap", section: "aboutYou", text: "Family Medicine physician.", replaces: "", basis: "stated").hasPrefix("Not kept: the note needs"))
@@ -619,7 +646,9 @@ final class CoachLiveContextTests: XCTestCase {
         - 2 days ago: "Work three" — Talked about office flow.
         """
         let payload = live.personPayload(topic: "work patient flow")
-        XCTAssertEqual(payload.components(separatedBy: "- [").count - 1, 6)
+        let noteLines = payload.split(separator: "\n").filter { $0.contains("Work routine detail") }
+        XCTAssertEqual(noteLines.count, 6)
+        XCTAssertFalse(payload.contains("ROUTINES"))
         XCTAssertTrue(payload.contains("Work one"))
         XCTAssertTrue(payload.contains("Work two"))
         XCTAssertFalse(payload.contains("Work three"))

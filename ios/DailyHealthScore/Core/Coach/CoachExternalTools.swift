@@ -7,7 +7,7 @@ import FoundationModels
 /// the model asks; the app performs the request and hands the text back.
 struct CoachFoodLookupTool: Tool {
     let name = "lookupFood"
-    let description = "Nutrition facts for a food or branded product from USDA FoodData Central and Open Food Facts: calories, protein, fiber, sugars, added sugars, fat, and minerals per serving when listed. Call once for each food you are about to give numbers for, even one you think you know. The result says exact, candidates, or none. Candidate items do not belong in an exact total. \(CoachFoodService.attachedPhotoGuidance) Not needed for foods you are only recommending."
+    let description = CoachToolCopy.lookupFood
     let context: CoachLiveContext
 
     @Generable
@@ -41,7 +41,7 @@ struct CoachFoodLookupTool: Tool {
 
 struct CoachEvidenceSearchTool: Tool {
     let name = "searchEvidence"
-    let description = "PubMed records with title, journal, year, PMID, and abstract kept together. Call when the person asks for evidence or a citation, or when a current, unfamiliar, or precise claim needs verification. Ordinary explanations should use your own expertise. A keyword match is evidence only when the study actually answers the question; cite only what comes back."
+    let description = CoachToolCopy.searchEvidence
     let context: CoachLiveContext
 
     @Generable
@@ -95,7 +95,7 @@ struct CoachEvidenceSearchTool: Tool {
 
 struct CoachCalculatorTool: Tool {
     let name = "calculate"
-    let description = "Exact arithmetic and weight conversion. Use for any total, difference, percentage, unit conversion, or per-kilogram figure instead of computing in prose, e.g. '250 + 230 + 100', '20 / 50 * 100', or '268.7 lb to kg'. A g/kg formula must use kilograms, never pounds."
+    let description = CoachToolCopy.calculate
     let context: CoachLiveContext
 
     @Generable
