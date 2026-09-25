@@ -30,6 +30,7 @@ final class CoachSafetyGateTests: XCTestCase {
         }
         XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
         XCTAssertTrue(message.lowercased().contains("emergency"))
+        XCTAssertFalse(message.contains("988"))
     }
 
     func test_disorderedEatingEscalates() {
@@ -37,6 +38,18 @@ final class CoachSafetyGateTests: XCTestCase {
             return XCTFail("Expected escalation")
         }
         XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
+        XCTAssertTrue(message.contains("1-866-662-1235"))
+    }
+
+    func test_laxativeForConstipationReachesTheModel() {
+        XCTAssertEqual(
+            CoachSafetyGate.evaluate("I'm bloated and constipated. Would a laxative help?"),
+            .ordinary
+        )
+        guard case .escalate(let message) = CoachSafetyGate.evaluate("I take laxatives to lose weight") else {
+            return XCTFail("Expected escalation")
+        }
+        XCTAssertTrue(message.contains("1-866-662-1235"))
     }
 
     /// Below an emergency there is still something to take care of: the model is
