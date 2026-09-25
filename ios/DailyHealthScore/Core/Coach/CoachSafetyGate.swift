@@ -51,7 +51,9 @@ enum CoachSafetyGate {
 
     private static let eatingDisorderPhrases = [
         "purge", "purging", "make myself throw up", "throwing up after eating",
-        "starve myself", "starving myself", "laxative", "binge and purge", "anorexia", "bulimia"
+        "starve myself", "starving myself", "binge and purge", "anorexia", "bulimia",
+        "laxative to lose", "laxatives to lose", "laxative for weight", "laxatives for weight",
+        "laxative after eating", "laxatives after eating", "laxative abuse", "abusing laxatives"
     ]
 
     private static let withdrawalPhrases = [
