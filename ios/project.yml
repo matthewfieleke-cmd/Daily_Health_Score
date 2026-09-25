@@ -14,8 +14,8 @@ options:
   postGenCommand: python3 scripts/patch_watch_embed.py
 settings:
   SWIFT_VERSION: "5.9"
-  MARKETING_VERSION: "1.7.0"
-  CURRENT_PROJECT_VERSION: "41"
+  MARKETING_VERSION: "1.8.0"
+  CURRENT_PROJECT_VERSION: "42"
 targets:
   DailyHealthScore:
     type: application
@@ -37,8 +37,8 @@ targets:
       # iPhone-only. Adding iPad ("1,2") would also require declaring iPad
       # interface orientations in Info.plist or setting UIRequiresFullScreen.
       TARGETED_DEVICE_FAMILY: "1"
-      MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "41"
+      MARKETING_VERSION: "1.8.0"
+      CURRENT_PROJECT_VERSION: "42"
       OTHER_CODE_SIGN_FLAGS: --generate-entitlement-der
       # Allow the Debug Watch/PlugIns mirror to write into the .app after embed.
       ENABLE_USER_SCRIPT_SANDBOXING: NO
@@ -84,8 +84,8 @@ targets:
       ONLY_ACTIVE_ARCH: NO
       "EXCLUDED_ARCHS[sdk=watchos*]": armv7k
       OTHER_CODE_SIGN_FLAGS: --generate-entitlement-der
-      MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "41"
+      MARKETING_VERSION: "1.8.0"
+      CURRENT_PROJECT_VERSION: "42"
     entitlements:
       path: DailyHealthScoreWatch/DailyHealthScoreWatch.entitlements
     dependencies:
@@ -118,8 +118,8 @@ targets:
       "EXCLUDED_ARCHS[sdk=watchos*]": armv7k
       OTHER_CODE_SIGN_FLAGS: --generate-entitlement-der
       LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/Frameworks @executable_path/../../Frameworks
-      MARKETING_VERSION: "1.7.0"
-      CURRENT_PROJECT_VERSION: "41"
+      MARKETING_VERSION: "1.8.0"
+      CURRENT_PROJECT_VERSION: "42"
     entitlements:
       path: DailyHealthScoreWatchWidgets/DailyHealthScoreWatchWidgets.entitlements
     dependencies:
