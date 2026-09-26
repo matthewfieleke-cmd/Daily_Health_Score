@@ -77,52 +77,19 @@ enum CoachCharter {
     }
 
 
-    /// The Home card: once per window, and again when the day's shape changes.
-    static func checkInContract(kind: CoachCheckInKind, hasTrend: Bool) -> String {
-        let shared = """
-        The app shows today's score and all three numbers live, directly above this card, and
-        they keep changing through the day. Never write a number, the score, or a total into
-        the card; describe the shape of the day in words that stay true until the next pillar
-        changes. Never print NO DATA, BELOW GOAL, GOAL MET, or GOAL EXCEEDED. Missing data is
-        unlogged, not failure. Plain text only, no Markdown. Write as one trusted coach who is
-        glad to see them; never name credentials; no paraphrase, no jargon.
+    /// The Home card. Facts are in the prompt. This does not assign a question,
+    /// a plan, or a line about tomorrow.
+    static let homeCardInstructions = """
+        Write up to three thoughts for the Home card. Choose what would help this person most right now. Each thought is one or two sentences. Fewer is better when fewer are worth saying.
+
+        The tiles above the card already show today's score and today's three numbers, and they keep changing. Do not restate today's score or today's numbers, even where the snapshot says to repeat a figure. Omit a thought that only repeats those tiles. The goal rows under the card already show check-in counts, so a thought does not need to repeat them.
+
+        A finished week may be named, with its numbers, only when TREND FACTS are present. A note is used only when it changes the thought. Do not recite the notes.
+
+        Nothing on the card is required to be a question, a plan, or a line about tomorrow. Say one of those only when it is the most useful thought. Honor the TIME RULES in the snapshot.
+
+        Plain text. No headers or emoji. Never print NO DATA, BELOW GOAL, GOAL MET, or GOAL EXCEEDED. Missing data is unlogged, not failure. A commute is driving; never suggest doing anything during it other than listening.
         """
-        switch kind {
-        case .morning:
-            return """
-            RESPONSE CONTRACT (morning check-in card):
-            - healthLine: ONE complete spoken sentence about the shape of today from the snapshot:
-              which pillars are already in hand and which are still open, with the realistic
-              window for the open ones — tied to their day when a note genuinely fits. Speak in
-              open-versus-in-hand terms, not "weakest", because fiber and movement trade places
-              all day. Do not trail off. Follow TIME RULES exactly.
-            - question: ONE easy question about the day ahead, one sentence ending in a question
-              mark. A memory, a recent conversation, or a live goal only when it genuinely fits
-              this day. Never abstract or introspective. If nothing fits, ask what they want to
-              protect today. A commute is driving; never suggest doing anything during it other
-              than listening.
-            - tomorrowLine: empty string.
-            - trendLine: \(hasTrend ? "one sentence phrasing the TREND FACTS in plain numbers, warm and honest — this is the one place numbers belong, because last week is finished." : "empty string.")
-            \(shared)
-            """
-        case .evening:
-            return """
-            RESPONSE CONTRACT (evening reflection card):
-            - healthLine: ONE complete spoken sentence about how today went, from the snapshot,
-              warm and honest: what showed up and what ran light, named only if it did.
-            - question: ONE easy reflective question about a moment, a person, or what got in the
-              way, one sentence ending in a question mark. A memory, a recent conversation, or
-              today's goals only when they genuinely fit. Never abstract. If a goal is far behind
-              pace, you may ask whether a smaller version would fit. A commute is driving; never
-              suggest doing anything during it other than listening.
-            - tomorrowLine: ONE small, specific thing for tomorrow, one sentence, starting with
-              "Tomorrow", anchored to a moment in their day. Never something already met today.
-              A commute is driving; never suggest doing anything during it other than listening.
-            - trendLine: empty string.
-            \(shared)
-            """
-        }
-    }
 
     /// The on-device filing pass: title, summary, pillar for a chat.
     static let filingInstructions = """

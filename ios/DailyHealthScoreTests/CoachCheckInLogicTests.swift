@@ -30,6 +30,8 @@ final class CoachCheckInLogicTests: XCTestCase {
         let first = CoachTestFixtures.goal(text: "walk after lunch")
         let second = CoachTestFixtures.goal(text: "call a friend")
         let key = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .evening, goals: [first, second])
+        XCTAssertTrue(key.contains("#checkin4#"))
+        XCTAssertFalse(key.contains("checkin3"))
         XCTAssertEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .evening, goals: [second, first]))
 
         var logged = first
@@ -92,10 +94,15 @@ final class CoachCheckInLogicTests: XCTestCase {
         XCTAssertNotNil(directive)
         XCTAssertTrue(directive?.contains("read ten pages") == true)
         XCTAssertTrue(directive?.contains("not a failure") == true)
+        let facts = SMARTGoalPace.paceFacts(goals: [goal], now: CoachTestFixtures.now, calendar: calendar)
+        XCTAssertTrue(facts?.contains("3 check-ins behind an even pace") == true)
+        XCTAssertFalse(facts?.contains("goalProposal") == true)
+        XCTAssertFalse(facts?.contains("not a failure") == true)
 
         goal.filledMask = SMARTGoalProgress.mask(filledCount: 3, targetCount: 8)
         XCTAssertEqual(SMARTGoalPace.behindCount(goal: goal, now: CoachTestFixtures.now, calendar: calendar), 1)
         XCTAssertNil(SMARTGoalPace.directive(goals: [goal], now: CoachTestFixtures.now, calendar: calendar))
+        XCTAssertNil(SMARTGoalPace.paceFacts(goals: [goal], now: CoachTestFixtures.now, calendar: calendar))
 
         var complete = goal
         complete.filledMask = SMARTGoalProgress.mask(filledCount: 8, targetCount: 8)

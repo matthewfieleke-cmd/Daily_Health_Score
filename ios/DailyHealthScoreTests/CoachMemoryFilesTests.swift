@@ -151,6 +151,42 @@ final class CoachMemoryFilesLogicTests: XCTestCase {
         )
     }
 
+    func test_cardNotesAreNewestDatedLinesWithoutFileHeadings() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let older = CoachMemoryItem(
+            category: .people,
+            content: "Wife is Maureen.",
+            provenance: .userStated,
+            createdAt: now.addingTimeInterval(-86_400 * 3)
+        )
+        let newer = CoachMemoryItem(
+            category: .routines,
+            content: "Clinic runs late on Thursdays.",
+            provenance: .coachNoted,
+            createdAt: now.addingTimeInterval(-3_600)
+        )
+        let notes = CoachMemoryLogic.cardNotes(items: [older, newer], at: now)
+        let lines = notes.split(separator: "\n")
+        XCTAssertEqual(lines.count, 2)
+        XCTAssertTrue(lines[0].contains("Clinic runs late"))
+        XCTAssertTrue(lines[0].contains("(inferred)"))
+        XCTAssertTrue(lines[1].contains("Maureen"))
+        XCTAssertTrue(lines[1].contains("(stated)"))
+        XCTAssertFalse(notes.contains("PEOPLE"))
+        XCTAssertFalse(notes.contains("ROUTINES"))
+        XCTAssertEqual(CoachMemoryLogic.cardNotes(items: []), "No saved notes.")
+
+        let extra = (0..<8).map { index in
+            CoachMemoryItem(
+                category: .checkIns,
+                content: "Note \(index).",
+                provenance: .userStated,
+                createdAt: now.addingTimeInterval(TimeInterval(index))
+            )
+        }
+        XCTAssertEqual(CoachMemoryLogic.cardNotes(items: extra, at: now.addingTimeInterval(100)).split(separator: "\n").count, 6)
+    }
+
     func test_broadMemoryTopicCanDeliberatelyReturnAllNotes() {
         let items = [
             CoachMemoryItem(category: .people, content: "Wife is Maureen.", provenance: .coachRecorded),
