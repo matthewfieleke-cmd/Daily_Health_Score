@@ -58,30 +58,35 @@ final class FoundationModelsCoach {
         snapshot: CoachSnapshot,
         goalRows: [CoachCheckInGoalRow],
         trend: CoachTrendDigest?,
-        goalPaceDirective: String?,
+        paceFacts: String?,
+        notes: String,
         now: Date = Date()
     ) async throws -> CoachCheckIn {
         #if canImport(FoundationModels)
         try ensureAvailable()
         // Background writes yield to chat when the daily allowance is nearly spent.
         let tier: CoachModelTier = CoachModelProvider.isServerQuotaApproaching ? .onDevice : CoachModelProvider.preferredTier()
+        // Facts only. A pillar assignment or a "offer a goalProposal" line
+        // would turn the card back into a script.
+        let pace = paceFacts.map { "GOAL PACE (already computed):\n\($0)" } ?? "GOAL PACE: none."
         func makePrompt() -> String {
             """
-            Write today's \(kind.title.lowercased()) card for the Home screen.
+            Choose what belongs on the Home card.
 
-            HEALTH SNAPSHOT (authoritative):
+            HEALTH SNAPSHOT (for judgment; the tiles already show today's numbers):
             \(snapshot.promptBlock)
 
-            COACHING DIRECTIVES (derived from goal status — follow these):
-            \(snapshot.coachingDirective)
-
-            SMART GOALS TODAY (already computed):
+            OPEN SMART GOALS (already computed):
             \(CoachCheckInLogic.goalsBlock(goalRows))
-            \(goalPaceDirective ?? "")
 
-            \(trend?.promptBlock ?? "TREND FACTS: none today.")
+            \(pace)
 
-            \(CoachCharter.checkInContract(kind: kind, hasTrend: trend != nil))
+            \(trend?.promptBlock ?? "TREND FACTS: none.")
+
+            NOTES:
+            \(notes)
+
+            \(CoachCharter.homeCardInstructions)
             """
         }
         let content: GenerableCoachCheckIn
@@ -103,24 +108,23 @@ final class FoundationModelsCoach {
                 .respond(to: makePrompt(), generating: GenerableCoachCheckIn.self)
                 .content
         }
-        let health = CoachMarkdown.plainText(content.healthLine).trimmedForCoach().endingOnSentence(maxCharacters: 220)
-        guard !health.isEmpty else {
+        var seen = Set<String>()
+        let thoughts = content.thoughts.compactMap { raw -> String? in
+            let line = CoachReplyPolish.polish(
+                CoachMarkdown.plainText(raw).trimmedForCoach().endingOnSentence(maxCharacters: 320)
+            )
+            guard !line.isEmpty, seen.insert(line).inserted else { return nil }
+            return line
+        }
+        let chosen = Array(thoughts.prefix(3))
+        guard let first = chosen.first else {
             throw CoachError.generationFailed("The coach returned an empty card.")
         }
-        let question = CoachMarkdown.plainText(content.question).trimmedForCoach().endingOnSentence(maxCharacters: 200)
-        let tomorrow = kind == .evening
-            ? CoachMarkdown.plainText(content.tomorrowLine).trimmedForCoach().endingOnSentence(maxCharacters: 180)
-            : ""
-        let trendLine = trend != nil
-            ? CoachMarkdown.plainText(content.trendLine).trimmedForCoach().endingOnSentence(maxCharacters: 220)
-            : ""
         return CoachCheckIn(
             kind: kind,
             dateKey: snapshot.todayKey,
-            healthLine: CoachReplyPolish.polish(health),
-            question: question,
-            tomorrowLine: tomorrow,
-            trendLine: trendLine.isEmpty ? (trend?.sentence ?? "") : trendLine,
+            healthLine: first,
+            thoughts: chosen,
             isFallback: false,
             generatedAt: now
         )
@@ -188,7 +192,7 @@ final class FoundationModelsCoach {
                 case .conversation, .acquaintance:
                     break
                 case .checkInReply:
-                    framing.append("This chat began from today's Home check-in card.")
+                    framing.append("This chat began from today's Home card.")
                 case .goal:
                     let goalID = thread.goalId ?? live.focusedGoalID
                     if let goalID, let goal = live.goals.first(where: { $0.id == goalID }) {
@@ -543,17 +547,8 @@ final class FoundationModelsCoach {
 #if canImport(FoundationModels)
 @Generable
 struct GenerableCoachCheckIn {
-    @Guide(description: "One complete spoken sentence about today's health. No status tokens (BELOW GOAL, GOAL MET, NO DATA). No ellipses. Plain text.")
-    var healthLine: String
-
-    @Guide(description: "One easy question about the day ahead. One sentence ending in a question mark. Plain text. A memory only when it genuinely fits this day. A commute is driving; never suggest doing anything during it other than listening.")
-    var question: String
-
-    @Guide(description: "Evening only: one small specific thing for tomorrow, one sentence starting with Tomorrow. Empty string in the morning. A commute is driving; never suggest doing anything during it other than listening.")
-    var tomorrowLine: String
-
-    @Guide(description: "Only when TREND FACTS were provided: one sentence with plain numbers. Otherwise empty string.")
-    var trendLine: String
+    @Guide(description: "Up to three thoughts, most useful first. Each is one or two plain sentences. Omit any that only repeats today's tiles. No headers or emoji.")
+    var thoughts: [String]
 }
 
 @Generable

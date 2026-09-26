@@ -118,9 +118,6 @@ final class LifestyleCoachController: ObservableObject {
             return
         }
 
-        let trend = kind == .morning && CoachCheckInLogic.isMonday(now, calendar: calendar)
-            ? CoachTrendDigest.build(records: records, goals: goals, activities: activities, now: now, calendar: calendar)
-            : nil
         let rows = CoachCheckInLogic.goalRows(goals: goals, activities: activities, todayKey: record.date)
 
         // Nothing has synced for today: a written card would describe an empty
@@ -128,7 +125,7 @@ final class LifestyleCoachController: ObservableObject {
         // matches, so the first real numbers trigger the write.
         guard CoachCheckInLogic.hasData(record), availability == .available else {
             let fallback = carryingReplyLink(
-                HomeCoachCardCopy.fallbackCheckIn(for: record, kind: kind, trend: trend, now: now, calendar: calendar)
+                HomeCoachCardCopy.fallbackCheckIn(for: record, kind: kind, now: now)
             )
             // A fallback is saved so Reply can quote it, under a key that never
             // matches: the next visit tries the model again.
@@ -159,12 +156,24 @@ final class LifestyleCoachController: ObservableObject {
                 calendar: calendar,
                 bodyTrend: bodyTrend
             )
+            let trend = CoachTrendDigest.build(
+                records: records,
+                goals: goals,
+                activities: activities,
+                now: now,
+                calendar: calendar
+            )
             let generated = try await model.generateCheckIn(
                 kind: kind,
                 snapshot: snapshot,
                 goalRows: rows,
                 trend: trend,
-                goalPaceDirective: SMARTGoalPace.directive(goals: goals, now: now, calendar: calendar),
+                paceFacts: SMARTGoalPace.paceFacts(goals: goals, now: now, calendar: calendar),
+                notes: CoachMemoryLogic.cardNotes(
+                    items: memory.effectiveMemories,
+                    at: now,
+                    calendar: calendar
+                ),
                 now: now
             )
             guard checkInGenerationID == generationID else { return }
@@ -174,7 +183,7 @@ final class LifestyleCoachController: ObservableObject {
         } catch {
             guard checkInGenerationID == generationID else { return }
             let fallback = carryingReplyLink(
-                HomeCoachCardCopy.fallbackCheckIn(for: record, kind: kind, trend: trend, now: now, calendar: calendar)
+                HomeCoachCardCopy.fallbackCheckIn(for: record, kind: kind, now: now)
             )
             memory.saveCheckIn(fallback, key: key + "#fallback")
             checkIn = fallback

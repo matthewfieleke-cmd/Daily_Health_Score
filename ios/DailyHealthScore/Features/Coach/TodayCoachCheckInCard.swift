@@ -3,8 +3,8 @@ import SwiftUI
 import UIKit
 #endif
 
-/// The Home card is the check-in: a morning note with one question, or an
-/// evening reflection with today's SMART goals and one thing for tomorrow.
+/// The Home card is a short feed of thoughts the Coach chose. Active SMART
+/// goals sit under them, with Done, whenever there is something to log.
 /// Reply opens a chat that starts with the card's words. Leftover height stays
 /// the grouped screen — never a white hole inside the card.
 struct TodayCoachCheckInCard: View {
@@ -54,9 +54,9 @@ struct TodayCoachCheckInCard: View {
 
     private func cardStack(kind: CoachCheckInKind, now: Date) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            header(kind: kind)
+            cardHeader
 
-            // Natural height when it fits; only an overflowing evening card scrolls.
+            // Natural height when it fits; only an overflowing card scrolls.
             ViewThatFits(in: .vertical) {
                 noteBody(kind: kind, now: now)
                 ScrollView(.vertical, showsIndicators: false) {
@@ -80,7 +80,7 @@ struct TodayCoachCheckInCard: View {
             } else if coach.isGeneratingCheckIn && coach.checkIn == nil {
                 loadingBody
             } else if let card = displayedCheckIn(kind: kind, now: now) {
-                checkInBody(card, kind: kind)
+                checkInBody(card)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -93,7 +93,7 @@ struct TodayCoachCheckInCard: View {
         return HomeCoachCardCopy.fallbackCheckIn(for: record, kind: kind, now: now)
     }
 
-    private func header(kind: CoachCheckInKind) -> some View {
+    private var cardHeader: some View {
         HStack(spacing: 10) {
             Image("DHSLifestyleCoach")
                 .resizable()
@@ -106,10 +106,17 @@ struct TodayCoachCheckInCard: View {
                 Text("DHS Lifestyle Coach")
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
-                Label(coach.memory.needsAcquaintance ? "Let’s get acquainted" : kind.title, systemImage: coach.memory.needsAcquaintance ? "hand.wave.fill" : kind.systemImage)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                if coach.memory.needsAcquaintance {
+                    Label("Let’s get acquainted", systemImage: "hand.wave.fill")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text("Today")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -141,39 +148,18 @@ struct TodayCoachCheckInCard: View {
     }
 
     @ViewBuilder
-    private func checkInBody(_ card: CoachCheckIn, kind: CoachCheckInKind) -> some View {
-        Text(card.healthLine)
-            .font(.footnote)
-            .foregroundStyle(.primary)
-            .fixedSize(horizontal: false, vertical: true)
-
-        if !card.trendLine.isEmpty {
-            Text(card.trendLine)
+    private func checkInBody(_ card: CoachCheckIn) -> some View {
+        ForEach(Array(card.displayLines.enumerated()), id: \.offset) { _, line in
+            Text(line)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
 
-        if kind == .evening {
-            goalRows
-            if !card.tomorrowLine.isEmpty {
-                Text(card.tomorrowLine)
-                    .font(.footnote)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-
-        if !card.question.isEmpty {
-            Text(card.question)
-                .font(.footnote.weight(.medium))
-                .italic()
-                .foregroundStyle(AppTheme.primary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        goalRows
     }
 
-    /// Tonight's SMART goals with a tap to log. Progress comes straight from the
+    /// Active SMART goals with a tap to log. Progress comes straight from the
     /// store, so a Done tap updates the row without rewriting the card.
     @ViewBuilder
     private var goalRows: some View {

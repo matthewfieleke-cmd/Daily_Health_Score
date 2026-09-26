@@ -1,42 +1,32 @@
 import Foundation
 
-/// Which check-in Home is showing. Morning runs until late afternoon; the
-/// evening reflection takes over from 5pm and through the night.
+/// Which window Home is writing for. Morning runs until 5pm; evening after
+/// that and through the night. The card does not print this label. The window
+/// only decides when the thoughts are rewritten.
 enum CoachCheckInKind: String, Codable, Sendable {
     case morning
     case evening
-
-    var title: String {
-        switch self {
-        case .morning: return "Morning check-in"
-        case .evening: return "Evening reflection"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .morning: return "sunrise.fill"
-        case .evening: return "moon.stars.fill"
-        }
-    }
 }
 
-/// The Home card. Written by the Coach for each window of the day and again
-/// when the day's shape changes; deterministic when the model is unavailable.
-/// It never carries numbers — the tiles above it show those live — so it
-/// cannot go stale against them. Reply opens a chat that starts with this text.
+/// The Home card. Up to three thoughts the Coach chooses, rewritten for each
+/// window of the day and again when the day's shape changes. A deterministic
+/// line stands in when the model is unavailable. Reply opens a chat that
+/// starts with this text.
 struct CoachCheckIn: Equatable, Codable, Sendable {
     var kind: CoachCheckInKind
     var dateKey: String
-    /// One spoken sentence about the shape of today (morning) or how the day
-    /// went (evening), without numbers.
+    /// First thought, kept so a reader that only knows the older field still
+    /// has something to say. New cards put the full feed in `thoughts`.
     var healthLine: String
-    /// One question that shows the Coach remembers this person.
+    /// Older cards: one question. Empty when `thoughts` carries the card.
     var question: String
-    /// Evening only: one small thing for tomorrow.
+    /// Older cards: one line for tomorrow. Empty on a thought feed.
     var tomorrowLine: String
-    /// Monday morning only: last week in one sentence.
+    /// Older cards: last week in one sentence. Empty on a thought feed.
     var trendLine: String
+    /// The thoughts on the card, most useful first. Empty on a card saved
+    /// before the feed, which still speaks through the four older fields.
+    var thoughts: [String]
     var replyThreadID: UUID?
     var isFallback: Bool
     var generatedAt: Date
@@ -45,9 +35,10 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         kind: CoachCheckInKind,
         dateKey: String,
         healthLine: String,
-        question: String,
+        question: String = "",
         tomorrowLine: String = "",
         trendLine: String = "",
+        thoughts: [String] = [],
         replyThreadID: UUID? = nil,
         isFallback: Bool = false,
         generatedAt: Date = Date()
@@ -58,20 +49,64 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         self.question = question
         self.tomorrowLine = tomorrowLine
         self.trendLine = trendLine
+        self.thoughts = thoughts
         self.replyThreadID = replyThreadID
         self.isFallback = isFallback
         self.generatedAt = generatedAt
     }
 
-    /// Everything the card says, as the first message of the reply chat.
-    var spokenText: String {
-        [healthLine, trendLine, tomorrowLine, question]
+    /// What the card shows. Thoughts when the Coach wrote them; otherwise the
+    /// older fields, in the order a reply used to speak them.
+    var displayLines: [String] {
+        let chosen = thoughts
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-            .joined(separator: " ")
+        if !chosen.isEmpty {
+            return Array(chosen.prefix(3))
+        }
+        return [healthLine, trendLine, tomorrowLine, question]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// Everything the card says, as the first message of the reply chat.
+    var spokenText: String {
+        displayLines.joined(separator: " ")
     }
 
     var hasReply: Bool { replyThreadID != nil }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind, dateKey, healthLine, question, tomorrowLine, trendLine, thoughts, replyThreadID, isFallback, generatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try container.decode(CoachCheckInKind.self, forKey: .kind)
+        dateKey = try container.decode(String.self, forKey: .dateKey)
+        healthLine = try container.decode(String.self, forKey: .healthLine)
+        question = try container.decodeIfPresent(String.self, forKey: .question) ?? ""
+        tomorrowLine = try container.decodeIfPresent(String.self, forKey: .tomorrowLine) ?? ""
+        trendLine = try container.decodeIfPresent(String.self, forKey: .trendLine) ?? ""
+        thoughts = try container.decodeIfPresent([String].self, forKey: .thoughts) ?? []
+        replyThreadID = try container.decodeIfPresent(UUID.self, forKey: .replyThreadID)
+        isFallback = try container.decodeIfPresent(Bool.self, forKey: .isFallback) ?? false
+        generatedAt = try container.decodeIfPresent(Date.self, forKey: .generatedAt) ?? Date()
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(dateKey, forKey: .dateKey)
+        try container.encode(healthLine, forKey: .healthLine)
+        try container.encode(question, forKey: .question)
+        try container.encode(tomorrowLine, forKey: .tomorrowLine)
+        try container.encode(trendLine, forKey: .trendLine)
+        try container.encode(thoughts, forKey: .thoughts)
+        try container.encodeIfPresent(replyThreadID, forKey: .replyThreadID)
+        try container.encode(isFallback, forKey: .isFallback)
+        try container.encode(generatedAt, forKey: .generatedAt)
+    }
 }
 
 /// One active SMART goal on the evening card, with a tap to log today.
@@ -119,7 +154,8 @@ enum CoachCheckInLogic {
 
     /// One write per window and per shape of the day. Tapping a goal Done must
     /// not rewrite the card, so progress masks stay out of the key; only which
-    /// goals exist matters.
+    /// goals exist matters. Notes are read when the card is written. A new note
+    /// shows up on the next window, the next change in shape, or a pull to refresh.
     static func cacheKey(
         dateKey: String,
         kind: CoachCheckInKind,
@@ -131,7 +167,7 @@ enum CoachCheckInLogic {
             .map(\.id.uuidString)
             .sorted()
             .joined(separator: ",")
-        return "\(dateKey)#\(kind.rawValue)#checkin3#\(ids)#\(signature)"
+        return "\(dateKey)#\(kind.rawValue)#checkin4#\(ids)#\(signature)"
     }
 
     /// Active goals a person could still log today, unlogged ones first.
@@ -273,6 +309,19 @@ enum SMARTGoalPace {
         }
         guard !lines.isEmpty else { return nil }
         return "GOAL PACE:\n" + lines.joined(separator: "\n")
+    }
+
+    /// The same lag, as a fact. The Home card does not tell the Coach to offer
+    /// a plan change; he can mention the pace when it is the useful thought.
+    static func paceFacts(goals: [SMARTGoal], now: Date = Date(), calendar: Calendar = .current) -> String? {
+        let lines = goals.compactMap { goal -> String? in
+            let behind = behindCount(goal: goal, now: now, calendar: calendar)
+            guard behind >= shrinkOfferThreshold else { return nil }
+            let title = goal.specificText.limitedToCoachBudget(70)
+            return "- \"\(title)\" is \(behind) check-ins behind an even pace (\(goal.filledCount) of \(goal.targetCount))."
+        }
+        guard !lines.isEmpty else { return nil }
+        return lines.joined(separator: "\n")
     }
 }
 

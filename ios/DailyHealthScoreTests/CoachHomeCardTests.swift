@@ -43,16 +43,16 @@ final class CoachHomeCardTests: XCTestCase {
         XCTAssertTrue(move.contains("before lunch"))
     }
 
-    func test_fallbackMorningCheckIn_isOneSpokenHealthLineWithAQuestion() {
+    func test_fallbackMorningCheckIn_isOnePlainLine() {
         let record = makeRecord(sleep: 5.0, fiber: 12, exercise: 2, focus: .fiber)
         let card = HomeCoachCardCopy.fallbackCheckIn(
             for: record,
             kind: .morning,
-            now: date(hour: 9, minute: 0),
-            calendar: calendar
+            now: date(hour: 9, minute: 0)
         )
         XCTAssertEqual(card.kind, .morning)
         XCTAssertTrue(card.isFallback)
+        XCTAssertEqual(card.displayLines, [card.healthLine])
         XCTAssertNil(card.healthLine.rangeOfCharacter(from: .decimalDigits), "The tiles above the card carry the numbers")
         XCTAssertTrue(card.healthLine.lowercased().contains("food"))
         XCTAssertFalse(card.healthLine.contains("BELOW GOAL"))
@@ -60,26 +60,25 @@ final class CoachHomeCardTests: XCTestCase {
         XCTAssertFalse(card.healthLine.contains("GOAL MET"))
         XCTAssertLessThan(card.healthLine.count, 220)
         XCTAssertFalse(card.healthLine.contains("…"))
-        XCTAssertTrue(card.question.hasSuffix("?"))
+        XCTAssertTrue(card.question.isEmpty)
         XCTAssertTrue(card.tomorrowLine.isEmpty)
         XCTAssertTrue(card.trendLine.isEmpty)
+        XCTAssertFalse(card.spokenText.contains("?"))
     }
 
-    func test_fallbackEveningCheckIn_reflectsAndNamesTomorrow() {
+    func test_fallbackEveningCheckIn_isOnePlainLine() {
         let record = makeRecord(sleep: 7.5, fiber: 12, exercise: 40, focus: .fiber)
         let card = HomeCoachCardCopy.fallbackCheckIn(
             for: record,
             kind: .evening,
-            now: date(hour: 20, minute: 0),
-            calendar: calendar
+            now: date(hour: 20, minute: 0)
         )
         XCTAssertEqual(card.kind, .evening)
+        XCTAssertEqual(card.displayLines.count, 1)
         XCTAssertTrue(card.healthLine.lowercased().contains("today"))
-        XCTAssertTrue(card.tomorrowLine.hasPrefix("Tomorrow"))
-        XCTAssertTrue(card.tomorrowLine.lowercased().contains("fiber") || card.tomorrowLine.lowercased().contains("lunch"))
-        XCTAssertTrue(card.question.hasSuffix("?"))
-        XCTAssertTrue(card.spokenText.contains(card.healthLine))
-        XCTAssertTrue(card.spokenText.hasSuffix(card.question))
+        XCTAssertTrue(card.tomorrowLine.isEmpty)
+        XCTAssertTrue(card.question.isEmpty)
+        XCTAssertEqual(card.spokenText, card.healthLine)
     }
 
     func test_beforeHealthSyncs_theCardWaitsInsteadOfJudgingAnEmptyDay() {
@@ -97,17 +96,18 @@ final class CoachHomeCardTests: XCTestCase {
         }
     }
 
-    func test_fallbackQuestionsRotateByDay() {
+    func test_fallbackDoesNotInventASecondThought() {
         let record = makeRecord(sleep: 7.5, fiber: 40, exercise: 40, focus: .maintain)
         var components = DateComponents(year: 2026, month: 8, day: 16, hour: 9)
         let first = HomeCoachCardCopy.fallbackCheckIn(
-            for: record, kind: .morning, now: calendar.date(from: components)!, calendar: calendar
+            for: record, kind: .morning, now: calendar.date(from: components)!
         )
         components.day = 17
         let second = HomeCoachCardCopy.fallbackCheckIn(
-            for: record, kind: .morning, now: calendar.date(from: components)!, calendar: calendar
+            for: record, kind: .morning, now: calendar.date(from: components)!
         )
-        XCTAssertNotEqual(first.question, second.question)
+        XCTAssertEqual(first.displayLines, second.displayLines)
+        XCTAssertEqual(first.displayLines.count, 1)
     }
 
     func test_endingOnSentence_neverAppendsEllipsis() {

@@ -253,22 +253,18 @@ final class CoachSnapshotBuilderTests: XCTestCase {
 
         XCTAssertFalse(charter.contains("GETTING ACQUAINTED"))
         XCTAssertFalse(charter.contains("rememberAboutPerson"))
-        let morning = CoachCharter.checkInContract(kind: .morning, hasTrend: true)
-        XCTAssertTrue(morning.contains("healthLine"))
-        XCTAssertTrue(morning.contains("question"))
-        XCTAssertTrue(morning.contains("TIME RULES"))
-        XCTAssertTrue(morning.contains("TREND FACTS"))
-        XCTAssertTrue(morning.contains("Never write a number"))
-        XCTAssertTrue(morning.contains("only when it genuinely fits"))
-        XCTAssertFalse(morning.contains("tied to a memory"))
-        XCTAssertTrue(morning.contains("A commute is driving"))
-        let evening = CoachCharter.checkInContract(kind: .evening, hasTrend: false)
-        XCTAssertTrue(evening.contains("tomorrowLine"))
-        XCTAssertTrue(evening.contains("Tomorrow"))
-        XCTAssertTrue(evening.contains("Never write a number"))
-        XCTAssertTrue(evening.contains("only when they genuinely fit"))
-        XCTAssertFalse(evening.contains("tied to a memory"))
-        XCTAssertEqual(evening.components(separatedBy: "A commute is driving").count - 1, 2)
+        let cardInstructions = CoachCharter.homeCardInstructions
+        XCTAssertTrue(cardInstructions.contains("up to three"))
+        XCTAssertTrue(cardInstructions.contains("Do not restate today's score"))
+        XCTAssertTrue(cardInstructions.contains("TIME RULES"))
+        XCTAssertTrue(cardInstructions.contains("TREND FACTS"))
+        XCTAssertTrue(cardInstructions.contains("only when it changes the thought"))
+        XCTAssertTrue(cardInstructions.contains("A commute is driving"))
+        XCTAssertFalse(cardInstructions.contains("healthLine"))
+        XCTAssertFalse(cardInstructions.contains("tomorrowLine"))
+        XCTAssertFalse(cardInstructions.contains("Never write a number"))
+        XCTAssertFalse(cardInstructions.contains("ending in a question"))
+        XCTAssertEqual(cardInstructions.components(separatedBy: "A commute is driving").count - 1, 1)
         XCTAssertTrue(CoachCharter.filingInstructions.contains("threadTitle"))
         XCTAssertTrue(CoachCharter.reviewInstructions.contains("Never invent facts"))
     }
@@ -312,6 +308,26 @@ final class CoachSnapshotBuilderTests: XCTestCase {
             "Today landed at 6 of 10. Tomorrow, one thing: shoes by the door. What got in the way?"
         )
         XCTAssertTrue(decoded.hasReply)
+        XCTAssertEqual(decoded.thoughts, [])
+
+        let fed = CoachCheckIn(
+            kind: .morning,
+            dateKey: "2026-08-16",
+            healthLine: "Clinic runs late today.",
+            question: "This older field stays off the card.",
+            thoughts: ["Clinic runs late today.", "Last week’s sleep was the steadier one."]
+        )
+        XCTAssertEqual(fed.displayLines, ["Clinic runs late today.", "Last week’s sleep was the steadier one."])
+        XCTAssertEqual(fed.spokenText, "Clinic runs late today. Last week’s sleep was the steadier one.")
+        let fedAgain = try JSONDecoder().decode(CoachCheckIn.self, from: JSONEncoder().encode(fed))
+        XCTAssertEqual(fedAgain, fed)
+
+        var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(card)) as! [String: Any]
+        object.removeValue(forKey: "thoughts")
+        let stripped = try JSONSerialization.data(withJSONObject: object)
+        let legacy = try JSONDecoder().decode(CoachCheckIn.self, from: stripped)
+        XCTAssertEqual(legacy.thoughts, [])
+        XCTAssertEqual(legacy.spokenText, card.spokenText)
     }
 
     private func chicagoCalendar() -> Calendar {

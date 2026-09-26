@@ -676,6 +676,34 @@ enum CoachMemoryLogic {
         }.joined(separator: "\n")
     }
 
+    /// A handful of dated notes for the Home card. Newest first, no file
+    /// headings: the card uses a note only when it changes a thought, and a
+    /// heading would turn the list into an assignment.
+    static func cardNotes(
+        items: [CoachMemoryItem],
+        at date: Date = Date(),
+        limit: Int = 6,
+        calendar: Calendar = .current
+    ) -> String {
+        let live = itemsByOverridingContradictions(items, at: date)
+            .sorted { $0.createdAt > $1.createdAt }
+        guard !live.isEmpty else { return "No saved notes." }
+        return live.prefix(limit).map { item in
+            var line = "\(entryDate(item.createdAt, now: date, calendar: calendar)): \(item.displayContent)"
+            if item.provenance.isStated {
+                line += " (stated)"
+            } else if item.provenance == .coachNoted || item.provenance.yieldsToConfirmed {
+                line += " (inferred)"
+            }
+            if item.section.isStateFile,
+               let days = calendar.dateComponents([.day], from: item.createdAt, to: date).day,
+               days > recentWindowDays {
+                line += " (older)"
+            }
+            return line
+        }.joined(separator: "\n")
+    }
+
     /// The durable files with nothing in them yet, in the order the intake
     /// asks about them. Recent is state, not a file to fill.
     static func emptySections(in items: [CoachMemoryItem]) -> [CoachMemorySection] {
