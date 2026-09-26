@@ -306,11 +306,10 @@ private struct WatchFaceRefreshButton: View {
             #endif
             watchSync.refreshWatchFace()
         } label: {
-            Label(
-                watchSync.isRefreshingFace ? "Sending to Watch…" : "Refresh Watch face",
-                systemImage: "applewatch.and.arrow.forward"
-            )
-            .frame(maxWidth: .infinity)
+            // A Label keeps a leading icon column in this Form and shifts the title.
+            Text(watchSync.isRefreshingFace ? "Sending to Watch…" : "Refresh Watch face")
+                .frame(maxWidth: .infinity, alignment: .center)
+                .multilineTextAlignment(.center)
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
