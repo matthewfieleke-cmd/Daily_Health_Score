@@ -10,6 +10,7 @@ struct CoachChatsView: View {
     @State private var opened: CoachChatLaunch?
     @State private var pendingDelete: CoachThread?
     @State private var showMemory = false
+    @State private var showIntake = false
 
     private var sections: [CoachThreadSection] {
         CoachThreadLogic.sections(coach.memory.threads)
@@ -82,7 +83,9 @@ struct CoachChatsView: View {
         .onAppear {
             coach.refreshAvailability()
             coach.memory.open(.chats)
-            Task { await coach.performHousekeepingIfDue() }
+            if !coach.isChatBusy {
+                coach.memory.keepTheMoreSpecificNotes()
+            }
         }
         .sheet(item: $opened) { launch in
             NavigationStack {
@@ -95,6 +98,13 @@ struct CoachChatsView: View {
             NavigationStack {
                 CoachMemoryListView()
                     .environmentObject(appState)
+            }
+        }
+        .sheet(isPresented: $showIntake) {
+            NavigationStack {
+                CoachIntakeView()
+                    .environmentObject(appState)
+                    .environmentObject(coach)
             }
         }
         .alert(
@@ -118,7 +128,7 @@ struct CoachChatsView: View {
 
     private var acquaintCard: some View {
         Button {
-            opened = .acquaint
+            showIntake = true
         } label: {
             HStack(spacing: 12) {
                 Image("DHSLifestyleCoach")
@@ -128,10 +138,10 @@ struct CoachChatsView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Let’s get acquainted")
+                    Text("Intake")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text("A short first conversation so your coach knows you before the numbers.")
+                    Text("A short form so your coach knows your life before the numbers.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

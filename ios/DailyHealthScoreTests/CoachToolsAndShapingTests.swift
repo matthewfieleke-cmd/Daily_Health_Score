@@ -509,6 +509,35 @@ final class CoachLiveContextTests: XCTestCase {
         XCTAssertTrue(live.pendingMemoryUpdates.isEmpty)
     }
 
+    func test_rememberWillNotReplaceAMoreSpecificNote() async {
+        let live = CoachLiveContext()
+        let rich = "Matt eats about 1500 calories in 15 minutes after fights with Maureen, on top of 3 full meals."
+        live.memoryItems = [
+            CoachMemoryItem(category: .patterns, content: rich, provenance: .coachRecorded)
+        ]
+        live.personsWords = "Matt eats about 1500 calories in 15 minutes after fights with Maureen, after 3 full meals."
+        let thinner = live.remember(
+            operation: "add",
+            section: "patterns",
+            text: "Matt eats about 1500 calories in 15 minutes after fights with Maureen, after 3 full meals.",
+            replaces: "",
+            basis: "stated"
+        )
+        XCTAssertTrue(thinner.hasPrefix("Already on file"))
+        XCTAssertTrue(live.pendingMemoryUpdates.isEmpty)
+
+        live.personsWords = "He just eats after fights with Maureen."
+        let dropped = live.remember(
+            operation: "update",
+            section: "patterns",
+            text: "Matt eats after fights with Maureen.",
+            replaces: rich,
+            basis: "stated"
+        )
+        XCTAssertTrue(dropped.hasPrefix("Not kept: that would drop"))
+        XCTAssertTrue(live.pendingMemoryUpdates.isEmpty)
+    }
+
     func test_checkInNeedsCompletionLanguageAndARealGoal() async {
         let live = CoachLiveContext()
         let goal = CoachTestFixtures.goal(text: "walk after dinner")

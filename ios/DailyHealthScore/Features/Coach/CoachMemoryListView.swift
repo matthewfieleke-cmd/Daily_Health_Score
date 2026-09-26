@@ -12,6 +12,7 @@ struct CoachMemoryListView: View {
     @State private var newNote = ""
     @State private var newNoteSection: CoachMemorySection = .aboutYou
     @State private var background = ""
+    @State private var showIntake = false
 
     private var store: CoachMemoryStore { appState.coach.memory }
 
@@ -41,9 +42,11 @@ struct CoachMemoryListView: View {
                 } description: {
                     Text("As you talk, your coach keeps short notes here — who matters to you, what helps, what gets in the way. You can edit, delete, or undo any of it. Health records and SMART goals are separate.")
                 } actions: {
-                    Button("Add a note") { isAddingNote = true }
+                    Button("Intake") { showIntake = true }
                         .buttonStyle(.borderedProminent)
                         .tint(AppTheme.primary)
+                    Button("Add a note") { isAddingNote = true }
+                        .buttonStyle(.bordered)
                 }
             } else {
                 List {
@@ -83,6 +86,9 @@ struct CoachMemoryListView: View {
             }
         }
         .task(id: store.memoryFingerprint) {
+            if !appState.coach.isChatBusy {
+                appState.coach.memory.keepTheMoreSpecificNotes()
+            }
             // A changed fingerprint no longer matches the stored paragraph.
             // Clear it before the compile, so a retracted fact does not stay on screen.
             background = appState.coach.memory.compiledProfile
@@ -96,7 +102,13 @@ struct CoachMemoryListView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Done") { dismiss() }
             }
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    showIntake = true
+                } label: {
+                    Image(systemName: "list.clipboard")
+                }
+                .accessibilityLabel("Intake")
                 Button {
                     isAddingNote = true
                 } label: {
@@ -135,6 +147,13 @@ struct CoachMemoryListView: View {
                         .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
+            }
+        }
+        .sheet(isPresented: $showIntake) {
+            NavigationStack {
+                CoachIntakeView()
+                    .environmentObject(appState)
+                    .environmentObject(appState.coach)
             }
         }
         .sheet(isPresented: $isAddingNote) {
@@ -184,7 +203,7 @@ struct CoachMemoryListView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Text([
                     change.section.label,
-                    source.map { "from “\($0)”" } ?? "from tidying the files",
+                    source.map { "from “\($0)”" } ?? "while organizing notes",
                     change.createdAt.formatted(.relative(presentation: .named))
                 ].joined(separator: " · "))
                     .font(.caption2)

@@ -682,4 +682,207 @@ final class CoachMemoryFilesStoreTests: XCTestCase {
         XCTAssertEqual(store.openThread?.title, "Sleep")
         XCTAssertTrue(store.openThread?.contextNote.contains("Sleep") == true)
     }
+
+    func test_aNewerNoteDoesNotReplaceAMoreSpecificOne() {
+        let store = makeStore()
+        let rich = "Matt eats about 1500 calories in 15 minutes after fights with Maureen, on top of 3 full meals."
+        let thin = "Matt eats about 1500 calories in 15 minutes after fights with Maureen, after 3 full meals."
+        let added = store.applyCoachUpdates(
+            [CoachMemoryUpdate(operation: .add, section: .patterns, text: rich)],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        XCTAssertEqual(added.first?.kind, .added)
+        let again = store.applyCoachUpdates(
+            [CoachMemoryUpdate(operation: .add, section: .patterns, text: thin)],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        XCTAssertTrue(again.isEmpty)
+        XCTAssertEqual(store.effectiveMemories.map(\.content), [rich])
+
+        let shortened = store.applyCoachUpdates(
+            [CoachMemoryUpdate(operation: .update, section: .patterns, text: "Matt eats after fights with Maureen.", replaces: rich)],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        XCTAssertTrue(shortened.isEmpty, "An update that drops specifics is refused")
+        XCTAssertEqual(store.effectiveMemories.map(\.content), [rich])
+    }
+
+    func test_aRicherUpdateKeepsTheExistingFile() {
+        let store = makeStore()
+        store.applyCoachUpdates(
+            [CoachMemoryUpdate(operation: .add, section: .aboutYou, text: "Matt, Family Medicine.")],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        let updated = store.applyCoachUpdates(
+            [CoachMemoryUpdate(
+                operation: .update,
+                section: .patterns,
+                text: "Matt works in Family Medicine and Tuesdays are heaviest.",
+                replaces: "Matt, Family Medicine."
+            )],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        XCTAssertEqual(updated.first?.kind, .updated)
+        XCTAssertEqual(store.effectiveMemories.count, 1)
+        XCTAssertEqual(store.effectiveMemories[0].section, .aboutYou)
+        XCTAssertTrue(store.effectiveMemories[0].content.contains("Tuesdays"))
+    }
+
+    func test_anUpdateThatMatchesNothingIsNotSavedAsANewNote() {
+        let store = makeStore()
+        store.applyCoachUpdates(
+            [CoachMemoryUpdate(operation: .add, section: .people, text: "Wife is Maureen.")],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        let missed = store.applyCoachUpdates(
+            [CoachMemoryUpdate(operation: .update, section: .people, text: "Has a dog named Piper.", replaces: "Has a dog named Piper.")],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        XCTAssertTrue(missed.isEmpty)
+        XCTAssertEqual(store.effectiveMemories.map(\.content), ["Wife is Maureen."])
+    }
+
+    func test_numbersNegationsAndDifferentPeopleStaySeparate() {
+        let store = makeStore()
+        let notes = [
+            "Matt eats about 1500 calories after fights with Maureen.",
+            "Matt eats about 1800 calories after fights with Maureen.",
+            "Matt does not eat after fights with Maureen.",
+            "Son Isaac is 14.",
+            "Son Caleb is 13."
+        ]
+        for note in notes {
+            store.applyCoachUpdates(
+                [CoachMemoryUpdate(operation: .add, section: .patterns, text: note)],
+                threadID: nil,
+                generationRevision: store.memoryRevision
+            )
+        }
+        store.keepTheMoreSpecificNotes()
+        XCTAssertEqual(store.effectiveMemories.count, notes.count)
+    }
+
+    func test_obviousCopiesFoldAndDistinctFactsStay() {
+        let store = makeStore()
+        let longWork = "Matt works in Family Medicine; schedule M, W, F 8-5 and T 7:30-6:30; Tuesdays heaviest."
+        let copies = [
+            longWork,
+            "Matt, Family Medicine.",
+            "Matt said his work is Family Medicine and Tuesdays run heaviest.",
+            "Matt works Family Medicine M, W, F 8-5 and T 7:30-6:30; Tuesdays heaviest.",
+            "Schedule M, W, F 8-5 and T 7:30-6:30, Tuesdays heaviest.",
+            "Matt's wife Maureen 43, son Isaac 14, son Caleb 13.",
+            "Wife Maureen 43. Son Isaac 14. Son Caleb 13.",
+            "Matt eats about 1500 calories in 15 minutes after fights with Maureen, on top of 3 full meals.",
+            "Matt eats about 1500 calories in 15 minutes after fights with Maureen, after 3 full meals.",
+            "Matt said eating to cope with feelings after a fight trips him up.",
+            "Matt eats to cope with bad feelings after a fight with Maureen."
+        ]
+        for (index, note) in copies.enumerated() {
+            let section: CoachMemorySection = index == 4 ? .routines : (index == 3 ? .patterns : (index == 5 || index == 6 ? .people : (index >= 7 ? .patterns : .aboutYou)))
+            // Written the way notes already on disk were written, before the new check.
+            store.save(CoachMemoryItem(
+                category: CoachMemoryCategory(section: section),
+                content: note,
+                provenance: .userStated,
+                confirmation: .confirmed
+            ))
+        }
+        store.keepTheMoreSpecificNotes()
+        let live = store.effectiveMemories.map(\.content)
+        XCTAssertEqual(live.filter { $0.contains("Family Medicine") || $0.contains("Schedule") }.count, 1)
+        XCTAssertTrue(live.contains(longWork))
+        XCTAssertEqual(live.filter { $0.contains("Maureen 43") || $0.contains("Caleb 13") }.count, 1)
+        XCTAssertEqual(live.filter { $0.contains("1500") }.count, 1)
+        XCTAssertEqual(live.filter { $0.contains("cope") }.count, 2)
+        let work = store.effectiveMemories.first { $0.content == longWork }
+        XCTAssertEqual(work?.section, .aboutYou)
+    }
+
+    func test_mergeKeepsEverySpecificAndCanMoveANote() {
+        let store = makeStore()
+        store.applyCoachUpdates(
+            [
+                CoachMemoryUpdate(operation: .add, section: .likes, text: "Likes music."),
+                CoachMemoryUpdate(operation: .add, section: .likes, text: "Likes working outside.")
+            ],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        let dropped = store.applyCoachUpdates(
+            [CoachMemoryUpdate(
+                operation: .merge,
+                section: .likes,
+                text: "Enjoys working outside.",
+                replaces: "Likes music.",
+                alsoReplaces: "Likes working outside."
+            )],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        XCTAssertTrue(dropped.isEmpty)
+        XCTAssertEqual(store.effectiveMemories.count, 2)
+
+        let merged = store.applyCoachUpdates(
+            [CoachMemoryUpdate(
+                operation: .merge,
+                section: .likes,
+                text: "Enjoys music and working outside.",
+                replaces: "Likes music.",
+                alsoReplaces: "Likes working outside."
+            )],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        XCTAssertFalse(merged.isEmpty)
+        XCTAssertEqual(store.effectiveMemories.map(\.content), ["Enjoys music and working outside."])
+
+        let moved = store.applyCoachUpdates(
+            [CoachMemoryUpdate(operation: .refile, section: .routines, text: "", replaces: "Enjoys music and working outside.")],
+            threadID: nil,
+            generationRevision: store.memoryRevision
+        )
+        XCTAssertEqual(moved.first?.kind, .refiled)
+        XCTAssertEqual(store.effectiveMemories[0].section, .routines)
+        XCTAssertEqual(store.effectiveMemories[0].content, "Enjoys music and working outside.")
+    }
+
+    func test_intakeWritesEachFieldOnceAndASecondSaveUpdatesThatNote() {
+        let store = makeStore()
+        XCTAssertTrue(store.needsAcquaintance)
+        store.saveIntake([
+            .name: "Matt",
+            .work: "Family Medicine",
+            .household: "Maureen and two sons"
+        ])
+        XCTAssertFalse(store.needsAcquaintance)
+        XCTAssertTrue(store.effectiveMemories.contains { $0.section == .aboutYou && $0.content == "Goes by Matt." })
+        XCTAssertTrue(store.effectiveMemories.contains { $0.section == .aboutYou && $0.content == "Work: Family Medicine." })
+        XCTAssertTrue(store.effectiveMemories.contains { $0.section == .people && $0.content == "At home: Maureen and two sons." })
+        let count = store.effectiveMemories.count
+
+        store.saveIntake([
+            .name: "Matthew",
+            .work: "Family Medicine",
+            .household: "Maureen and two sons"
+        ])
+        XCTAssertEqual(store.effectiveMemories.count, count)
+        XCTAssertTrue(store.effectiveMemories.contains { $0.content == "Goes by Matthew." })
+        XCTAssertFalse(store.effectiveMemories.contains { $0.content == "Goes by Matt." })
+        XCTAssertEqual(store.intakeAnswers()[.name], "Matthew")
+    }
+
+    func test_skippingIntakeDoesNotCreateNotes() {
+        let store = makeStore()
+        store.skipIntake()
+        XCTAssertFalse(store.needsAcquaintance)
+        XCTAssertTrue(store.effectiveMemories.isEmpty)
+    }
 }

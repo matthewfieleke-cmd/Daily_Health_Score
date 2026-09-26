@@ -321,8 +321,11 @@ final class FoundationModelsCoach {
         fallbackReason: String?
     ) async throws -> CoachReplyResult {
         lastTierUsed = .onDevice
-        // Anything a failed server attempt asked for is void; this turn starts over.
+        // The server reply did not land. Notes it had already accepted are about
+        // what the person said, so they stay. A draft from that reply does not.
+        let acceptedNotes = live.pendingMemoryUpdates
         live.beginTurn()
+        live.keepAcceptedNotes(acceptedNotes)
         let instructions = CoachCharter.instructions(for: .onDevice)
         let fullBudget = CoachContextBudget.make(
             totalTokens: await CoachModelProvider.contextTokens(for: .onDevice),
@@ -452,17 +455,34 @@ final class FoundationModelsCoach {
         #endif
     }
 
-    /// A short health background, on-device. Empty when there is nothing to compile.
+    /// A short health background for the Memory screen. Private Cloud Compute
+    /// writes it unless the allowance is already tight or the call fails, in
+    /// which case the on-device model stands in. Empty when there is nothing
+    /// to compile.
     func compileProfile(entryList: String) async throws -> String {
         #if canImport(FoundationModels)
-        try ensureAvailable()
         guard entryList != "None." else { return "" }
+        let prompt = CoachCharter.backgroundCompilePrompt(
+            entryList: entryList,
+            today: CoachMemoryLogic.compilerToday()
+        )
+        let server = CoachModelProvider.isServerModelAvailable && !CoachModelProvider.isServerQuotaApproaching
+        if server {
+            do {
+                let text = try await CoachModelProvider
+                    .makeSession(tier: .privateCloud, instructions: CoachCharter.profileInstructions)
+                    .respond(to: prompt)
+                    .content
+                let trimmed = CoachCharter.trimmedBackground(CoachMarkdown.plainText(text))
+                if !trimmed.isEmpty { return trimmed }
+            } catch {
+                // The on-device model writes a stand-in. The files stay either way.
+            }
+        }
+        try ensureAvailable()
         let text = try await CoachModelProvider
             .makeSession(tier: .onDevice, instructions: CoachCharter.profileInstructions)
-            .respond(to: CoachCharter.backgroundCompilePrompt(
-                entryList: entryList,
-                today: CoachMemoryLogic.compilerToday()
-            ))
+            .respond(to: prompt)
             .content
         return CoachCharter.trimmedBackground(CoachMarkdown.plainText(text))
         #else

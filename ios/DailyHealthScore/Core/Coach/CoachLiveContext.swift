@@ -50,6 +50,12 @@ final class CoachLiveContext {
         evidenceSearches = []
     }
 
+    /// Notes Private Cloud Compute already accepted, kept when the reply itself
+    /// falls back. Proposals from the failed reply are not kept.
+    func keepAcceptedNotes(_ updates: [CoachMemoryUpdate]) {
+        pendingMemoryUpdates = updates
+    }
+
     func log(
         _ tool: String,
         detail: String? = nil,
@@ -180,17 +186,37 @@ final class CoachLiveContext {
 
     // MARK: - Actions
 
-    /// A note is kept only when it is valid for the files and comes from the
-    /// person's own words. Returns what the model should be told.
-    func remember(operation: String, section: String, text: String, replaces: String, basis: String) -> String {
-        guard let update = CoachMemoryUpdate(operation: operation, section: section, text: text, replaces: replaces, basis: basis) else {
-            return "Not kept: the note needs a valid file (aboutYou, people, patterns, coaching, goals, likes, routines, body, recent), an operation (add, update, remove), and text under 240 characters."
+    /// A note is kept only when it is valid for the files, comes from the
+    /// person's own words or from notes already on file, and does not replace
+    /// a more specific note with a thinner one. Returns what the model should
+    /// be told.
+    func remember(operation: String, section: String, text: String, replaces: String, alsoReplaces: String = "", basis: String) -> String {
+        guard let update = CoachMemoryUpdate(operation: operation, section: section, text: text, replaces: replaces, alsoReplaces: alsoReplaces, basis: basis) else {
+            return "Not kept: the note needs a valid file (aboutYou, people, patterns, coaching, goals, likes, routines, body, recent), an operation (add, update, merge, refile, remove), and text under 240 characters."
         }
-        guard CoachMemoryLogic.isGrounded(update, inPersonsWords: personsWords) else {
+        let queued = pendingMemoryUpdates.compactMap { update -> CoachMemoryItem? in
+            guard update.operation == .add || update.operation == .update || update.operation == .merge else { return nil }
+            guard !update.text.isEmpty else { return nil }
+            return CoachMemoryItem(
+                category: CoachMemoryCategory(section: update.section),
+                content: update.text,
+                provenance: update.basis.provenance
+            )
+        }
+        let visible = memoryItems + queued
+        let retained = CoachMemoryLogic.retainedNotes(for: update, in: visible)
+        guard CoachMemoryLogic.isGrounded(update, inPersonsWords: personsWords, retaining: retained) else {
             return "Not kept: notes must come from what the person actually said, not from your own suggestions."
         }
-        pendingMemoryUpdates.append(update)
-        return "On file."
+        switch CoachMemoryLogic.filing(for: update, in: visible, keepExistingSection: true) {
+        case .reject(let reason):
+            return reason
+        case .alreadyKept(let existing):
+            return "Already on file: \(existing)"
+        case .store, .refile, .remove:
+            pendingMemoryUpdates.append(update)
+            return "On file."
+        }
     }
 
     func propose(

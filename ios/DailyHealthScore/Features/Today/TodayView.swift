@@ -9,6 +9,7 @@ struct TodayView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var coachLaunch: CoachChatLaunch?
+    @State private var showIntake = false
     @State private var showSMARTGoals = false
     @State private var showHRVAnalysis = false
     /// Shared 0…1 progress for coordinated dial-up (ring, numbers, bars).
@@ -76,6 +77,13 @@ struct TodayView: View {
             startDialUp()
         }
         .onDisappear { dialUpTask?.cancel() }
+        .sheet(isPresented: $showIntake) {
+            NavigationStack {
+                CoachIntakeView()
+                    .environmentObject(appState)
+                    .environmentObject(appState.coach)
+            }
+        }
         .sheet(item: $coachLaunch) { launch in
             NavigationStack {
                 if launch == .chats {
@@ -110,7 +118,7 @@ struct TodayView: View {
                     record: record,
                     onReply: { coachLaunch = .replyToCheckIn },
                     onContinueReply: { coachLaunch = .thread($0) },
-                    onAcquaint: { coachLaunch = .acquaint }
+                    onIntake: { showIntake = true }
                 )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     // Remaining height is the grouped screen, not empty card chrome.

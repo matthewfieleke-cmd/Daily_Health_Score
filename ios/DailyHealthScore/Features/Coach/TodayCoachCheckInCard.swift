@@ -14,7 +14,7 @@ struct TodayCoachCheckInCard: View {
     let record: DailyRecord?
     var onReply: () -> Void
     var onContinueReply: (UUID) -> Void
-    var onAcquaint: () -> Void
+    var onIntake: () -> Void
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -107,7 +107,7 @@ struct TodayCoachCheckInCard: View {
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                 if coach.memory.needsAcquaintance {
-                    Label("Let’s get acquainted", systemImage: "hand.wave.fill")
+                    Label("Intake", systemImage: "list.clipboard")
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -140,7 +140,7 @@ struct TodayCoachCheckInCard: View {
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("Before we talk numbers, I’d like to know you a little — a short first conversation so what I say fits your life.")
+            Text("Intake is a short form, so what your coach says fits your life before the numbers.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -229,7 +229,7 @@ struct TodayCoachCheckInCard: View {
     @ViewBuilder
     private func door(kind: CoachCheckInKind, now: Date) -> some View {
         if coach.memory.needsAcquaintance {
-            doorButton(title: "Let’s get acquainted", systemImage: "hand.wave.fill", action: onAcquaint)
+            doorButton(title: "Intake", systemImage: "list.clipboard", action: onIntake)
         } else if let card = coach.memory.cachedCheckIn,
                   card.kind == kind,
                   card.dateKey == record?.date,

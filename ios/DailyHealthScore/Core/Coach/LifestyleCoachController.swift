@@ -20,7 +20,6 @@ final class LifestyleCoachController: ObservableObject {
     @Published private(set) var goalProposal: CoachGoalProposal?
     /// The Coach heard "I did it"; the person confirms before anything is logged.
     @Published private(set) var pendingGoalCheckIn: CoachGoalCheckInRequest?
-    @Published private(set) var isHousekeeping = false
     private var checkInGenerationID = UUID()
     private var chatGenerationID = UUID()
     /// One on-device background compile at a time. A second caller waits,
@@ -246,6 +245,7 @@ final class LifestyleCoachController: ObservableObject {
             return
         }
 
+        memory.keepTheMoreSpecificNotes()
         let memoryRevisionAtStart = memory.memoryRevision
         chatError = nil
         pendingGoalCheckIn = nil
@@ -296,9 +296,6 @@ final class LifestyleCoachController: ObservableObject {
                 ? (result.fallbackReason ?? (CoachModelProvider.isServerQuotaExhausted ? "today’s Private Cloud Compute limit is reached" : nil))
                 : nil
             memory.append(CoachChatTurn(role: .coach, text: result.message, modelTier: result.tier, fallbackReason: reason))
-            // The reply is on screen; the composer reopens now, while filing
-            // and profile work continue on-device behind it.
-            isChatBusy = false
             goalProposal = result.goalProposal
             pendingGoalCheckIn = result.goalCheckIn
             if result.proposalRejected {
@@ -306,6 +303,7 @@ final class LifestyleCoachController: ObservableObject {
             }
             if memory.memoryRevision == memoryRevisionAtStart {
                 // The remember tool already validated and grounded each note.
+                // Notes land before the composer reopens, so the next message sees them.
                 let applied = memory.applyCoachUpdates(
                     result.memoryUpdates,
                     threadID: thread.id,
@@ -316,6 +314,9 @@ final class LifestyleCoachController: ObservableObject {
                     memory.ingestUserStatedFacts(from: trimmed)
                 }
             }
+            // The reply is on screen and the files are current. Filing and the
+            // summary continue behind the composer.
+            isChatBusy = false
             // Filing happens after the reply is on screen and costs no quota.
             let filingText = trimmed.isEmpty
                 ? (photoFileNames.count > 1 ? "The person sent photos." : "The person sent a photo.")
@@ -324,13 +325,22 @@ final class LifestyleCoachController: ObservableObject {
             await compileProfileIfNeeded()
         } catch {
             guard chatGenerationID == generationID else { return }
+            if memory.memoryRevision == memoryRevisionAtStart {
+                let accepted = live.pendingMemoryUpdates
+                memory.applyCoachUpdates(
+                    accepted,
+                    threadID: memory.openThread?.id,
+                    generationRevision: memoryRevisionAtStart
+                )
+                if accepted.isEmpty {
+                    memory.ingestUserStatedFacts(from: trimmed)
+                }
+            }
             if let coachError = error as? FoundationModelsCoach.CoachError,
                case .declined(let reason) = coachError {
-                // Both models refused the content. The app answers with care,
-                // keeps whatever facts the message plainly stated, and names
-                // the refusal once, under the reply, so it is never a mystery.
+                // Both models refused the content. The app answers with care
+                // and names the refusal once, under the reply.
                 memory.append(CoachChatTurn(role: .coach, text: CoachSafetyGate.declinedReply(concern: safetyConcern)))
-                memory.ingestUserStatedFacts(from: trimmed)
                 chatError = "The model declined this message: \(reason)"
                 return
             }
@@ -373,7 +383,8 @@ final class LifestyleCoachController: ObservableObject {
         }
     }
 
-    /// Rebuilds the compiled background when the entries changed. On-device.
+    /// Rebuilds the compiled background when the entries changed. Private Cloud
+    /// Compute writes it, with an on-device stand-in when that cannot run.
     /// Callers that overlap — chat, the Home card, the memory screen — share
     /// one compile. A result is stored only for the notes that were compiled.
     func compileProfileIfNeeded() async {
@@ -424,22 +435,6 @@ final class LifestyleCoachController: ObservableObject {
             memory.saveCompiledProfile(stored)
         } catch {
             // The card and the chat can go out without a background; the files stay in the tool.
-        }
-    }
-
-    /// Daily tidy of the files, on-device, logged and undoable.
-    func performHousekeepingIfDue() async {
-        refreshAvailability()
-        guard availability == .available, !isHousekeeping, memory.shouldReviewFiles() else { return }
-        isHousekeeping = true
-        defer { isHousekeeping = false }
-        do {
-            let operations = try await model.reviewFiles(entryList: memory.entryList)
-            memory.applyReview(operations)
-            memory.markFilesReviewed()
-            await compileProfileIfNeeded()
-        } catch {
-            // Try again tomorrow.
         }
     }
 

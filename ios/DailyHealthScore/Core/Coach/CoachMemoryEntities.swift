@@ -185,6 +185,8 @@ final class CoachMemoryStateEntity {
     /// Fingerprint of the entries the profile was compiled from.
     var compiledProfileKey: String = ""
     var lastFilesReviewAt: Date?
+    /// Intake answers and the notes they own. Empty on rows from before Intake.
+    var intakeJSON: String = ""
 
     init(
         id: String = "default",

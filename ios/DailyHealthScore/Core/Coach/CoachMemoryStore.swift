@@ -127,7 +127,79 @@ final class CoachMemoryStore: ObservableObject {
     var liveMemoryCount: Int { effectiveMemories.count }
 
     var needsAcquaintance: Bool {
-        CoachAcquaintance.isNeeded(threads: threads, liveMemoryCount: liveMemoryCount)
+        if intakeRecord.completedAt != nil { return false }
+        return CoachAcquaintance.isNeeded(threads: threads, liveMemoryCount: liveMemoryCount)
+    }
+
+    var intakeRecord: CoachIntakeRecord {
+        let state = fetchOrCreateState()
+        guard let data = state.intakeJSON.data(using: .utf8),
+              let record = try? JSONDecoder().decode(CoachIntakeRecord.self, from: data) else {
+            return .empty
+        }
+        return record
+    }
+
+    func intakeAnswers() -> [CoachIntakeField: String] {
+        var answers: [CoachIntakeField: String] = [:]
+        for field in CoachIntakeField.allCases {
+            answers[field] = intakeRecord.answers[field.rawValue] ?? ""
+        }
+        return answers
+    }
+
+    /// Writes the baseline. An edit of a field this form already owns replaces
+    /// that note. A field already covered by a more specific note does not
+    /// overwrite it. Clearing a field removes only the note that field wrote.
+    func saveIntake(_ answers: [CoachIntakeField: String], now: Date = Date()) {
+        var record = intakeRecord
+        for field in CoachIntakeField.allCases {
+            let raw = answers[field]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            record.answers[field.rawValue] = raw
+            let linked = record.noteIDs[field.rawValue].flatMap { id in
+                memories.first { $0.id.uuidString == id && $0.isEffective() }
+            }
+            if raw.isEmpty {
+                if let linked {
+                    delete(linked)
+                }
+                record.noteIDs[field.rawValue] = nil
+                continue
+            }
+            let text = CoachMemoryUpdate.cleaned(field.note(from: raw))
+            if let linked {
+                let replacement = correct(item: linked, content: text, category: CoachMemoryCategory(section: field.section))
+                record.noteIDs[field.rawValue] = replacement.uuidString
+                continue
+            }
+            removeTombstone(CoachMemoryFingerprint.fingerprint(text))
+            let update = CoachMemoryUpdate(operation: .add, section: field.section, text: text, basis: .stated)
+            let changes = applyFiling(
+                CoachMemoryLogic.filing(for: update, in: memories, at: now, keepExistingSection: false),
+                update: update,
+                provenance: .userStated,
+                confirmation: .confirmed,
+                threadID: nil,
+                now: now
+            )
+            if let stored = changes.first(where: { $0.kind == .added || $0.kind == .updated }) {
+                record.noteIDs[field.rawValue] = stored.itemId.uuidString
+            } else {
+                record.noteIDs[field.rawValue] = nil
+            }
+        }
+        record.completedAt = now
+        writeIntake(record)
+        persistDerivedProfile()
+        reload()
+    }
+
+    /// Marks Intake done without changing the files.
+    func skipIntake(now: Date = Date()) {
+        var record = intakeRecord
+        record.completedAt = now
+        writeIntake(record)
+        reload()
     }
 
     /// Coach edits the person has not undone, newest first.
@@ -347,17 +419,22 @@ final class CoachMemoryStore: ObservableObject {
     }
 
     /// Facts the person just said, in their own words. Does not bump revision,
-    /// so an in-flight reply is not cancelled.
+    /// so an in-flight reply is not cancelled. A sentence already covered by a
+    /// more specific note is not written again.
     func ingestUserStatedFacts(from message: String) {
-        let blocked = tombstones
-        var added = false
+        var applied: [CoachMemoryChange] = []
         for item in CoachPhDMemoryExtractor.items(from: message) {
-            if CoachMemoryLogic.isTombstoned(content: item.content, tombstones: blocked) { continue }
-            if CoachMemoryLogic.hasEquivalent(item.content, in: memories) { continue }
-            upsert(item)
-            added = true
+            let update = CoachMemoryUpdate(operation: .add, section: item.section, text: item.content, basis: .stated)
+            applied.append(contentsOf: applyFiling(
+                CoachMemoryLogic.filing(for: update, in: memories, keepExistingSection: true),
+                update: update,
+                provenance: .userStated,
+                confirmation: .confirmed,
+                threadID: nil,
+                now: Date()
+            ))
         }
-        if added {
+        if !applied.isEmpty {
             persistDerivedProfile()
             reload()
         }
@@ -365,6 +442,7 @@ final class CoachMemoryStore: ObservableObject {
 
     /// Coach edits to the files, applied only if the person did not edit memory
     /// while the reply was generating. Returns what changed, for Undo.
+    /// A newer note never replaces a more specific one.
     @discardableResult
     func applyCoachUpdates(
         _ updates: [CoachMemoryUpdate],
@@ -373,80 +451,37 @@ final class CoachMemoryStore: ObservableObject {
         now: Date = Date()
     ) -> [CoachMemoryChange] {
         guard generationRevision == memoryRevision else { return [] }
-        let blocked = tombstones
         var applied: [CoachMemoryChange] = []
-
-        func add(_ update: CoachMemoryUpdate) {
-            guard !CoachMemoryLogic.isTombstoned(content: update.text, tombstones: blocked) else { return }
-            guard !CoachMemoryLogic.hasEquivalent(update.text, in: memories, at: now) else { return }
-            let item = CoachMemoryItem(
-                category: CoachMemoryCategory(section: update.section),
-                content: update.text,
-                provenance: update.basis.provenance,
-                createdAt: now,
-                confirmation: .unconfirmed
-            )
-            upsert(item)
-            applied.append(record(CoachMemoryChange(
-                kind: .added,
-                section: update.section,
-                itemId: item.id,
-                newContent: update.text,
-                createdAt: now,
-                threadId: threadID
-            )))
-        }
-
         for update in updates.prefix(6) {
-            switch update.operation {
-            case .add:
-                add(update)
-            case .update:
-                guard let target = CoachMemoryLogic.match(update.replaces, in: memories, section: update.section, at: now) else {
-                    add(update)
-                    continue
-                }
-                if CoachMemoryFingerprint.normalize(target.content) == CoachMemoryFingerprint.normalize(update.text) { continue }
-                guard !CoachMemoryLogic.isTombstoned(content: update.text, tombstones: blocked) else { continue }
-                // A stated fact stays stated when the Coach rewrites it.
-                let provenance: CoachMemoryProvenance = target.provenance.isStated ? .coachRecorded : update.basis.provenance
-                let replacement = CoachMemoryItem(
-                    category: CoachMemoryCategory(section: update.section),
-                    content: update.text,
-                    provenance: provenance,
-                    createdAt: now,
-                    associatedGoalId: target.associatedGoalId,
-                    confirmation: .unconfirmed
-                )
-                var previous = target
-                previous.supersededById = replacement.id
-                upsert(previous)
-                upsert(replacement)
-                applied.append(record(CoachMemoryChange(
-                    kind: .updated,
-                    section: update.section,
-                    itemId: replacement.id,
-                    previousItemId: target.id,
-                    previousContent: target.content,
-                    newContent: update.text,
-                    createdAt: now,
-                    threadId: threadID
-                )))
-            case .remove:
-                guard let target = CoachMemoryLogic.match(update.replaces, in: memories, section: update.section, at: now) else { continue }
-                var deleted = target
-                deleted.isDeleted = true
-                upsert(deleted)
-                addTombstone(target.contentFingerprint)
-                applied.append(record(CoachMemoryChange(
-                    kind: .removed,
-                    section: update.section,
-                    itemId: target.id,
-                    previousContent: target.content,
-                    createdAt: now,
-                    threadId: threadID
-                )))
-            }
+            applied.append(contentsOf: applyFiling(
+                CoachMemoryLogic.filing(for: update, in: memories, at: now, keepExistingSection: true),
+                update: update,
+                provenance: nil,
+                confirmation: .unconfirmed,
+                threadID: threadID,
+                now: now
+            ))
+        }
+        if !applied.isEmpty {
+            persistDerivedProfile()
+            reload()
+        }
+        return applied
+    }
+
+    /// Folds notes that say the same thing, keeping the more specific one.
+    /// Does not bump revision, so an in-flight reply is not cancelled.
+    @discardableResult
+    func keepTheMoreSpecificNotes(now: Date = Date()) -> [CoachMemoryChange] {
+        var applied: [CoachMemoryChange] = []
+        var guardrail = 0
+        while guardrail < 40 {
+            guardrail += 1
+            let live = effectiveMemories
+            guard let weaker = live.first(where: { item in
+                live.contains { CoachMemoryLogic.noteDominates($0, over: item) }
+            }) else { break }
+            applied.append(retire(weaker, threadID: nil, now: now))
         }
         if !applied.isEmpty {
             persistDerivedProfile()
@@ -708,19 +743,23 @@ final class CoachMemoryStore: ObservableObject {
         _ = ingestModelProfileUpdate(incoming, generationRevision: memoryRevision)
     }
 
-    /// A note the person typed themselves.
+    /// A note the person typed themselves. A wording already covered by a more
+    /// specific note is left as it is.
     func addNote(section: CoachMemorySection, content: String) {
         let text = CoachMemoryUpdate.cleaned(content)
         guard !text.isEmpty else { return }
-        let item = CoachMemoryItem(
-            category: CoachMemoryCategory(section: section),
-            content: text,
+        let update = CoachMemoryUpdate(operation: .add, section: section, text: text, basis: .stated)
+        let applied = applyFiling(
+            CoachMemoryLogic.filing(for: update, in: memories, keepExistingSection: false),
+            update: update,
             provenance: .userStated,
-            createdAt: Date(),
-            lastConfirmedAt: Date(),
-            confirmation: .confirmed
+            confirmation: .confirmed,
+            threadID: nil,
+            now: Date()
         )
-        save(item)
+        guard !applied.isEmpty else { return }
+        persistDerivedProfile()
+        reload()
     }
 
     func save(_ item: CoachMemoryItem) {
@@ -747,7 +786,8 @@ final class CoachMemoryStore: ObservableObject {
         save(updated)
     }
 
-    func correct(item: CoachMemoryItem, content: String, category: CoachMemoryCategory) {
+    @discardableResult
+    func correct(item: CoachMemoryItem, content: String, category: CoachMemoryCategory) -> UUID {
         var replacement = CoachMemoryItem(
             category: category,
             content: CoachMemoryUpdate.cleaned(content),
@@ -768,6 +808,7 @@ final class CoachMemoryStore: ObservableObject {
         persistDerivedProfile()
         bumpRevision(removing: [item.content])
         reload()
+        return replacement.id
     }
 
     func delete(_ item: CoachMemoryItem) {
@@ -977,6 +1018,116 @@ final class CoachMemoryStore: ObservableObject {
         }
         persistDerivedProfile()
         reload()
+    }
+
+    /// Applies one filing decision. A pure add is recorded as added. Replacing
+    /// a less specific note is an update, so Undo restores that note rather
+    /// than leaving a hole. Extra notes the new text covers are removed, each
+    /// with its own Undo.
+    private func applyFiling(
+        _ decision: CoachMemoryLogic.Filing,
+        update: CoachMemoryUpdate,
+        provenance: CoachMemoryProvenance?,
+        confirmation: CoachMemoryConfirmation,
+        threadID: UUID?,
+        now: Date
+    ) -> [CoachMemoryChange] {
+        switch decision {
+        case .alreadyKept, .reject:
+            return []
+        case .remove(let id):
+            guard let target = memories.first(where: { $0.id == id }) else { return [] }
+            return [retire(target, threadID: threadID, now: now)]
+        case .refile(let id, let section):
+            guard let target = memories.first(where: { $0.id == id }), target.section != section else { return [] }
+            var moved = target
+            moved.category = CoachMemoryCategory(section: section)
+            upsert(moved)
+            return [record(CoachMemoryChange(
+                kind: .refiled,
+                section: section,
+                itemId: target.id,
+                previousContent: target.section.rawValue,
+                newContent: target.content,
+                createdAt: now,
+                threadId: threadID
+            ))]
+        case .store(let section, let retiring):
+            if CoachMemoryLogic.isTombstoned(content: update.text, tombstones: tombstones) { return [] }
+            let primary = retiring.first.flatMap { id in memories.first { $0.id == id } }
+            let stated = primary?.provenance.isStated == true
+            let keptProvenance: CoachMemoryProvenance = {
+                if let provenance, primary == nil { return provenance }
+                if stated { return primary?.provenance == .userStated ? .userStated : .coachRecorded }
+                return provenance ?? update.basis.provenance
+            }()
+            let item = CoachMemoryItem(
+                category: CoachMemoryCategory(section: section),
+                content: update.text,
+                provenance: keptProvenance,
+                createdAt: now,
+                lastConfirmedAt: confirmation == .confirmed ? now : nil,
+                associatedGoalId: primary?.associatedGoalId,
+                confirmation: confirmation
+            )
+            var changes: [CoachMemoryChange] = []
+            if let primary {
+                var previous = primary
+                previous.supersededById = item.id
+                upsert(previous)
+                upsert(item)
+                changes.append(record(CoachMemoryChange(
+                    kind: .updated,
+                    section: section,
+                    itemId: item.id,
+                    previousItemId: primary.id,
+                    previousContent: primary.content,
+                    newContent: update.text,
+                    createdAt: now,
+                    threadId: threadID
+                )))
+                for id in retiring.dropFirst() {
+                    guard let extra = memories.first(where: { $0.id == id }) else { continue }
+                    changes.append(retire(extra, threadID: threadID, now: now))
+                }
+            } else {
+                upsert(item)
+                changes.append(record(CoachMemoryChange(
+                    kind: .added,
+                    section: section,
+                    itemId: item.id,
+                    newContent: update.text,
+                    createdAt: now,
+                    threadId: threadID
+                )))
+            }
+            return changes
+        }
+    }
+
+    private func retire(_ item: CoachMemoryItem, threadID: UUID?, now: Date) -> CoachMemoryChange {
+        var deleted = item
+        deleted.isDeleted = true
+        upsert(deleted)
+        addTombstone(item.contentFingerprint)
+        return record(CoachMemoryChange(
+            kind: .removed,
+            section: item.section,
+            itemId: item.id,
+            previousContent: item.content,
+            createdAt: now,
+            threadId: threadID
+        ))
+    }
+
+    private func writeIntake(_ record: CoachIntakeRecord) {
+        let state = fetchOrCreateState()
+        if let data = try? JSONEncoder().encode(record),
+           let json = String(data: data, encoding: .utf8) {
+            state.intakeJSON = json
+        }
+        state.updatedAt = Date()
+        try? modelContext.save()
     }
 
     private func persistDerivedProfile() {

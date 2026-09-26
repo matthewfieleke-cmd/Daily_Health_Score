@@ -18,7 +18,7 @@ enum CoachToolCopy {
     static let lookupFood = "Nutrition facts for a food or branded product from USDA FoodData Central and Open Food Facts: calories, protein, fiber, sugars, added sugars, fat, and minerals per serving when listed. The result says exact, candidates, or none. A number stated for a food should be one of these results. Candidate items are not an exact total. A food that is only being recommended does not need a lookup."
     static let searchEvidence = "PubMed records with title, journal, year, PMID, and abstract kept together. Call when the person asks for evidence or a citation, or when a current, unfamiliar, or precise claim needs verification. Ordinary explanations should use your own expertise. A keyword match is evidence only when the study actually answers the question; cite only what comes back."
     static let calculate = "Exact arithmetic and weight conversion. Use for any total, difference, percentage, unit conversion, or per-kilogram figure instead of computing in prose, e.g. '250 + 230 + 100', '20 / 50 * 100', or '268.7 lb to kg'. A g/kg formula must use kilograms, never pounds."
-    static let rememberAboutPerson = "Stores one sentence this person said, under 240 characters, in one file: aboutYou, people, patterns, coaching, goals, likes, routines, body, or recent. Their framing, third person. stated means they said it; inferred means it is a read of what they said. Only what they said, not a metric, the score, or advice. An update or removal names the existing note."
+    static let rememberAboutPerson = "Stores, updates, merges, refiles, or retires one note under 240 characters in aboutYou, people, patterns, coaching, goals, likes, routines, body, or recent. The note is what they said, third person. stated means they said it; inferred means it is a read. Only what they said, not a metric, the score, or advice. update and retire name the existing note. merge names both notes and keeps every specific. refile moves a note without rewriting it. A note that would drop a specific already on file is refused."
     static let proposeSMARTGoal = "Hands the person a SMART goal draft to review — a new goal, or an update to a saved one by exact goalID — once the action is clear. Details the person did not supply may be useful suggestions, but identify them as suggestions in your reply and invite changes. Only one draft can be on screen at a time; a second call replaces the first. Nothing is saved until they save it."
     static let logGoalCheckIn = "Asks them to confirm a check-in on a saved SMART goal for today or yesterday, after they said they completed that action. The goalID is the one on the saved goals. It is not logged until they confirm."
     static let readTextInPhoto = "Read the text in an attached photo, such as a nutrition label, menu, or note. Use when exact words or numbers in the photo matter."
@@ -201,14 +201,16 @@ struct CoachRememberTool: Tool {
 
     @Generable
     struct Arguments {
-        @Guide(description: "add, update, or remove.")
+        @Guide(description: "add, update, merge, refile, or remove.")
         var operation: String
         @Guide(description: "aboutYou, people, patterns, coaching, goals, likes, routines, body, or recent.")
         var section: String
-        @Guide(description: "The note. Empty for remove.")
+        @Guide(description: "The note. Empty when only removing or refiling.")
         var text: String
-        @Guide(description: "For update or remove: the existing note being replaced or removed, quoted as closely as possible. Empty for add.")
+        @Guide(description: "The existing note being updated, merged, refiled, or removed, quoted as closely as possible. Empty for add.")
         var replaces: String
+        @Guide(description: "For merge: the other existing note being folded in. Empty otherwise.")
+        var alsoReplaces: String
         @Guide(description: "stated when they said it; inferred when it is your read.")
         var basis: String
     }
@@ -219,11 +221,12 @@ struct CoachRememberTool: Tool {
             section: arguments.section,
             text: arguments.text,
             replaces: arguments.replaces,
+            alsoReplaces: arguments.alsoReplaces,
             basis: arguments.basis
         )
         await context.log(
             "rememberAboutPerson",
-            outcome: result == "On file." ? "accepted" : "rejected"
+            outcome: result == "On file." ? "accepted" : (result.hasPrefix("Already on file") ? "kept" : "rejected")
         )
         return result
     }

@@ -105,13 +105,17 @@ enum CoachCharter {
 
     /// Bump when this compiler's job changes, so a profile written for the old
     /// job is not served as the current background.
-    static let profileCompilerGeneration = "2"
+    static let profileCompilerGeneration = "3"
 
-    /// The on-device compiler: a short health background, not a copy of the files.
+    /// The summary on the Memory screen. Private Cloud Compute writes it, and
+    /// the on-device model stands in when Private Cloud Compute cannot. It is
+    /// not added to the conversation.
     static let profileInstructions = """
     You compile a coach's notes about one person into the short background a Lifestyle Medicine coach would want before helping them. The conversation can look up a note when it needs one exact fact, so this is the picture that most changes the care, not a copy of the files.
 
     Write one short passage, a few sentences. Include how they live, who matters, what helps, what gets in the way, and what is current, when the notes support it. Food, movement, sleep, stress, connection, and substances belong only when a note supports them. Keep the names and constraints that would change the help. Leave out a detail that is merely specific, already over, or would not change the care.
+
+    Do not mention what the notes leave out, and do not join two notes into a cause unless a note says so.
 
     Keep what they stated apart from what was inferred: phrase an inference as seeming or possible. Do not invent facts, dates, ages, or numbers. No advice, no metrics, no score. Plain prose, no headings.
     """

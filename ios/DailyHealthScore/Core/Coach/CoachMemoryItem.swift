@@ -52,18 +52,18 @@ enum CoachMemorySection: String, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 
-    /// What belongs here, for the model.
+    /// What belongs here, for the model. One fact has one home.
     var promptHint: String {
         switch self {
-        case .aboutYou: return "name, profession, diet pattern, values, self-narratives in their own words, what a good day looks like"
-        case .people: return "partner, kids, friends, colleagues — names, ages with an as-of date, and how those relationships affect health"
-        case .patterns: return "trigger, tell, and antidote in one sentence: what tends to happen under strain, how it shows, what has helped"
-        case .coaching: return "how they want to be coached: what to call them, topics to return to, frames that land, what to avoid"
-        case .goals: return "what they are working toward and why, beyond the saved SMART goals; mottos they use"
-        case .likes: return "foods, products, activities, and rituals they enjoy, by name — the raw material for suggestions"
-        case .routines: return "work and clinic days, sleep and meal rhythms, commutes, constraints like shift work or travel"
-        case .body: return "conditions, devices, medications they mention, injuries, recovery limits, weight context — as stated"
-        case .recent: return "dated state: mood as reported, the current hurdle, a positive trend, a recent success"
+        case .aboutYou: return "name, work, and values, in their words. Not the weekly schedule"
+        case .people: return "who is in their life: names, ages, and the relationship. Not the pattern those people are part of"
+        case .patterns: return "one fact about what happens under strain. Not a schedule, and not several facts packed together"
+        case .coaching: return "how they want to be coached: what lands, what to avoid, what to call them"
+        case .goals: return "direction they are working toward that is not already a saved SMART goal"
+        case .likes: return "named foods, products, and activities they enjoy"
+        case .routines: return "the weekly clock: work days, sleep, meal timing, commute"
+        case .body: return "conditions, medicines, injuries, and limits, as they said them. Not the score"
+        case .recent: return "dated state that will go stale: mood, the current hurdle, a recent change"
         }
     }
 
@@ -365,6 +365,8 @@ struct CoachMemoryUpdate: Equatable, Sendable {
     enum Operation: String, Sendable {
         case add
         case update
+        case merge
+        case refile
         case remove
     }
 
@@ -387,42 +389,51 @@ struct CoachMemoryUpdate: Equatable, Sendable {
     var section: CoachMemorySection
     var text: String
     var replaces: String
+    /// The second note a merge folds in.
+    var alsoReplaces: String
     var basis: Basis = .stated
 
-    init?(operation: String, section: String, text: String, replaces: String, basis: String = "stated") {
+    init?(operation: String, section: String, text: String, replaces: String, alsoReplaces: String = "", basis: String = "stated") {
         let op = operation.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         let parsed: Operation
         if op.hasPrefix("add") || op.hasPrefix("creat") || op.hasPrefix("new") {
             parsed = .add
+        } else if op.hasPrefix("merg") || op.hasPrefix("combin") || op.hasPrefix("fold") {
+            parsed = .merge
+        } else if op.hasPrefix("refile") || op.hasPrefix("move") {
+            parsed = .refile
         } else if op.hasPrefix("upd") || op.hasPrefix("edit") || op.hasPrefix("chang") || op.hasPrefix("repl") {
             parsed = .update
-        } else if op.hasPrefix("rem") || op.hasPrefix("del") || op.hasPrefix("forg") {
+        } else if op.hasPrefix("rem") || op.hasPrefix("del") || op.hasPrefix("forg") || op.hasPrefix("retir") {
             parsed = .remove
         } else {
             return nil
         }
         let cleanText = CoachMemoryUpdate.cleaned(text)
         let cleanReplaces = CoachMemoryUpdate.cleaned(replaces)
+        let cleanAlso = CoachMemoryUpdate.cleaned(alsoReplaces)
         switch parsed {
-        case .add:
+        case .add, .update:
             guard cleanText.count >= 4 else { return nil }
-        case .update:
-            guard cleanText.count >= 4 else { return nil }
-        case .remove:
+        case .merge:
+            guard cleanText.count >= 4, cleanReplaces.count >= 4, cleanAlso.count >= 4 else { return nil }
+        case .refile, .remove:
             guard cleanReplaces.count >= 4 || cleanText.count >= 4 else { return nil }
         }
         self.operation = parsed
         self.section = CoachMemorySection(modelValue: section)
         self.text = cleanText
-        self.replaces = cleanReplaces.isEmpty && parsed == .remove ? cleanText : cleanReplaces
+        self.replaces = cleanReplaces.isEmpty && (parsed == .remove || parsed == .refile) ? cleanText : cleanReplaces
+        self.alsoReplaces = cleanAlso
         self.basis = Basis(modelValue: basis)
     }
 
-    init(operation: Operation, section: CoachMemorySection, text: String, replaces: String = "", basis: Basis = .stated) {
+    init(operation: Operation, section: CoachMemorySection, text: String, replaces: String = "", alsoReplaces: String = "", basis: Basis = .stated) {
         self.operation = operation
         self.section = section
         self.text = CoachMemoryUpdate.cleaned(text)
         self.replaces = CoachMemoryUpdate.cleaned(replaces)
+        self.alsoReplaces = CoachMemoryUpdate.cleaned(alsoReplaces)
         self.basis = basis
     }
 
@@ -568,11 +579,20 @@ enum CoachMemoryLogic {
 
     /// A new note has to come from the person's words. The Coach's own
     /// suggestions filed as facts about the person are how a memory drifts from
-    /// the truth; this keeps them out.
-    static func isGrounded(_ update: CoachMemoryUpdate, inPersonsWords words: String) -> Bool {
-        guard update.operation != .remove else { return true }
+    /// the truth; this keeps them out. A rewrite may reuse the notes it
+    /// replaces, and may not introduce a substance word from anywhere else.
+    static func isGrounded(
+        _ update: CoachMemoryUpdate,
+        inPersonsWords words: String,
+        retaining existingNotes: [String] = []
+    ) -> Bool {
+        if update.operation == .remove || update.operation == .refile { return true }
         let noteWords = substanceWords(in: update.text)
         guard !noteWords.isEmpty else { return false }
+        if update.operation == .update || update.operation == .merge {
+            let allowed = substanceWords(in: ([words] + existingNotes).joined(separator: " "))
+            return noteWords.isSubset(of: allowed)
+        }
         let spoken = substanceWords(in: words)
         let overlap = noteWords.intersection(spoken).count
         return noteWords.count <= 4 ? overlap >= 1 : overlap >= 2
@@ -898,16 +918,225 @@ enum CoachMemoryLogic {
         return best?.item
     }
 
-    /// True when an equivalent note already exists, so an add is a no-op.
+    /// True when a note already on file is at least as specific, so an add is a no-op.
     static func hasEquivalent(_ text: String, in items: [CoachMemoryItem], at date: Date = Date()) -> Bool {
-        let needle = CoachMemoryFingerprint.normalize(text)
-        guard !needle.isEmpty else { return true }
-        for item in effectiveItems(items, at: date) {
-            let hay = CoachMemoryFingerprint.normalize(item.content)
-            if hay == needle { return true }
-            if needle.count >= 16, hay.count >= 16, hay.contains(needle) || needle.contains(hay) { return true }
+        coveringNote(for: text, in: items, at: date) != nil
+    }
+
+    /// How one proposed note should land among the notes already on file.
+    /// A newer wording never replaces a more specific one.
+    enum Filing: Equatable {
+        case store(section: CoachMemorySection, retiring: [UUID])
+        case refile(id: UUID, section: CoachMemorySection)
+        case remove(id: UUID)
+        case alreadyKept(String)
+        case reject(String)
+    }
+
+    static func filing(
+        for update: CoachMemoryUpdate,
+        in items: [CoachMemoryItem],
+        at date: Date = Date(),
+        keepExistingSection: Bool
+    ) -> Filing {
+        let live = effectiveItems(items, at: date)
+        switch update.operation {
+        case .add:
+            if let kept = coveringNote(for: update.text, in: live, at: date) {
+                return .alreadyKept(kept.content)
+            }
+            let weaker = lessSpecificNotes(than: update.text, in: live, at: date)
+                .sorted { isPreferable($0, to: $1) }
+            let section: CoachMemorySection
+            if keepExistingSection, let richest = weaker.first {
+                section = richest.section
+            } else {
+                section = update.section
+            }
+            return .store(section: section, retiring: weaker.map(\.id))
+        case .update:
+            let reference = update.replaces.isEmpty ? update.text : update.replaces
+            guard let target = match(reference, in: live, section: update.section, at: date) else {
+                return .reject("Not kept: no note matched. Quote the existing note.")
+            }
+            if losesSpecifics(from: [target.content], replacement: update.text) {
+                return .reject("Not kept: that would drop a specific already on file.")
+            }
+            if !isStricter(update.text, than: target.content), !contradicts(update.text, target.content) {
+                return .alreadyKept(target.content)
+            }
+            let extras = lessSpecificNotes(than: update.text, in: live, at: date).filter { $0.id != target.id }
+            return .store(section: target.section, retiring: [target.id] + extras.map(\.id))
+        case .merge:
+            guard let first = match(update.replaces, in: live, section: nil, at: date),
+                  let second = match(update.alsoReplaces, in: live, section: nil, at: date),
+                  first.id != second.id else {
+                return .reject("Not kept: no note matched. Quote both existing notes.")
+            }
+            if losesSpecifics(from: [first.content, second.content], replacement: update.text) {
+                return .reject("Not kept: that would drop a specific already on file.")
+            }
+            let richer = isPreferable(first, to: second) ? first : second
+            let poorer = richer.id == first.id ? second : first
+            if !isStricter(update.text, than: richer.content),
+               covers(richer.content, update.text),
+               covers(richer.content, poorer.content) {
+                return .remove(id: poorer.id)
+            }
+            let section = (update.section == first.section || update.section == second.section)
+                ? update.section
+                : richer.section
+            let ordered = [richer, poorer].sorted { isPreferable($0, to: $1) }
+            return .store(section: section, retiring: ordered.map(\.id))
+        case .refile:
+            let reference = update.replaces.isEmpty ? update.text : update.replaces
+            guard let target = match(reference, in: live, section: nil, at: date) else {
+                return .reject("Not kept: no note matched. Quote the existing note.")
+            }
+            if target.section == update.section { return .alreadyKept(target.content) }
+            return .refile(id: target.id, section: update.section)
+        case .remove:
+            let reference = update.replaces.isEmpty ? update.text : update.replaces
+            guard let target = match(reference, in: live, section: update.section, at: date) else {
+                return .reject("Not kept: no note matched. Quote the existing note.")
+            }
+            return .remove(id: target.id)
         }
-        return false
+    }
+
+    /// Notes whose facts sit entirely inside `text`, with nothing `text` contradicts.
+    static func lessSpecificNotes(than text: String, in items: [CoachMemoryItem], at date: Date = Date()) -> [CoachMemoryItem] {
+        effectiveItems(items, at: date).filter { isStricter(text, than: $0.content) }
+    }
+
+    /// The note already on file that says everything `text` says, and is not poorer.
+    static func coveringNote(for text: String, in items: [CoachMemoryItem], at date: Date = Date()) -> CoachMemoryItem? {
+        let keepers = effectiveItems(items, at: date).filter {
+            covers($0.content, text) && !isStricter(text, than: $0.content)
+        }
+        return keepers.max { isPreferable($1, to: $0) }
+    }
+
+    static func retainedNotes(for update: CoachMemoryUpdate, in items: [CoachMemoryItem], at date: Date = Date()) -> [String] {
+        let live = effectiveItems(items, at: date)
+        switch update.operation {
+        case .update, .refile, .remove:
+            let reference = update.replaces.isEmpty ? update.text : update.replaces
+            return [match(reference, in: live, section: update.operation == .refile ? nil : update.section, at: date)?.content].compactMap { $0 }
+        case .merge:
+            let first = match(update.replaces, in: live, section: nil, at: date)?.content
+            let second = match(update.alsoReplaces, in: live, section: nil, at: date)?.content
+            return [first, second].compactMap { $0 }
+        case .add:
+            return []
+        }
+    }
+
+    /// True when `keeper` already contains every specific in `candidate`.
+    static func covers(_ keeper: String, _ candidate: String) -> Bool {
+        guard !contradicts(keeper, candidate) else { return false }
+        let candidateWords = comparisonWords(in: candidate)
+        guard !candidateWords.isEmpty else { return false }
+        return candidateWords.isSubset(of: comparisonWords(in: keeper))
+    }
+
+    /// True when `candidate` keeps every specific in `existing` and adds at least one.
+    static func isStricter(_ candidate: String, than existing: String) -> Bool {
+        guard !contradicts(candidate, existing) else { return false }
+        let candidateWords = comparisonWords(in: candidate)
+        let existingWords = comparisonWords(in: existing)
+        return existingWords.isSubset(of: candidateWords) && candidateWords.count > existingWords.count
+    }
+
+    /// A name, a number, or a negation that disagrees. Those are different facts.
+    static func contradicts(_ lhs: String, _ rhs: String) -> Bool {
+        if hasNegation(lhs) != hasNegation(rhs) { return true }
+        let leftNumbers = comparisonWords(in: lhs).filter { $0.allSatisfy(\.isNumber) }
+        let rightNumbers = comparisonWords(in: rhs).filter { $0.allSatisfy(\.isNumber) }
+        guard !leftNumbers.isEmpty, !rightNumbers.isEmpty else { return false }
+        return !leftNumbers.isSubset(of: rightNumbers) && !rightNumbers.isSubset(of: leftNumbers)
+    }
+
+    /// True when `replacement` drops a specific the sources had, other than a number it corrects.
+    static func losesSpecifics(from sources: [String], replacement: String) -> Bool {
+        let kept = comparisonWords(in: replacement)
+        let dropped = sources.reduce(into: Set<String>()) { partial, source in
+            partial.formUnion(comparisonWords(in: source).subtracting(kept))
+        }
+        guard !dropped.isEmpty else { return false }
+        if dropped.contains(where: { !$0.allSatisfy(\.isNumber) }) { return true }
+        if kept.contains(where: { $0.allSatisfy(\.isNumber) }) { return false }
+        return !sources.contains { hasNegation($0) != hasNegation(replacement) }
+    }
+
+    /// The note worth keeping when two say the same thing: more specifics, then
+    /// the longer wording, then the older one. Recency does not win.
+    static func isPreferable(_ candidate: CoachMemoryItem, to other: CoachMemoryItem) -> Bool {
+        let candidateWords = comparisonWords(in: candidate.content).count
+        let otherWords = comparisonWords(in: other.content).count
+        if candidateWords != otherWords { return candidateWords > otherWords }
+        if candidate.content.count != other.content.count { return candidate.content.count > other.content.count }
+        if candidate.createdAt != other.createdAt { return candidate.createdAt < other.createdAt }
+        return candidate.id.uuidString < other.id.uuidString
+    }
+
+    static func noteDominates(_ keeper: CoachMemoryItem, over other: CoachMemoryItem) -> Bool {
+        guard keeper.id != other.id else { return false }
+        guard !contradicts(keeper.content, other.content) else { return false }
+        guard covers(keeper.content, other.content) else { return false }
+        if isStricter(keeper.content, than: other.content) { return true }
+        return comparisonWords(in: keeper.content) == comparisonWords(in: other.content) && isPreferable(keeper, to: other)
+    }
+
+    /// Specifics used to compare notes. Light stemming, so "eats" and "eating"
+    /// are one word, and a single differing number stays visible.
+    static func comparisonWords(in text: String) -> Set<String> {
+        let stop: Set<String> = [
+            "about", "after", "again", "also", "always", "another", "around", "because", "been", "before",
+            "being", "between", "both", "could", "does", "doing", "during", "each", "either", "every",
+            "feels", "from", "going", "goes", "have", "having", "help", "helps", "helpful", "into", "just",
+            "keeps", "like", "likely", "makes", "many", "more", "most", "much", "often", "only", "other",
+            "over", "part", "person", "really", "said", "same", "says", "seems", "since", "some", "something",
+            "still", "such", "than", "that", "their", "them", "then", "there", "these", "they", "thing",
+            "things", "this", "those", "through", "told", "under", "until", "uses", "very", "want", "wants",
+            "when", "where", "which", "while", "will", "with", "within", "would", "your", "stated", "inferred",
+            "january", "february", "march", "april", "june", "july", "august", "september", "october",
+            "november", "december", "2025", "2026", "2027", "tends", "tend", "usually", "sometimes"
+        ]
+        let tokens = text.lowercased()
+            .replacingOccurrences(of: "’", with: "'")
+            .replacingOccurrences(of: "'", with: "")
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+        return Set(tokens.compactMap { token in
+            if token.allSatisfy(\.isNumber), !token.isEmpty, !stop.contains(token) { return token }
+            guard token.count >= 4 else { return nil }
+            let word = comparisonStem(token)
+            return stop.contains(word) || stop.contains(token) ? nil : word
+        })
+    }
+
+    private static func comparisonStem(_ token: String) -> String {
+        var word = token
+        if word.hasSuffix("s"), !word.hasSuffix("ss"), word.count >= 4 {
+            let stem = String(word.dropLast())
+            if stem.count >= 3 { word = stem }
+        }
+        if word.hasSuffix("ing"), word.count >= 6 {
+            let stem = String(word.dropLast(3))
+            if stem.count >= 3 { word = stem }
+        }
+        return word
+    }
+
+    static func hasNegation(_ text: String) -> Bool {
+        let cues: Set<String> = [
+            "not", "no", "never", "dont", "doesnt", "cannot", "cant", "without", "nobody", "nothing"
+        ]
+        let tokens = text.lowercased()
+            .replacingOccurrences(of: "’", with: "'")
+            .replacingOccurrences(of: "'", with: "")
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+        return tokens.contains { cues.contains($0) }
     }
 
     static func significantWords(_ normalized: String) -> Set<String> {
