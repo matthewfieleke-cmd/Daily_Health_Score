@@ -204,7 +204,7 @@ struct TodayView: View {
     // MARK: - Three compact metric cards in a single row
 
     private func metricRow(for record: DailyRecord) -> some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             CompactMetricCard(
                 title: "Sleep",
                 metricValue: record.sleepHours,
@@ -373,28 +373,44 @@ private struct CompactMetricCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 5) {
+            HStack(alignment: .top, spacing: 5) {
                 Image(systemName: systemImage)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(tint)
                     .frame(width: 20, height: 20)
                     .background(Circle().fill(tint.opacity(0.15)))
-                Text(title)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.7)
+                // Two lines are reserved on every card. "Steps" is one line and
+                // "Exercise Minutes" is two; the row must not change height.
+                ZStack(alignment: .topLeading) {
+                    Text("Exercise\nMinutes")
+                        .font(.caption2.weight(.semibold))
+                        .lineLimit(2)
+                        .hidden()
+                        .accessibilityHidden(true)
+                    Text(title)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(metricDisplayText)
                     .font(.headline.weight(.bold))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
                     .contentTransition(.numericText(value: displayedMetric))
                 Text(unitSuffix)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -410,6 +426,8 @@ private struct CompactMetricCard: View {
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .contentTransition(.numericText(value: displayedScore))
                 Spacer(minLength: 0)
                 if atOrOverGoal, progress >= 1 {

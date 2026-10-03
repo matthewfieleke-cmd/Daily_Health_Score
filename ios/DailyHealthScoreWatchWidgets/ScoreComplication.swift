@@ -153,16 +153,16 @@ struct ScoreComplicationView: View {
                     .widgetAccentable()
                     .lineLimit(1)
                 if let snapshot = liveSnapshot {
-                    ViewThatFits(in: .horizontal) {
-                        Text(snapshot.rectangularPillarLine)
+                    // Always two lines. A step count is wider than exercise
+                    // minutes, and switching between them must not change how
+                    // many lines the slot uses.
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(snapshot.rectangularPillarLineSleepFiber)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(snapshot.rectangularPillarLineSleepFiber)
-                                .lineLimit(1)
-                            Text(snapshot.rectangularPillarLineExercise)
-                                .lineLimit(1)
-                        }
+                            .minimumScaleFactor(0.7)
+                        Text(snapshot.rectangularPillarLineExercise)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                     }
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)

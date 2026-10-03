@@ -121,24 +121,37 @@ struct RollingSummaryView: View {
         ) {
             ForEach(items) { tile in
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
+                    HStack(alignment: .top, spacing: 8) {
                         Image(systemName: tile.icon)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(tile.tint)
                             .frame(width: 22, height: 22)
                             .background(Circle().fill(tile.tint.opacity(0.15)))
-                        Text(tile.label.uppercased())
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .tracking(0.5)
+                        ZStack(alignment: .topLeading) {
+                            Text("EXERCISE\nMINUTES")
+                                .font(.caption2.weight(.semibold))
+                                .lineLimit(2)
+                                .hidden()
+                                .accessibilityHidden(true)
+                            Text(tile.label.uppercased())
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.75)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
                     Text(tile.value)
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                     Text(tile.sub)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                        .lineLimit(1)
                 }
                 .dhsCard()
             }
@@ -172,6 +185,8 @@ struct RollingSummaryView: View {
                             Text(metricLine(for: record))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
                         }
                         Spacer()
                         scoreChip(record.totalScore)
@@ -202,7 +217,7 @@ struct RollingSummaryView: View {
     private func metricLine(for record: DailyRecord) -> String {
         let sleep = ScoreCalculator.formatDisplayScore(record.sleepHours)
         let fiber = ScoreCalculator.formatDisplayScore(record.fiberGrams)
-        let movement = "\(record.movementGoal.metricName) \(MovementGoal.formatCount(record.movementValue))"
+        let movement = "\(MovementGoal.formatCount(record.movementValue)) \(record.movementGoal.unit)"
         return "Sleep \(sleep)h · Fiber \(fiber)g · \(movement)"
     }
 
