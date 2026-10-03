@@ -211,12 +211,12 @@ private struct FoodGroupTile: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
                 FoodGroupIcon(group: group)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 48, height: 48)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(group.title)
                         .font(.subheadline.weight(.semibold))
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.85)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(group.hint)
                         .font(.caption2)
@@ -233,6 +233,8 @@ private struct FoodGroupTile: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("About \(group.title)")
             }
+
+            Spacer(minLength: 10)
 
             HStack(spacing: 8) {
                 stepButton(systemName: "minus", delta: -1)
@@ -303,21 +305,60 @@ private struct FoodGroupInfoSheet: View {
     @Environment(\.dismiss) private var dismiss
     let group: FoodGroup
 
+    private var guide: FoodGroupGuide { group.guide }
+
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    ForEach(group.examples, id: \.self) { line in
-                        Text(line)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(alignment: .top, spacing: 14) {
+                        FoodGroupIcon(group: group)
+                            .frame(width: 76, height: 76)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(group.title)
+                                .font(.title3.weight(.semibold))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(guide.summary)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
-                }
-                if group.showsAntioxidantNote {
-                    Section {
-                        Text(FoodGroup.antioxidantNote)
+
+                    infoCard(title: "One serving") {
+                        Text(guide.serving)
+                            .font(.body)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+
+                    infoCard(title: "What counts") {
+                        bulletList(guide.counts, mark: "checkmark.circle.fill", tint: AppTheme.leaf)
+                    }
+
+                    infoCard(title: "What does not count") {
+                        bulletList(guide.doesNotCount, mark: "minus.circle.fill", tint: AppTheme.primary)
+                    }
+
+                    if let note = guide.note {
+                        Text(note)
+                            .font(.subheadline)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(AppTheme.leaf.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+
+                    Text("Drawn from the American Heart Association’s dietary guidance and the Dietary Guidelines for Americans, 2025–2030. A logging aid, not personal medical advice.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .padding(20)
             }
-            .navigationTitle(group.title)
+            .background(AppTheme.screenBackground.ignoresSafeArea())
+            .navigationTitle("About this group")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -326,5 +367,36 @@ private struct FoodGroupInfoSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    private func infoCard(title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.6)
+            content()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func bulletList(_ lines: [String], mark: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(lines, id: \.self) { line in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Image(systemName: mark)
+                        .font(.subheadline)
+                        .foregroundStyle(tint)
+                        .accessibilityHidden(true)
+                    Text(line)
+                        .font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 }
