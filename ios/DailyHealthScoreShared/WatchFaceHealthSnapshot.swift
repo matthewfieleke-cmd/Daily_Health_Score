@@ -169,8 +169,7 @@ enum WatchFaceHealthSnapshot {
                     HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
                     HKCategoryValueSleepAnalysis.asleepCore.rawValue,
                     HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
-                    HKCategoryValueSleepAnalysis.asleepREM.rawValue,
-                    HKCategoryValueSleepAnalysis.asleep.rawValue
+                    HKCategoryValueSleepAnalysis.asleepREM.rawValue
                 ])
                 var seconds: TimeInterval = 0
                 for sample in samples as? [HKCategorySample] ?? [] {
