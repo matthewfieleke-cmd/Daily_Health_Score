@@ -9,6 +9,8 @@ import Foundation
 enum WatchBridge {
     static let appGroupIdentifier = "group.com.dailyhealthscore.app.mf"
     static let snapshotDefaultsKey = "dhs.watch.snapshotJSON"
+    static let nutritionModeDefaultsKey = "dhs.watch.nutritionMode"
+    static let nutritionModeFileName = "dhs.watch.nutritionMode.txt"
     static let snapshotFileName = "dhs.watch.snapshot.json"
     static let compactFaceFileName = "dhs.watch.face.txt"
     static let snapshotSupportFileName = "dhs.watch.snapshot.support.json"

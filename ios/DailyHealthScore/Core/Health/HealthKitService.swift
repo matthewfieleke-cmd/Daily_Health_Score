@@ -10,6 +10,8 @@ struct HealthDayMetrics: Equatable {
     var sleepHrvSDNNMs: Double? = nil
     var sleepHasUnsettledSession: Bool = false
 
+    /// Health owns sleep, fiber grams, steps, and exercise minutes.
+    /// Food-group servings stay on the saved record and are copied back on sync.
     var dailyMetrics: DailyMetrics {
         DailyMetrics(
             sleepHours: sleepHours,

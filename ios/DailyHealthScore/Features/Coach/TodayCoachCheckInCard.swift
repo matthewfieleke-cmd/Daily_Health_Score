@@ -33,6 +33,7 @@ struct TodayCoachCheckInCard: View {
                         activities: appState.smartGoalStore.activities,
                         hrvSensitivity: appState.settingsStore.hrvSensitivity,
                         bodyTrend: appState.bodyTrend,
+                        nutritionMode: appState.settingsStore.settings.nutritionMode,
                         now: context.date
                     )
                 }
@@ -47,6 +48,7 @@ struct TodayCoachCheckInCard: View {
                     activities: appState.smartGoalStore.activities,
                     hrvSensitivity: appState.settingsStore.hrvSensitivity,
                     bodyTrend: appState.bodyTrend,
+                    nutritionMode: appState.settingsStore.settings.nutritionMode,
                     force: true
                 )
             }
@@ -228,6 +230,17 @@ struct TodayCoachCheckInCard: View {
         .accessibilityElement(children: .combine)
     }
 
+    private func chartSettings(for card: CoachCheckIn) -> UserSettings {
+        var settings = appState.settingsStore.settings
+        if let goal = MovementGoal(rawValue: card.chartMovementGoalRaw), !card.chartMovementGoalRaw.isEmpty {
+            settings.movementGoal = goal
+        }
+        if card.chartMetric == .fiber {
+            settings.nutritionMode = NutritionMode(rawValue: card.chartNutritionModeRaw) ?? .fiber
+        }
+        return settings
+    }
+
     @ViewBuilder
     private var chartDoor: some View {
         if let card = coach.memory.cachedCheckIn,
@@ -236,11 +249,7 @@ struct TodayCoachCheckInCard: View {
            let trend = CompletedTrendBuilder.build(
             metric: metric,
             records: appState.recordStore.records,
-            settings: UserSettings(
-                sleepGoal: record?.sleepGoal ?? .sevenHalf,
-                fiberGoal: record?.fiberGoal ?? .forty,
-                movementGoal: record?.movementGoal ?? .exerciseMinutes
-            )
+            settings: chartSettings(for: card)
            ) {
             Button {
                 onShowChart(metric)

@@ -145,7 +145,8 @@ struct CoachEvalView: View {
                 goals: appState.smartGoalStore.goals,
                 activities: appState.smartGoalStore.activities,
                 hrvSensitivity: appState.settingsStore.hrvSensitivity,
-                bodyTrend: appState.bodyTrend
+                bodyTrend: appState.bodyTrend,
+                nutritionMode: appState.settingsStore.settings.nutritionMode
             )
             results[prompt.id] = result
             runningID = nil
@@ -168,7 +169,8 @@ struct CoachEvalView: View {
                     goals: appState.smartGoalStore.goals,
                     activities: appState.smartGoalStore.activities,
                     hrvSensitivity: appState.settingsStore.hrvSensitivity,
-                    bodyTrend: appState.bodyTrend
+                    bodyTrend: appState.bodyTrend,
+                    nutritionMode: appState.settingsStore.settings.nutritionMode
                 )
                 results[prompt.id] = result
             }

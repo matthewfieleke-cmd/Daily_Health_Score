@@ -61,7 +61,7 @@ Sleep is attributed to the calendar day when asleep samples **end** (wake-day at
 | Metric   | Max points | Default goal        |
 |----------|------------|---------------------|
 | Sleep    | 4          | 7.5 hours (7 / 7.5 / 8 selectable) |
-| Fiber    | 4          | 40 g (30 / 40 / 50) |
+| Nutrition | 4          | 40 g of fiber from Apple Health, or food groups logged in the app |
 | Movement | 2          | 30 Exercise Minutes, or 8,000 or 10,000 Steps |
 
 Your **primary focus** highlights the weakest area for the day. When all goals are met, the app emphasizes **maintain** guidance.

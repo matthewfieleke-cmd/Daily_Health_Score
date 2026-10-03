@@ -82,6 +82,7 @@ enum WatchSnapshotStore {
                 // Compact face is a fallback, not a success on its own if the write failed.
             }
         }
+        WatchNutritionModeStore.save(from: snapshot, defaults: defaults, containerURL: containerURL)
         return wrote
     }
 
@@ -103,12 +104,20 @@ enum WatchSnapshotStore {
     ) {
         defaults?.removeObject(forKey: WatchBridge.snapshotDefaultsKey)
         defaults?.removeObject(forKey: WatchBridge.compactFaceFileName)
+        defaults?.removeObject(forKey: WatchBridge.nutritionModeDefaultsKey)
         for file in snapshotWriteURLs(containerURL: containerURL) {
             try? FileManager.default.removeItem(at: file)
         }
         if let compact = compactFaceURL(containerURL: containerURL) {
             try? FileManager.default.removeItem(at: compact)
         }
+        if let mode = nutritionModeURL(containerURL: containerURL) {
+            try? FileManager.default.removeItem(at: mode)
+        }
+    }
+
+    static func nutritionModeURL(containerURL: URL? = WatchSnapshotStore.groupContainer) -> URL? {
+        containerURL?.appendingPathComponent(WatchBridge.nutritionModeFileName)
     }
 
     static func snapshotFileURL(containerURL: URL? = WatchSnapshotStore.groupContainer) -> URL? {
@@ -145,6 +154,51 @@ enum WatchSnapshotStore {
 
     static var groupedDefaults: UserDefaults? {
         UserDefaults(suiteName: WatchBridge.appGroupIdentifier)
+    }
+}
+
+/// Last nutrition mode that arrived with a snapshot. A missing snapshot must
+/// not invent a food-group score from Apple Health fiber.
+enum WatchNutritionModeStore {
+    static func rawMode(for snapshot: WatchSnapshot) -> String {
+        snapshot.fiber.unit == "pts" ? "foodGroups" : "fiber"
+    }
+
+    static func save(
+        from snapshot: WatchSnapshot,
+        defaults: UserDefaults?,
+        containerURL: URL?
+    ) {
+        let raw = rawMode(for: snapshot)
+        if containerURL != nil {
+            defaults?.set(raw, forKey: WatchBridge.nutritionModeDefaultsKey)
+        }
+        guard let file = WatchSnapshotStore.nutritionModeURL(containerURL: containerURL),
+              let data = raw.data(using: .utf8) else { return }
+        let folder = file.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? data.write(to: file, options: [.atomic, .noFileProtection])
+        try? WatchSnapshotStore.protect(file)
+    }
+
+    static func current(
+        defaults: UserDefaults? = WatchSnapshotStore.groupedDefaults,
+        containerURL: URL? = WatchSnapshotStore.groupContainer
+    ) -> String {
+        if let file = WatchSnapshotStore.nutritionModeURL(containerURL: containerURL),
+           let text = try? String(contentsOf: file, encoding: .utf8) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return defaults?.string(forKey: WatchBridge.nutritionModeDefaultsKey) ?? "fiber"
+    }
+
+    /// Health fiber can paint a face only while nutrition is still the gram goal.
+    static func allowsHealthFiberFallback(
+        defaults: UserDefaults? = WatchSnapshotStore.groupedDefaults,
+        containerURL: URL? = WatchSnapshotStore.groupContainer
+    ) -> Bool {
+        current(defaults: defaults, containerURL: containerURL) != "foodGroups"
     }
 }
 

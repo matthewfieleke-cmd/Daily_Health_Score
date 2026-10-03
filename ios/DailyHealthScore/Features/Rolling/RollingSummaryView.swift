@@ -5,6 +5,8 @@ struct RollingSummaryView: View {
     let days: Int
     let title: String
     @State private var coachFocus: CoachFocusContext?
+    @State private var foodLogDate = ""
+    @State private var showFoodLog = false
 
     private var stats: RollingStats? {
         let settings = appState.settingsStore.settings
@@ -14,7 +16,11 @@ struct RollingSummaryView: View {
             settings: settings
         )
         guard !filled.isEmpty else { return nil }
-        return RollingStatsCalculator.compute(records: filled, windowKeys: filled.map(\.date))
+        return RollingStatsCalculator.compute(
+            records: filled,
+            windowKeys: filled.map(\.date),
+            nutritionMode: settings.nutritionMode
+        )
     }
 
     var body: some View {
@@ -30,7 +36,8 @@ struct RollingSummaryView: View {
                                 coachFocus = CoachFocusContextBuilder.history(
                                     stats: stats,
                                     days: days,
-                                    windowKeys: keys
+                                    windowKeys: keys,
+                                    nutritionMode: appState.settingsStore.settings.nutritionMode
                                 )
                             }
                             statsGrid(stats)
@@ -45,6 +52,10 @@ struct RollingSummaryView: View {
                 }
             }
             .enlargedAppNavigationBar(title: title)
+        }
+        .sheet(isPresented: $showFoodLog) {
+            FoodGroupLogSheet(dateKey: foodLogDate)
+                .environmentObject(appState)
         }
         .sheet(item: $coachFocus) { focus in
             NavigationStack {
@@ -108,9 +119,7 @@ struct RollingSummaryView: View {
             StatTile(label: "Sleep",    value: "\(ScoreCalculator.formatDisplayScore(stats.avgSleepHours)) hr",
                      sub: "\(ScoreCalculator.formatDisplayScore(stats.avgSleepScore)) / 4",
                      icon: "moon.stars.fill", tint: AppTheme.primary),
-            StatTile(label: "Fiber",    value: "\(ScoreCalculator.formatDisplayScore(stats.avgFiberGrams)) g",
-                     sub: "\(ScoreCalculator.formatDisplayScore(stats.avgFiberScore)) / 4",
-                     icon: "leaf.fill", tint: AppTheme.leaf),
+            nutritionTile(stats),
             StatTile(
                 label: movementGoal(in: stats).metricName,
                 value: "\(MovementGoal.formatCount(stats.avgMovementValue)) \(movementGoal(in: stats).unit)",
@@ -198,11 +207,9 @@ struct RollingSummaryView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        coachFocus = CoachFocusContextBuilder.day(record, dateKey: record.date)
-                    }
+                    .onTapGesture { openDay(record) }
                     .accessibilityAddTraits(.isButton)
-                    .accessibilityHint("Ask Coach about this day")
+                    .accessibilityHint(dayHint)
                     if record.id != stats.recordsInWindow.last?.id {
                         Divider().padding(.leading, 14)
                     }
@@ -242,11 +249,57 @@ struct RollingSummaryView: View {
         stats.recordsInWindow.first?.movementGoal ?? .exerciseMinutes
     }
 
+    private var nutritionMode: NutritionMode {
+        appState.settingsStore.settings.nutritionMode
+    }
+
+    private var dayHint: String {
+        nutritionMode == .foodGroups ? "Opens this day's food log" : "Ask Coach about this day"
+    }
+
+    private func nutritionTile(_ stats: RollingStats) -> StatTile {
+        if nutritionMode == .foodGroups {
+            return StatTile(
+                label: "Food groups",
+                value: ScoreCalculator.formatDisplayScore(stats.avgFiberScore),
+                sub: "\(ScoreCalculator.formatDisplayScore(stats.avgFiberScore)) / 4",
+                icon: "fork.knife",
+                tint: AppTheme.leaf
+            )
+        }
+        return StatTile(
+            label: "Fiber",
+            value: "\(ScoreCalculator.formatDisplayScore(stats.avgFiberGrams)) g",
+            sub: "\(ScoreCalculator.formatDisplayScore(stats.avgFiberScore)) / 4",
+            icon: "leaf.fill",
+            tint: AppTheme.leaf
+        )
+    }
+
+    private func openDay(_ record: DailyRecord) {
+        if nutritionMode == .foodGroups {
+            foodLogDate = record.date
+            showFoodLog = true
+        } else {
+            coachFocus = CoachFocusContextBuilder.day(
+                record,
+                dateKey: record.date,
+                nutritionMode: nutritionMode
+            )
+        }
+    }
+
     private func metricLine(for record: DailyRecord) -> String {
         let sleep = ScoreCalculator.formatDisplayScore(record.sleepHours)
-        let fiber = ScoreCalculator.formatDisplayScore(record.fiberGrams)
         let movement = "\(MovementGoal.formatCount(record.movementValue)) \(record.movementGoal.unit)"
-        return "Sleep \(sleep)h · Fiber \(fiber)g · \(movement)"
+        let nutrition: String
+        if nutritionMode == .foodGroups {
+            let score = FoodGroupScore.points(record.foodGroups)
+            nutrition = "Food groups \(ScoreCalculator.formatDisplayScore(score))"
+        } else {
+            nutrition = "Fiber \(ScoreCalculator.formatDisplayScore(record.fiberGrams))g"
+        }
+        return "Sleep \(sleep)h · \(nutrition) · \(movement)"
     }
 
     private func scoreChip(_ score: Double) -> some View {

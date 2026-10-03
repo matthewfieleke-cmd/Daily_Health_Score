@@ -100,6 +100,7 @@ enum PaceNudgeLogic {
         exerciseMinutes: Double,
         exerciseGoal: Double,
         movementUnit: String = "min",
+        fiberUnit: String = "g",
         now: Date = Date(),
         calendar: Calendar = .current,
         skipIfAlreadyPassed: Bool = true
@@ -116,22 +117,23 @@ enum PaceNudgeLogic {
             return PaceNudgeDecision(
                 slot: slot,
                 kind: .combined,
-                title: "Fiber and movement",
+                title: fiberUnit == "pts" ? "Food and movement" : "Fiber and movement",
                 body: combinedCopy(
                     slot: slot,
                     fiberGrams: fiberGrams,
                     fiberGoal: fiberGoal,
                     exerciseMinutes: exerciseMinutes,
                     exerciseGoal: exerciseGoal,
-                    movementUnit: movementUnit
+                    movementUnit: movementUnit,
+                    fiberUnit: fiberUnit
                 )
             )
         case (true, false):
             return PaceNudgeDecision(
                 slot: slot,
                 kind: .fiber,
-                title: "Fiber",
-                body: fiberCopy(slot: slot, grams: fiberGrams, goal: fiberGoal)
+                title: fiberUnit == "pts" ? "Food groups" : "Fiber",
+                body: fiberCopy(slot: slot, grams: fiberGrams, goal: fiberGoal, unit: fiberUnit)
             )
         case (false, true):
             return PaceNudgeDecision(
@@ -152,6 +154,7 @@ enum PaceNudgeLogic {
         exerciseMinutes: Double,
         exerciseGoal: Double,
         movementUnit: String = "min",
+        fiberUnit: String = "g",
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> [PaceNudgeDecision] {
@@ -163,6 +166,7 @@ enum PaceNudgeLogic {
                 exerciseMinutes: exerciseMinutes,
                 exerciseGoal: exerciseGoal,
                 movementUnit: movementUnit,
+                fiberUnit: fiberUnit,
                 now: now,
                 calendar: calendar,
                 skipIfAlreadyPassed: true
@@ -188,13 +192,25 @@ enum PaceNudgeLogic {
         fiberGoal: Double,
         exerciseMinutes: Double,
         exerciseGoal: Double,
-        movementUnit: String
+        movementUnit: String,
+        fiberUnit: String
     ) -> String {
-        let gramsText = Int(fiberGrams.rounded())
-        let fiberGoalText = Int(fiberGoal.rounded())
         let movementText = Int(exerciseMinutes.rounded())
         let movementGoalText = Int(exerciseGoal.rounded())
         let movement = movementPhrase(value: movementText, goal: movementGoalText, unit: movementUnit)
+        if fiberUnit == "pts" {
+            let food = foodGroupPhrase(value: fiberGrams, goal: fiberGoal)
+            switch slot {
+            case .afternoon:
+                return "Movement is at \(movement) and food groups are \(food). A short walk, plus logging what you ate on iPhone, will get both on the board."
+            case .lateAfternoon:
+                return "Still \(movement) and food groups \(food). A brisk walk before dinner and logging the plate on iPhone will catch this up."
+            case .evening:
+                return "Still short: \(movement) and food groups \(food). A short walk and logging tonight’s food on iPhone is enough."
+            }
+        }
+        let gramsText = Int(fiberGrams.rounded())
+        let fiberGoalText = Int(fiberGoal.rounded())
         switch slot {
         case .afternoon:
             return "Movement is at \(movement) and fiber is \(gramsText) of \(fiberGoalText) g. A short walk plus beans, berries, or a salad — or log a meal on iPhone — will get both on the board."
@@ -212,7 +228,35 @@ enum PaceNudgeLogic {
         return "\(value) of \(goal) min"
     }
 
-    private static func fiberCopy(slot: PaceNudgeSlot, grams: Double, goal: Double) -> String {
+    private static func foodGroupPhrase(value: Double, goal: Double) -> String {
+        if value <= 0 { return "not logged yet" }
+        let shown = String(format: "%.1f", (value * 10).rounded() / 10)
+        let goalText = String(format: "%.0f", goal.rounded())
+        return "\(shown) of \(goalText)"
+    }
+
+    private static func fiberCopy(slot: PaceNudgeSlot, grams: Double, goal: Double, unit: String) -> String {
+        if unit == "pts" {
+            if grams <= 0 {
+                switch slot {
+                case .afternoon:
+                    return "Food groups are not logged yet. If you already ate, log it on iPhone."
+                case .lateAfternoon:
+                    return "Food groups are still not logged. Logging dinner on iPhone is enough to start the score."
+                case .evening:
+                    return "Food groups are not logged yet. Logging tonight’s food on iPhone is the whole step."
+                }
+            }
+            let shown = foodGroupPhrase(value: grams, goal: goal)
+            switch slot {
+            case .afternoon:
+                return "Food groups are at \(shown). Logging the next serving on iPhone moves the score."
+            case .lateAfternoon:
+                return "Food groups are still \(shown). Dinner is the easiest place to add a serving — or log it on iPhone if you already ate."
+            case .evening:
+                return "Food groups are still \(shown). Logging tonight’s plate on iPhone is enough."
+            }
+        }
         let gramsText = Int(grams.rounded())
         let goalText = Int(goal.rounded())
         switch slot {

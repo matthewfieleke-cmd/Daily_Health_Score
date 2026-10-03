@@ -42,7 +42,8 @@ The app uses HealthKit’s read-only access for these types. It does not write h
 The app stores locally, on your iPhone:
 
 - Daily scores and metric values derived from Health data
-- Your goal settings (sleep hours target, fiber target, etc.)
+- Food-group logs you enter in the app (vegetables, fruit, whole grains, legumes and nuts, fish, and foods to limit). These stay on this device and are not written to Apple Health
+- Your goal settings (sleep hours target, nutrition mode, movement goal)
 - Suggestions shown for each day
 - Optional SMART goals and check-in state
 - App preferences (e.g. rotation of encouragement/motivation text)

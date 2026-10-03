@@ -7,6 +7,7 @@ final class SettingsStore: ObservableObject {
         static let sleepGoal = "dhs.sleepGoal"
         static let fiberGoal = "dhs.fiberGoal"
         static let movementGoal = "dhs.movementGoal"
+        static let nutritionMode = "dhs.nutritionMode"
         static let usedSuggestions = "dhs.usedSuggestions"
         static let usedDiscouragement = "dhs.usedDiscouragement"
         static let usedMotivation = "dhs.usedMotivation"
@@ -53,7 +54,15 @@ final class SettingsStore: ObservableObject {
         let fiber = FiberGoalGrams(rawValue: fiberRaw == 0 ? 40 : fiberRaw) ?? .forty
         let movement = UserDefaults.standard.string(forKey: Keys.movementGoal)
             .flatMap(MovementGoal.init(rawValue:)) ?? .exerciseMinutes
-        settings = UserSettings(sleepGoal: sleep, fiberGoal: fiber, movementGoal: movement)
+        let nutrition = UserDefaults.standard.string(forKey: Keys.nutritionMode)
+            .flatMap(NutritionMode.init(rawValue:)) ?? .fiber
+        settings = UserSettings(
+            sleepGoal: sleep,
+            fiberGoal: .forty,
+            movementGoal: movement,
+            nutritionMode: nutrition
+        )
+        UserDefaults.standard.set(FiberGoalGrams.forty.rawValue, forKey: Keys.fiberGoal)
         hrvSensitivity = UserDefaults.standard.string(forKey: Keys.hrvSensitivity)
             .flatMap(HRVSensitivity.init(rawValue:)) ?? .balanced
         if UserDefaults.standard.object(forKey: Keys.paceNudgesEnabled) == nil {
@@ -72,8 +81,9 @@ final class SettingsStore: ObservableObject {
 
     func nextSuggestion(for focus: PrimaryFocus, phase: DayPhase) -> String {
         let focusKey = focus == .maintain ? "maintain" : focus.rawValue
-        let category = "\(focusKey)-\(phase.rawValue)"
-        let pool = SuggestionLibrary.pool(for: focus, phase: phase)
+        let nutritionKey = focus == .fiber && settings.nutritionMode == .foodGroups ? "foodGroups" : focusKey
+        let category = "\(nutritionKey)-\(phase.rawValue)"
+        let pool = SuggestionLibrary.pool(for: focus, phase: phase, nutritionMode: settings.nutritionMode)
         var used = usedSuggestions[category] ?? []
         var unused = pool.filter { !used.contains($0.id) }
         if unused.isEmpty {
@@ -130,6 +140,8 @@ final class SettingsStore: ObservableObject {
         UserDefaults.standard.set(settings.sleepGoal.rawValue, forKey: Keys.sleepGoal)
         UserDefaults.standard.set(settings.fiberGoal.rawValue, forKey: Keys.fiberGoal)
         UserDefaults.standard.set(settings.movementGoal.rawValue, forKey: Keys.movementGoal)
+        UserDefaults.standard.set(settings.nutritionMode.rawValue, forKey: Keys.nutritionMode)
+        UserDefaults.standard.set(FiberGoalGrams.forty.rawValue, forKey: Keys.fiberGoal)
     }
 
     private func loadRotationState() {

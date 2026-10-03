@@ -16,6 +16,7 @@ enum CoachPromptSuggestions {
         goals: [SMARTGoal] = [],
         phase: DayPhase = .current(),
         focus: CoachFocusContext? = nil,
+        nutritionMode: NutritionMode = .fiber,
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> [String] {
@@ -66,7 +67,7 @@ enum CoachPromptSuggestions {
         }
 
         // One question about the numbers at most, the most useful one today.
-        if focus == nil, let metric = metricQuestion(record: record, evening: evening) {
+        if focus == nil, let metric = metricQuestion(record: record, evening: evening, nutritionMode: nutritionMode) {
             suggestions.append(metric)
         }
 
@@ -76,13 +77,26 @@ enum CoachPromptSuggestions {
 
     /// The single most useful numbers question for the day, or nil when the day
     /// is in hand. Gaps are computed here.
-    static func metricQuestion(record: DailyRecord, evening: Bool) -> String? {
-        let fiberGap = Double(record.fiberGoal.rawValue) - record.fiberGrams
-        if record.fiberGrams <= 0 {
-            return "What are easy ways to hit my fiber goal?"
-        }
-        if fiberGap > 0, !evening {
-            return "How do I get \(Int(fiberGap.rounded())) more grams of fiber today?"
+    static func metricQuestion(
+        record: DailyRecord,
+        evening: Bool,
+        nutritionMode: NutritionMode = .fiber
+    ) -> String? {
+        if nutritionMode == .foodGroups {
+            if !record.foodGroups.isLogged {
+                return "What should I log for food groups today?"
+            }
+            if record.fiberScore < 3.95, !evening {
+                return "Which food group would help my score the most today?"
+            }
+        } else {
+            let fiberGap = UserSettings.fiberGoalGrams - record.fiberGrams
+            if record.fiberGrams <= 0 {
+                return "What are easy ways to hit my fiber goal?"
+            }
+            if fiberGap > 0, !evening {
+                return "How do I get \(Int(fiberGap.rounded())) more grams of fiber today?"
+            }
         }
         let movementGap = record.movementGoal.goalValue - record.movementValue
         if movementGap > 0, !evening {

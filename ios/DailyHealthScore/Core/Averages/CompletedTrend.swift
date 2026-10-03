@@ -28,8 +28,10 @@ struct TrendChartReference: Equatable, Codable, Identifiable, Sendable {
     var dayCount: Int
     /// Movement goal in effect when the chart was drawn. Empty for sleep and fiber.
     var movementGoalRaw: String = ""
+    /// Nutrition mode when a fiber chart was drawn. Empty on older charts, which were grams.
+    var nutritionModeRaw: String = ""
 
-    var id: String { "\(metric.rawValue)|\(endDateKey)|\(dayCount)|\(movementGoalRaw)" }
+    var id: String { "\(metric.rawValue)|\(endDateKey)|\(dayCount)|\(movementGoalRaw)|\(nutritionModeRaw)" }
 }
 
 struct TrendBar: Equatable, Sendable, Identifiable {
@@ -72,7 +74,8 @@ struct CompletedTrend: Equatable, Sendable {
             metric: metric,
             endDateKey: endDateKey,
             dayCount: bars.count,
-            movementGoalRaw: metric == .movement ? settings.movementGoal.rawValue : ""
+            movementGoalRaw: metric == .movement ? settings.movementGoal.rawValue : "",
+            nutritionModeRaw: metric == .fiber ? settings.nutritionMode.rawValue : ""
         )
     }
 
@@ -108,6 +111,10 @@ enum CompletedTrendBuilder {
         var resolved = settings
         if reference.metric == .movement, let goal = MovementGoal(rawValue: reference.movementGoalRaw) {
             resolved.movementGoal = goal
+        }
+        if reference.metric == .fiber {
+            // Older charts have no mode. Those were Apple Health grams.
+            resolved.nutritionMode = NutritionMode(rawValue: reference.nutritionModeRaw) ?? .fiber
         }
         return build(
             metric: reference.metric,
@@ -242,6 +249,9 @@ enum CompletedTrendBuilder {
         case .sleep:
             return formatSleep(value)
         case .fiber:
+            if settings.nutritionMode == .foodGroups {
+                return ScoreCalculator.formatDisplayScore(value)
+            }
             return "\(ScoreCalculator.formatDisplayScore(value)) g"
         case .movement:
             if settings.movementGoal.countsSteps {
@@ -263,7 +273,7 @@ enum CompletedTrendBuilder {
     static func title(for metric: TrendMetric, settings: UserSettings) -> String {
         switch metric {
         case .sleep: return "Sleep"
-        case .fiber: return "Fiber"
+        case .fiber: return settings.nutritionMode.cardTitle
         case .movement: return settings.movementGoal.metricName
         }
     }
@@ -271,7 +281,7 @@ enum CompletedTrendBuilder {
     static func goal(for metric: TrendMetric, settings: UserSettings) -> Double {
         switch metric {
         case .sleep: return settings.sleepGoal.rawValue
-        case .fiber: return Double(settings.fiberGoal.rawValue)
+        case .fiber: return settings.nutritionMode == .foodGroups ? 4 : UserSettings.fiberGoalGrams
         case .movement: return settings.movementGoal.goalValue
         }
     }
@@ -351,7 +361,11 @@ enum CompletedTrendBuilder {
         guard let record else { return 0 }
         switch metric {
         case .sleep: return max(record.sleepHours, 0)
-        case .fiber: return max(record.fiberGrams, 0)
+        case .fiber:
+            if settings.nutritionMode == .foodGroups {
+                return FoodGroupScore.points(record.foodGroups)
+            }
+            return max(record.fiberGrams, 0)
         case .movement:
             let raw = settings.movementGoal.countsSteps ? record.stepCount : record.exerciseMinutes
             return max(raw, 0)

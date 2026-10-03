@@ -16,7 +16,11 @@ struct RollingStats {
 }
 
 enum RollingStatsCalculator {
-    static func compute(records: [DailyRecord], windowKeys: [String]) -> RollingStats? {
+    static func compute(
+        records: [DailyRecord],
+        windowKeys: [String],
+        nutritionMode: NutritionMode = .fiber
+    ) -> RollingStats? {
         let keySet = Set(windowKeys)
         let inWindow = records.filter { keySet.contains($0.date) }.sorted { $0.date > $1.date }
         guard !inWindow.isEmpty else { return nil }
@@ -27,12 +31,14 @@ enum RollingStatsCalculator {
                     sleepHours: record.sleepHours,
                     fiberGrams: record.fiberGrams,
                     exerciseMinutes: record.exerciseMinutes,
-                    stepCount: record.stepCount
+                    stepCount: record.stepCount,
+                    foodGroups: record.foodGroups
                 ),
                 settings: UserSettings(
                     sleepGoal: record.sleepGoal,
-                    fiberGoal: record.fiberGoal,
-                    movementGoal: record.movementGoal
+                    fiberGoal: .forty,
+                    movementGoal: record.movementGoal,
+                    nutritionMode: nutritionMode
                 )
             )
         }

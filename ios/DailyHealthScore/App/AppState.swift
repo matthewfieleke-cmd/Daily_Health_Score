@@ -244,7 +244,43 @@ final class AppState: ObservableObject {
             sleepHrvSDNNMs: existing?.sleepHrvSDNNMs
         )
         recordStore.save(record)
+        objectWillChange.send()
         watchSync.publish(kind: .foreground, forceComplication: true)
+    }
+
+    /// Saves a food-group log for one day. Health numbers on that day stay.
+    func saveFoodGroupLog(date: String, servings: FoodGroupServings) {
+        var logged = servings
+        logged.isLogged = true
+        for group in FoodGroup.allCases {
+            logged[group] = servings[group]
+        }
+        let existing = recordStore.records.first { $0.date == date }
+        saveManualDay(
+            date: date,
+            metrics: DailyMetrics(
+                sleepHours: existing?.sleepHours ?? 0,
+                fiberGrams: existing?.fiberGrams ?? 0,
+                exerciseMinutes: existing?.exerciseMinutes ?? 0,
+                stepCount: existing?.stepCount ?? 0,
+                foodGroups: logged
+            )
+        )
+    }
+
+    /// Close without saving leaves the day alone. Remove log is the explicit clear.
+    func clearFoodGroupLog(date: String) {
+        let existing = recordStore.records.first { $0.date == date }
+        saveManualDay(
+            date: date,
+            metrics: DailyMetrics(
+                sleepHours: existing?.sleepHours ?? 0,
+                fiberGrams: existing?.fiberGrams ?? 0,
+                exerciseMinutes: existing?.exerciseMinutes ?? 0,
+                stepCount: existing?.stepCount ?? 0,
+                foodGroups: .empty
+            )
+        )
     }
 
     /// Refreshes today's suggestion when the day/evening phase changes (e.g. after 7:30 PM).
@@ -284,7 +320,7 @@ final class AppState: ObservableObject {
             ?? HealthDayMetrics(sleepHours: 0, fiberGrams: 0, exerciseMinutes: 0)
         let record = RecordBuilder.build(
             date: today,
-            metrics: healthMetrics.dailyMetrics,
+            metrics: healthMetrics.dailyMetrics.keepingFoodGroups(from: existing),
             settings: settingsStore.settings,
             settingsStore: settingsStore,
             existing: existing,
@@ -322,7 +358,7 @@ final class AppState: ObservableObject {
             }
             return RecordBuilder.build(
                 date: dateKey,
-                metrics: healthMetrics.dailyMetrics,
+                metrics: healthMetrics.dailyMetrics.keepingFoodGroups(from: existing),
                 settings: settingsStore.settings,
                 settingsStore: settingsStore,
                 existing: existing,
@@ -334,48 +370,30 @@ final class AppState: ObservableObject {
     }
 
     private func applyGoalChangesToTodayRecord() {
-        let todayKey = DateHelpers.localDateKey()
-        guard let existing = recordStore.records.first(where: { $0.date == todayKey }) else { return }
+        rescoreStoredRecords()
+    }
 
-        let metrics = DailyMetrics(
-            sleepHours: existing.sleepHours,
-            fiberGrams: existing.fiberGrams,
-            exerciseMinutes: existing.exerciseMinutes,
-            stepCount: existing.stepCount
-        )
-        let computed = ScoreCalculator.calculate(metrics: metrics, settings: settingsStore.settings)
-        let focus = ScoreCalculator.determinePrimaryFocus(computed)
-        let resolved = SuggestionResolver.resolve(
-            date: existing.date,
-            focus: focus,
-            existing: existing,
-            settingsStore: settingsStore
-        )
-
-        let updated = DailyRecord(
-            date: existing.date,
-            sleepHours: existing.sleepHours,
-            fiberGrams: existing.fiberGrams,
-            exerciseMinutes: existing.exerciseMinutes,
-            stepCount: existing.stepCount,
-            sleepHrvSDNNMs: existing.sleepHrvSDNNMs,
-            sleepGoal: settingsStore.settings.sleepGoal,
-            fiberGoal: settingsStore.settings.fiberGoal,
-            movementGoal: settingsStore.settings.movementGoal,
-            sleepScore: computed.sleepScore,
-            fiberScore: computed.fiberScore,
-            exerciseScore: computed.exerciseScore,
-            totalScore: computed.totalScore,
-            sleepPercent: computed.sleepPercent,
-            fiberPercent: computed.fiberPercent,
-            exercisePercent: computed.exercisePercent,
-            primaryFocus: focus,
-            suggestion: resolved.text,
-            suggestionPhase: resolved.phase,
-            createdAt: existing.createdAt,
-            updatedAt: Date()
-        )
-        recordStore.save(updated)
+    /// Health was unavailable. Rescore what is already saved, including every food log.
+    private func rescoreStoredRecords() {
+        let settings = settingsStore.settings
+        let updated = recordStore.records.map { existing in
+            RecordBuilder.build(
+                date: existing.date,
+                metrics: DailyMetrics(
+                    sleepHours: existing.sleepHours,
+                    fiberGrams: existing.fiberGrams,
+                    exerciseMinutes: existing.exerciseMinutes,
+                    stepCount: existing.stepCount,
+                    foodGroups: existing.foodGroups
+                ),
+                settings: settings,
+                settingsStore: settingsStore,
+                existing: existing,
+                sleepHrvSDNNMs: existing.sleepHrvSDNNMs
+            )
+        }
+        recordStore.saveBatch(updated)
+        objectWillChange.send()
         watchSync.publish(kind: .foreground)
     }
 }

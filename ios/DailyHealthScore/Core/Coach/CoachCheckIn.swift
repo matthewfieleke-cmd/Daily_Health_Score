@@ -35,6 +35,8 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
     var chartEndDateKey: String = ""
     var chartDayCount: Int = 0
     var chartMovementGoalRaw: String = ""
+    /// Nutrition mode when the card offered a fiber chart. Empty on older cards.
+    var chartNutritionModeRaw: String = ""
 
     init(
         kind: CoachCheckInKind,
@@ -50,7 +52,8 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         chartMetricRaw: String = "",
         chartEndDateKey: String = "",
         chartDayCount: Int = 0,
-        chartMovementGoalRaw: String = ""
+        chartMovementGoalRaw: String = "",
+        chartNutritionModeRaw: String = ""
     ) {
         self.kind = kind
         self.dateKey = dateKey
@@ -66,6 +69,7 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         self.chartEndDateKey = chartEndDateKey
         self.chartDayCount = chartDayCount
         self.chartMovementGoalRaw = chartMovementGoalRaw
+        self.chartNutritionModeRaw = chartNutritionModeRaw
     }
 
     var chartMetric: TrendMetric? {
@@ -78,7 +82,8 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
             metric: chartMetric,
             endDateKey: chartEndDateKey,
             dayCount: chartDayCount,
-            movementGoalRaw: chartMovementGoalRaw
+            movementGoalRaw: chartMovementGoalRaw,
+            nutritionModeRaw: chartNutritionModeRaw
         )
     }
 
@@ -105,7 +110,7 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case kind, dateKey, healthLine, question, tomorrowLine, trendLine, thoughts, replyThreadID, isFallback, generatedAt
-        case chartMetricRaw, chartEndDateKey, chartDayCount, chartMovementGoalRaw
+        case chartMetricRaw, chartEndDateKey, chartDayCount, chartMovementGoalRaw, chartNutritionModeRaw
     }
 
     init(from decoder: Decoder) throws {
@@ -124,6 +129,7 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         chartEndDateKey = try container.decodeIfPresent(String.self, forKey: .chartEndDateKey) ?? ""
         chartDayCount = try container.decodeIfPresent(Int.self, forKey: .chartDayCount) ?? 0
         chartMovementGoalRaw = try container.decodeIfPresent(String.self, forKey: .chartMovementGoalRaw) ?? ""
+        chartNutritionModeRaw = try container.decodeIfPresent(String.self, forKey: .chartNutritionModeRaw) ?? ""
     }
 
     func encode(to encoder: Encoder) throws {
@@ -142,6 +148,7 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         try container.encode(chartEndDateKey, forKey: .chartEndDateKey)
         try container.encode(chartDayCount, forKey: .chartDayCount)
         try container.encode(chartMovementGoalRaw, forKey: .chartMovementGoalRaw)
+        try container.encode(chartNutritionModeRaw, forKey: .chartNutritionModeRaw)
     }
 }
 
@@ -170,7 +177,7 @@ enum CoachCheckInLogic {
     /// Health has synced something for today. Before that, writing a card
     /// would describe an empty day as a bad one.
     static func hasData(_ record: DailyRecord) -> Bool {
-        record.sleepHours > 0 || record.fiberGrams > 0 || record.movementValue > 0
+        record.sleepHours > 0 || record.fiberGrams > 0 || record.movementValue > 0 || record.foodGroups.isLogged
     }
 
     /// The shape of the day as the card describes it: whether sleep is in, and
@@ -183,9 +190,10 @@ enum CoachCheckInLogic {
         let sleep = record.sleepHours <= 0
             ? "none"
             : (record.sleepHours >= record.sleepGoal.rawValue ? "met" : "below")
-        let fiber = record.fiberGrams >= Double(record.fiberGoal.rawValue) ? "met" : "open"
+        let fiber = record.fiberScore >= 3.95 ? "met" : "open"
+        let foodLog = record.foodGroups.isLogged ? "logged" : "unlogged"
         let exercise = record.movementValue >= record.movementGoal.goalValue ? "met" : "open"
-        return "sleep=\(sleep),fiber=\(fiber),exercise=\(exercise)"
+        return "sleep=\(sleep),fiber=\(fiber),foodLog=\(foodLog),exercise=\(exercise)"
     }
 
     /// One write per window and per shape of the day. Tapping a goal Done must
@@ -252,6 +260,7 @@ struct CoachTrendDigest: Equatable, Sendable {
         records: [DailyRecord],
         goals: [SMARTGoal],
         activities: [SMARTGoalActivity],
+        nutritionMode: NutritionMode = .fiber,
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> CoachTrendDigest? {
@@ -259,9 +268,16 @@ struct CoachTrendDigest: Equatable, Sendable {
         let lastWeekKeys = DateHelpers.rollingDateKeys(days: 7, endingOn: yesterday)
         let twoWeeks = DateHelpers.rollingDateKeys(days: 14, endingOn: yesterday)
         let priorWeekKeys = Array(twoWeeks.prefix(7))
-        guard let recent = RollingStatsCalculator.compute(records: records, windowKeys: lastWeekKeys),
-              recent.daysWithData >= minimumDaysPerWeek else { return nil }
-        let prior = RollingStatsCalculator.compute(records: records, windowKeys: priorWeekKeys)
+        guard let recent = RollingStatsCalculator.compute(
+            records: records,
+            windowKeys: lastWeekKeys,
+            nutritionMode: nutritionMode
+        ), recent.daysWithData >= minimumDaysPerWeek else { return nil }
+        let prior = RollingStatsCalculator.compute(
+            records: records,
+            windowKeys: priorWeekKeys,
+            nutritionMode: nutritionMode
+        )
         let priorUsable = (prior?.daysWithData ?? 0) >= minimumDaysPerWeek
 
         var facts: [String] = []
@@ -282,8 +298,18 @@ struct CoachTrendDigest: Equatable, Sendable {
         let sleep = String(format: "%.1f", recent.avgSleepHours)
         facts.append("Average sleep \(sleep) h.")
 
-        let fiberGoalDays = recent.recordsInWindow.filter { $0.fiberGrams >= Double($0.fiberGoal.rawValue) }.count
-        facts.append("Fiber goal reached on \(fiberGoalDays) of \(recent.daysWithData) logged days.")
+        let fiberGoalDays: Int
+        let fiberFact: String
+        if nutritionMode == .foodGroups {
+            fiberGoalDays = recent.recordsInWindow.filter {
+                $0.foodGroups.isLogged && FoodGroupScore.points($0.foodGroups) >= 3.95
+            }.count
+            fiberFact = "Food-group goal reached on \(fiberGoalDays) of \(recent.daysWithData) logged days."
+        } else {
+            fiberGoalDays = recent.recordsInWindow.filter { $0.fiberGrams >= UserSettings.fiberGoalGrams }.count
+            fiberFact = "Fiber goal reached on \(fiberGoalDays) of \(recent.daysWithData) logged days."
+        }
+        facts.append(fiberFact)
         spoken.append("Sleep averaged \(sleep) hours and fiber hit goal on \(fiberGoalDays) of \(recent.daysWithData) days.")
 
         let exercise = String(format: "%.0f", recent.avgExerciseMinutes)

@@ -8,13 +8,15 @@ import UIKit
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @State private var showEditDay = false
+    @State private var showFoodLog = false
+    @State private var showFoodGroupSwitch = false
     @State private var showClearConfirm = false
     @State private var showClearCoachConfirm = false
     @State private var showDeleteChatsConfirm = false
     @State private var showSleepDiagnostic = false
     @State private var exportText = ""
     @State private var selectedSleepGoal: SleepGoalHours = .sevenHalf
-    @State private var selectedFiberGoal: FiberGoalGrams = .forty
+    @State private var selectedNutritionMode: NutritionMode = .fiber
     @State private var selectedMovementGoal: MovementGoal = .exerciseMinutes
 
     var body: some View {
@@ -26,11 +28,14 @@ struct SettingsView: View {
                             Text("\(goal.label) hr").tag(goal)
                         }
                     }
-                    Picker("Fiber goal", selection: fiberGoalBinding) {
-                        ForEach(FiberGoalGrams.allCases) { goal in
-                            Text("\(goal.rawValue) g").tag(goal)
+                    Picker("Nutrition", selection: nutritionModeBinding) {
+                        ForEach(NutritionMode.allCases) { mode in
+                            Text(mode.settingsLabel).tag(mode)
                         }
                     }
+                    Text("Fiber is always 40 g from Apple Health. Food-group logs stay on this device and are not written to Apple Health.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Picker("Movement goal", selection: movementGoalBinding) {
                         ForEach(MovementGoal.allCases) { goal in
                             Text(goal.settingsLabel).tag(goal)
@@ -45,9 +50,20 @@ struct SettingsView: View {
                         Label("Refresh from Apple Health", systemImage: "arrow.clockwise")
                     }
                     Button {
-                        showEditDay = true
+                        if appState.settingsStore.settings.nutritionMode == .foodGroups {
+                            showFoodLog = true
+                        } else {
+                            showEditDay = true
+                        }
                     } label: {
                         Label("Adjust a saved day", systemImage: "pencil")
+                    }
+                    if appState.settingsStore.settings.nutritionMode == .foodGroups {
+                        Button {
+                            showEditDay = true
+                        } label: {
+                            Label("Adjust sleep or movement", systemImage: "figure.walk")
+                        }
                     }
                     Button {
                         Task { await appState.requestHealthAccess() }
@@ -63,7 +79,7 @@ struct SettingsView: View {
 
                 Section("Apple Watch") {
                     Toggle("Afternoon & evening reminders", isOn: paceNudgeBinding)
-                    Text("If fiber or movement is still low later in the day, your Watch (or iPhone, if no Watch is paired) will remind you. Fiber reminders ask you to log a meal on iPhone or eat a high-fiber food — they never log from the Watch.")
+                    Text("If nutrition or movement is still low later in the day, your Watch (or iPhone, if no Watch is paired) will remind you. Nutrition reminders ask you to log on iPhone — they never log from the Watch.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     WatchFaceRefreshButton(watchSync: appState.watchSync)
@@ -142,16 +158,26 @@ struct SettingsView: View {
             .tint(AppTheme.primary)
             .onAppear {
                 selectedSleepGoal = appState.settingsStore.settings.sleepGoal
-                selectedFiberGoal = appState.settingsStore.settings.fiberGoal
+                selectedNutritionMode = appState.settingsStore.settings.nutritionMode
                 selectedMovementGoal = appState.settingsStore.settings.movementGoal
             }
             .onChange(of: appState.settingsStore.settings) { _, settings in
                 selectedSleepGoal = settings.sleepGoal
-                selectedFiberGoal = settings.fiberGoal
+                selectedNutritionMode = settings.nutritionMode
                 selectedMovementGoal = settings.movementGoal
             }
             .sheet(isPresented: $showEditDay) {
                 EditDayView()
+            }
+            .sheet(isPresented: $showFoodLog) {
+                FoodGroupLogSheet(dateKey: DateHelpers.localDateKey(), allowsDateChange: true)
+                    .environmentObject(appState)
+            }
+            .alert("Switch to food groups?", isPresented: $showFoodGroupSwitch) {
+                Button("Cancel", role: .cancel) {}
+                Button("Switch") { applyNutritionMode(.foodGroups) }
+            } message: {
+                Text("Past days stay blank until you log them. Fiber grams from Apple Health are kept.")
             }
             .sheet(isPresented: $showSleepDiagnostic) {
                 SleepDiagnosticView()
@@ -231,16 +257,25 @@ struct SettingsView: View {
         )
     }
 
-    private var fiberGoalBinding: Binding<FiberGoalGrams> {
+    private var nutritionModeBinding: Binding<NutritionMode> {
         Binding(
-            get: { selectedFiberGoal },
-            set: { newGoal in
-                guard selectedFiberGoal != newGoal else { return }
-                selectedFiberGoal = newGoal
-                appState.settingsStore.settings.fiberGoal = newGoal
-                Task { await appState.refreshTodayAfterGoalChange() }
+            get: { selectedNutritionMode },
+            set: { newMode in
+                guard selectedNutritionMode != newMode else { return }
+                if newMode == .foodGroups {
+                    showFoodGroupSwitch = true
+                } else {
+                    applyNutritionMode(newMode)
+                }
             }
         )
+    }
+
+    private func applyNutritionMode(_ mode: NutritionMode) {
+        selectedNutritionMode = mode
+        appState.settingsStore.settings.nutritionMode = mode
+        appState.settingsStore.settings.fiberGoal = .forty
+        Task { await appState.refreshTodayAfterGoalChange() }
     }
 
     private var paceNudgeBinding: Binding<Bool> {

@@ -63,6 +63,7 @@ enum WatchFaceHealthSnapshot {
         calendar: Calendar = .current
     ) async -> WatchSnapshot? {
         #if canImport(HealthKit)
+        guard WatchNutritionModeStore.allowsHealthFiberFallback() else { return nil }
         guard HKHealthStore.isHealthDataAvailable() else { return nil }
         let store = HKHealthStore()
         guard let dayStart = calendar.date(

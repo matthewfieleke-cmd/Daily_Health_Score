@@ -1,7 +1,14 @@
 import Foundation
 
 enum SuggestionLibrary {
-    static func pool(for focus: PrimaryFocus, phase: DayPhase) -> [ContentEntry] {
+    static func pool(
+        for focus: PrimaryFocus,
+        phase: DayPhase,
+        nutritionMode: NutritionMode = .fiber
+    ) -> [ContentEntry] {
+        if focus == .fiber, nutritionMode == .foodGroups {
+            return phase == .evening ? foodGroupEvening : foodGroupDay
+        }
         switch (focus, phase) {
         case (.sleep, .day): return sleepDay
         case (.sleep, .evening): return sleepEvening
@@ -63,6 +70,26 @@ enum SuggestionLibrary {
     ]
 
     // MARK: - Fiber (day) — today fuel, mindful eating, evening slip risk
+
+    private static let foodGroupDay: [ContentEntry] = [
+        ContentEntry(id: "food-group-day-01", text: "Today, add a fist of vegetables to the meal you already planned. Broccoli, leafy greens, cauliflower, cabbage, and kale are especially useful."),
+        ContentEntry(id: "food-group-day-02", text: "A handful of berries covers a fruit serving and brings more antioxidants than raisins or fruit in syrup."),
+        ContentEntry(id: "food-group-day-03", text: "A cupped hand of beans counts as legumes. That is separate from the vegetable fist."),
+        ContentEntry(id: "food-group-day-04", text: "If lunch is already set, add greens to it instead of rebuilding the plate."),
+        ContentEntry(id: "food-group-day-05", text: "One palm of fish covers that group for the day."),
+        ContentEntry(id: "food-group-day-06", text: "A sugary drink, processed meat, or a fast-food meal is one limited serving. The points start yours."),
+        ContentEntry(id: "food-group-day-07", text: "Logging part of the day still moves the score. You do not need every group."),
+        ContentEntry(id: "food-group-day-08", text: "Whole grains: a cupped hand of cooked oats, brown rice, or barley, not white rice."),
+    ]
+
+    private static let foodGroupEvening: [ContentEntry] = [
+        ContentEntry(id: "food-group-eve-01", text: "Tomorrow, put broccoli, cauliflower, cabbage, or kale on the plate you already expect to eat."),
+        ContentEntry(id: "food-group-eve-02", text: "Tomorrow’s fruit is easier as a handful of berries than as a project."),
+        ContentEntry(id: "food-group-eve-03", text: "A cupped hand of beans tomorrow covers legumes without a new recipe."),
+        ContentEntry(id: "food-group-eve-04", text: "If tomorrow is busy, log the groups you do eat. A partial day still counts."),
+        ContentEntry(id: "food-group-eve-05", text: "Leafy greens and berries do more for your cells than iceberg, raisins, or fruit in syrup. They still count as a serving either way."),
+        ContentEntry(id: "food-group-eve-06", text: "One limited serving is a glass, a processed meat, or a fast-food meal. You do not need to avoid every treat."),
+    ]
 
     private static let fiberDay: [ContentEntry] = [
         ContentEntry(id: "fiber-day-01", text: "Today, add one high‑fiber side to your next meal—beans, berries, or vegetables—before evening hunger hits."),

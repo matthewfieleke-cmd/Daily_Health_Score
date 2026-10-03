@@ -59,7 +59,8 @@ final class WatchSyncCoordinator: NSObject, ObservableObject {
         let snapshot = WatchSnapshotBuilder.build(
             today: today,
             goals: smartGoalStore.goals,
-            paceNudgesEnabled: settingsStore.paceNudgesEnabled
+            paceNudgesEnabled: settingsStore.paceNudgesEnabled,
+            nutritionMode: settingsStore.settings.nutritionMode
         )
         WatchSnapshotStore.save(snapshot)
         refreshPaceNudges(with: snapshot)

@@ -27,11 +27,11 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
 
     /// One-line pillar summary for the rectangular Watch face slot.
     var rectangularPillarLine: String {
-        "S \(sleep.compactFaceValue)  F \(fiber.compactFaceValue)  \(movementFaceToken) \(exercise.compactFaceValue)"
+        "S \(sleep.compactFaceValue)  \(fiberFaceToken) \(fiber.compactFaceValue)  \(movementFaceToken) \(exercise.compactFaceValue)"
     }
 
     var rectangularPillarLineSleepFiber: String {
-        "S \(sleep.compactFaceValue)  F \(fiber.compactFaceValue)"
+        "S \(sleep.compactFaceValue)  \(fiberFaceToken) \(fiber.compactFaceValue)"
     }
 
     var rectangularPillarLineExercise: String {
@@ -42,11 +42,19 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
         let movement = exercise.unit == "steps"
             ? "steps \(exercise.compactFaceValue)"
             : "exercise \(exercise.compactFaceValue)"
-        return "Sleep \(sleep.compactFaceValue), fiber \(fiber.compactFaceValue), \(movement)"
+        let nutrition = fiber.unit == "pts"
+            ? "food groups \(fiber.compactFaceValue)"
+            : "fiber \(fiber.compactFaceValue)"
+        return "Sleep \(sleep.compactFaceValue), \(nutrition), \(movement)"
     }
 
     private var movementFaceToken: String {
         exercise.unit == "steps" ? "Steps" : "E"
+    }
+
+    /// Grams keep the short F. A food-group score must not look like grams.
+    private var fiberFaceToken: String {
+        fiber.unit == "g" ? "F" : "Food"
     }
 
     func isForDay(_ date: Date, calendar: Calendar = .current) -> Bool {
@@ -153,7 +161,12 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
                 name: "Sleep", value: sleepValue, goal: 7.5, unit: parts[3], points: 0, maxPoints: 4
             ),
             fiber: WatchPillarSnapshot(
-                name: "Fiber", value: fiberValue, goal: 40, unit: parts[5], points: 0, maxPoints: 4
+                name: parts[5] == "pts" ? "Food groups" : "Fiber",
+                value: fiberValue,
+                goal: parts[5] == "pts" ? 4 : 40,
+                unit: parts[5],
+                points: 0,
+                maxPoints: 4
             ),
             exercise: WatchPillarSnapshot(
                 name: countsSteps ? "Steps" : "Exercise Minutes",
@@ -179,6 +192,9 @@ struct WatchPillarSnapshot: Codable, Equatable, Sendable {
     var maxPoints: Double
 
     var formattedValue: String {
+        if unit == "pts" {
+            return String(format: "%.1f", (value * 10).rounded() / 10)
+        }
         if unit == "min" || unit == "steps" {
             return "\(Int(value.rounded()))"
         }
@@ -215,7 +231,7 @@ struct WatchPillarSnapshot: Codable, Equatable, Sendable {
             return "\(formattedValue)g"
         case "min", "m", "minutes":
             return "\(formattedValue)m"
-        case "steps":
+        case "steps", "pts", "points":
             return formattedValue
         default:
             return "\(formattedValue)\(unit)"

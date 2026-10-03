@@ -10,6 +10,8 @@ struct TrendChartScreen: View {
     let settings: UserSettings
     var showsTalk: Bool
     var onTalk: (() -> Void)?
+    /// Keeps a chart that was already drawn from flipping units if the goal changes later.
+    var lockedReference: TrendChartReference?
 
     @State private var metric: TrendMetric
 
@@ -18,17 +20,35 @@ struct TrendChartScreen: View {
         settings: UserSettings,
         metric: TrendMetric,
         showsTalk: Bool = false,
-        onTalk: (() -> Void)? = nil
+        onTalk: (() -> Void)? = nil,
+        lockedReference: TrendChartReference? = nil
     ) {
         self.records = records
         self.settings = settings
         self.showsTalk = showsTalk
         self.onTalk = onTalk
+        self.lockedReference = lockedReference
         _metric = State(initialValue: metric)
     }
 
+    private var displaySettings: UserSettings {
+        guard let lockedReference else { return settings }
+        var resolved = settings
+        if let goal = MovementGoal(rawValue: lockedReference.movementGoalRaw), !lockedReference.movementGoalRaw.isEmpty {
+            resolved.movementGoal = goal
+        }
+        if metric == .fiber {
+            if !lockedReference.nutritionModeRaw.isEmpty {
+                resolved.nutritionMode = NutritionMode(rawValue: lockedReference.nutritionModeRaw) ?? .fiber
+            } else if lockedReference.metric == .fiber {
+                resolved.nutritionMode = .fiber
+            }
+        }
+        return resolved
+    }
+
     private var trend: CompletedTrend? {
-        CompletedTrendBuilder.build(metric: metric, records: records, settings: settings)
+        CompletedTrendBuilder.build(metric: metric, records: records, settings: displaySettings)
     }
 
     var body: some View {
@@ -36,8 +56,8 @@ struct TrendChartScreen: View {
             VStack(alignment: .leading, spacing: 16) {
                 Picker("Metric", selection: $metric) {
                     Text("Sleep").tag(TrendMetric.sleep)
-                    Text("Fiber").tag(TrendMetric.fiber)
-                    Text(settings.movementGoal.metricName).tag(TrendMetric.movement)
+                    Text(displaySettings.nutritionMode.cardTitle).tag(TrendMetric.fiber)
+                    Text(displaySettings.movementGoal.metricName).tag(TrendMetric.movement)
                 }
                 .pickerStyle(.segmented)
 

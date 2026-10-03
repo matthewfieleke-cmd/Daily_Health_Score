@@ -59,6 +59,7 @@ final class RecordStore: ObservableObject {
                 sleepGoal: record.sleepGoal,
                 fiberGoal: record.fiberGoal,
                 movementGoal: record.movementGoal,
+                foodGroups: record.foodGroups,
                 sleepScore: record.sleepScore,
                 fiberScore: record.fiberScore,
                 exerciseScore: record.exerciseScore,

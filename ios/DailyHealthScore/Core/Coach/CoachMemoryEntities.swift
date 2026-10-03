@@ -33,11 +33,11 @@ final class CoachChatMessageEntity {
     static func encode(_ chart: TrendChartReference?) -> String {
         guard let chart else { return "" }
         let movement = chart.movementGoalRaw
-        return "\(chart.metric.rawValue)|\(chart.endDateKey)|\(chart.dayCount)|\(movement)"
+        return "\(chart.metric.rawValue)|\(chart.endDateKey)|\(chart.dayCount)|\(movement)|\(chart.nutritionModeRaw)"
     }
 
     static func decodeChart(_ raw: String) -> TrendChartReference? {
-        let parts = raw.split(separator: "|").map(String.init)
+        let parts = raw.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
         guard parts.count >= 3,
               let metric = TrendMetric(rawValue: parts[0]),
               let count = Int(parts[2]), count > 0 else { return nil }
@@ -45,7 +45,8 @@ final class CoachChatMessageEntity {
             metric: metric,
             endDateKey: parts[1],
             dayCount: count,
-            movementGoalRaw: parts.count >= 4 ? parts[3] : ""
+            movementGoalRaw: parts.count >= 4 ? parts[3] : "",
+            nutritionModeRaw: parts.count >= 5 ? parts[4] : ""
         )
     }
 

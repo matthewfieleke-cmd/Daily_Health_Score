@@ -7,12 +7,32 @@ enum WatchSnapshotBuilder {
         today: DailyRecord?,
         goals: [SMARTGoal],
         paceNudgesEnabled: Bool,
+        nutritionMode: NutritionMode = .fiber,
         now: Date = Date()
     ) -> WatchSnapshot {
         let record = today
         let sleepGoal = record?.sleepGoal.rawValue ?? SleepGoalHours.sevenHalf.rawValue
-        let fiberGoal = Double(record?.fiberGoal.rawValue ?? FiberGoalGrams.forty.rawValue)
         let movement = record?.movementGoal ?? .exerciseMinutes
+        let fiber: WatchPillarSnapshot
+        if nutritionMode == .foodGroups {
+            fiber = WatchPillarSnapshot(
+                name: "Food groups",
+                value: record?.fiberScore ?? 0,
+                goal: 4,
+                unit: "pts",
+                points: record?.fiberScore ?? 0,
+                maxPoints: 4
+            )
+        } else {
+            fiber = WatchPillarSnapshot(
+                name: "Fiber",
+                value: record?.fiberGrams ?? 0,
+                goal: UserSettings.fiberGoalGrams,
+                unit: "g",
+                points: record?.fiberScore ?? 0,
+                maxPoints: 4
+            )
+        }
 
         return WatchSnapshot(
             dateKey: record?.date ?? DateHelpers.localDateKey(from: now),
@@ -25,14 +45,7 @@ enum WatchSnapshotBuilder {
                 points: record?.sleepScore ?? 0,
                 maxPoints: 4
             ),
-            fiber: WatchPillarSnapshot(
-                name: "Fiber",
-                value: record?.fiberGrams ?? 0,
-                goal: fiberGoal,
-                unit: "g",
-                points: record?.fiberScore ?? 0,
-                maxPoints: 4
-            ),
+            fiber: fiber,
             exercise: WatchPillarSnapshot(
                 name: movement.metricName,
                 value: record?.movementValue ?? 0,

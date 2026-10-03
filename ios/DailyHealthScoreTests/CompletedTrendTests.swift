@@ -163,4 +163,32 @@ final class CompletedTrendTests: XCTestCase {
         XCTAssertEqual(filled.first { $0.date == "2026-09-27" }?.sleepHours, 0)
         XCTAssertEqual(filled.count, 7)
     }
+
+    func test_foodGroupChartUsesTheScoreAndStaysPutIfTheModeChanges() throws {
+        let groups = UserSettings(sleepGoal: .sevenHalf, fiberGoal: .forty, nutritionMode: .foodGroups)
+        var day = record("2026-10-02", fiber: 40)
+        day.foodGroups = FoodGroupServings(vegetables: 3, isLogged: true)
+        let trend = try XCTUnwrap(CompletedTrendBuilder.build(
+            metric: .fiber,
+            records: [day],
+            settings: groups,
+            now: now(),
+            calendar: calendar
+        ))
+        XCTAssertEqual(trend.title, "Food groups")
+        XCTAssertEqual(trend.goal, 4)
+        XCTAssertEqual(trend.bars.first?.value ?? -1, 2, accuracy: 1e-9)
+        XCTAssertFalse(trend.headline.contains("g"))
+
+        var grams = groups
+        grams.nutritionMode = .fiber
+        let again = try XCTUnwrap(CompletedTrendBuilder.build(
+            reference: trend.reference(settings: groups),
+            records: [day],
+            settings: grams,
+            calendar: calendar
+        ))
+        XCTAssertEqual(again.title, "Food groups")
+        XCTAssertEqual(again.bars.first?.value ?? -1, 2, accuracy: 1e-9)
+    }
 }

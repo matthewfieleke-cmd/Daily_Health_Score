@@ -125,6 +125,7 @@ enum CoachFocusContextBuilder {
     static func metric(
         _ feature: CoachFocusFeature,
         record: DailyRecord,
+        nutritionMode: NutritionMode = .fiber,
         nowKey: String = DateHelpers.localDateKey()
     ) -> CoachFocusContext {
         let status: CoachMetricStatus
@@ -135,10 +136,7 @@ enum CoachFocusContextBuilder {
                 unit: "h", decimals: 1, points: record.sleepScore, maxPoints: 4
             )
         case .fiber:
-            status = CoachSnapshotBuilder.status(
-                name: "Fiber", value: record.fiberGrams, goal: Double(record.fiberGoal.rawValue),
-                unit: "g", decimals: 1, points: record.fiberScore, maxPoints: 4
-            )
+            status = CoachSnapshotBuilder.nutritionStatus(for: record, mode: nutritionMode)
         case .exercise:
             status = CoachSnapshotBuilder.movementStatus(for: record)
         default:
@@ -162,7 +160,12 @@ enum CoachFocusContextBuilder {
         )
     }
 
-    static func history(stats: RollingStats, days: Int, windowKeys: [String]) -> CoachFocusContext {
+    static func history(
+        stats: RollingStats,
+        days: Int,
+        windowKeys: [String],
+        nutritionMode: NutritionMode = .fiber
+    ) -> CoachFocusContext {
         let start = windowKeys.first ?? ""
         let end = windowKeys.last ?? ""
         let missingDays = max(stats.daysInWindow - stats.daysWithData, 0)
@@ -178,7 +181,7 @@ enum CoachFocusContextBuilder {
             endDateKey: end,
             valueSummary: """
             Average score \(ScoreCalculator.formatDisplayScore(stats.avgTotalScore)) of 10 across \(stats.daysWithData) of \(stats.daysInWindow) days. \
-            Sleep \(ScoreCalculator.formatDisplayScore(stats.avgSleepHours)) h, fiber \(String(format: "%.0f", stats.avgFiberGrams)) g, \
+            Sleep \(ScoreCalculator.formatDisplayScore(stats.avgSleepHours)) h, \(nutritionSummary(stats, mode: nutritionMode)), \
             \(movement.metricName) \(String(format: "%.0f", stats.avgMovementValue)) \(movement.unit).
             """,
             baselineComparison: "Comparisons use this selected \(days)-day window only.",
@@ -187,7 +190,12 @@ enum CoachFocusContextBuilder {
         )
     }
 
-    static func day(_ record: DailyRecord?, dateKey: String, todayKey: String = DateHelpers.localDateKey()) -> CoachFocusContext {
+    static func day(
+        _ record: DailyRecord?,
+        dateKey: String,
+        todayKey: String = DateHelpers.localDateKey(),
+        nutritionMode: NutritionMode = .fiber
+    ) -> CoachFocusContext {
         guard let record else {
             return CoachFocusContext(
                 feature: .history,
@@ -202,10 +210,7 @@ enum CoachFocusContextBuilder {
             name: "Sleep", value: record.sleepHours, goal: record.sleepGoal.rawValue,
             unit: "h", decimals: 1, points: record.sleepScore, maxPoints: 4
         )
-        let fiber = CoachSnapshotBuilder.status(
-            name: "Fiber", value: record.fiberGrams, goal: Double(record.fiberGoal.rawValue),
-            unit: "g", decimals: 1, points: record.fiberScore, maxPoints: 4
-        )
+        let fiber = CoachSnapshotBuilder.nutritionStatus(for: record, mode: nutritionMode)
         let exercise = CoachSnapshotBuilder.movementStatus(for: record)
         let missingBits = [sleep, fiber, exercise].filter { $0.level == .missing }.map(\.name)
         return CoachFocusContext(
@@ -221,6 +226,13 @@ enum CoachFocusContextBuilder {
                 ? ""
                 : "\(missingBits.joined(separator: ", ")) unlogged on this day — not zero behavior."
         )
+    }
+
+    private static func nutritionSummary(_ stats: RollingStats, mode: NutritionMode) -> String {
+        if mode == .foodGroups {
+            return "food groups \(ScoreCalculator.formatDisplayScore(stats.avgFiberScore)) of 4"
+        }
+        return "fiber \(String(format: "%.0f", stats.avgFiberGrams)) g"
     }
 
     static func hrv(analysis: HRVAnalysis, startDateKey: String, endDateKey: String, todayKey: String) -> CoachFocusContext {
