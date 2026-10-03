@@ -74,12 +74,29 @@ enum CoachDayRange {
 
     // MARK: - Lines
 
+    private static func movementFact(_ record: DailyRecord) -> String {
+        let value = number(record.movementValue, decimals: 0)
+        let goal = number(record.movementGoal.goalValue, decimals: 0)
+        if record.movementGoal.countsSteps {
+            return "steps \(value) of \(goal)"
+        }
+        return "exercise minutes \(value) of \(goal)"
+    }
+
+    private static func movementAverage(_ value: Double, goal: MovementGoal) -> String {
+        let shown = number(value, decimals: 0)
+        if goal.countsSteps {
+            return "steps \(shown)"
+        }
+        return "exercise minutes \(shown)"
+    }
+
     private static func dayLine(_ record: DailyRecord) -> String {
         var parts = [
             "\(label(record.date)): score \(ScoreCalculator.formatDisplayScore(record.totalScore)) of 10",
             "sleep \(number(record.sleepHours, decimals: 1)) h of \(number(record.sleepGoal.rawValue, decimals: 1))",
             "fiber \(number(record.fiberGrams, decimals: 1)) g of \(record.fiberGoal.rawValue)",
-            "exercise \(number(record.exerciseMinutes, decimals: 0)) min of \(record.exerciseGoalMinutes)"
+            movementFact(record)
         ]
         if let hrv = record.sleepHrvSDNNMs {
             parts.append("sleep HRV \(number(hrv, decimals: 0)) ms")
@@ -93,8 +110,9 @@ enum CoachDayRange {
         let score = records.map(\.totalScore).reduce(0, +) / count
         let sleep = records.map(\.sleepHours).reduce(0, +) / count
         let fiber = records.map(\.fiberGrams).reduce(0, +) / count
-        let exercise = records.map(\.exerciseMinutes).reduce(0, +) / count
-        return "\(label): score \(ScoreCalculator.formatDisplayScore(score)) of 10, sleep \(number(sleep, decimals: 1)) h, fiber \(number(fiber, decimals: 1)) g, exercise \(number(exercise, decimals: 0)) min."
+        let movement = records.map(\.movementValue).reduce(0, +) / count
+        let movementText = movementAverage(movement, goal: records.first?.movementGoal ?? .exerciseMinutes)
+        return "\(label): score \(ScoreCalculator.formatDisplayScore(score)) of 10, sleep \(number(sleep, decimals: 1)) h, fiber \(number(fiber, decimals: 1)) g, \(movementText)."
     }
 
     private static func missingNote(keys: [String], byDate: [String: DailyRecord]) -> [String] {

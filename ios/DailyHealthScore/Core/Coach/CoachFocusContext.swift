@@ -69,7 +69,7 @@ struct CoachFocusContext: Identifiable, Equatable, Sendable {
         case .today: return "Today"
         case .sleep: return "Sleep"
         case .fiber: return "Fiber"
-        case .exercise: return "Exercise"
+        case .exercise: return metricName ?? "Exercise Minutes"
         case .hrv: return "Heart rate variability"
         case .history: return "Selected history"
         case .sleepDiagnostic: return "Sleep records"
@@ -140,10 +140,7 @@ enum CoachFocusContextBuilder {
                 unit: "g", decimals: 1, points: record.fiberScore, maxPoints: 4
             )
         case .exercise:
-            status = CoachSnapshotBuilder.status(
-                name: "Exercise", value: record.exerciseMinutes, goal: Double(record.exerciseGoalMinutes),
-                unit: "min", decimals: 0, points: record.exerciseScore, maxPoints: 2
-            )
+            status = CoachSnapshotBuilder.movementStatus(for: record)
         default:
             status = CoachSnapshotBuilder.status(
                 name: "Score", value: record.totalScore, goal: 10,
@@ -170,23 +167,20 @@ enum CoachFocusContextBuilder {
         let end = windowKeys.last ?? ""
         let missingDays = max(stats.daysInWindow - stats.daysWithData, 0)
         let missing = missingDays > 0
-            ? "\(missingDays) day(s) in this window have no saved record. That is missing data, not zero sleep, fiber, or exercise."
+            ? "\(missingDays) day(s) in this window have no saved record. That is missing data, not zero sleep, fiber, or movement."
             : ""
+        let movement = stats.recordsInWindow.first?.movementGoal ?? .exerciseMinutes
         return CoachFocusContext(
             feature: .history,
             metricName: "Rolling score",
             unit: "points",
             startDateKey: start,
             endDateKey: end,
-            valueSummary: String(
-                format: "Average score %.1f of 10 across %d of %d days. Sleep %.1f h, fiber %.0f g, exercise %.0f min.",
-                stats.avgTotalScore,
-                stats.daysWithData,
-                stats.daysInWindow,
-                stats.avgSleepHours,
-                stats.avgFiberGrams,
-                stats.avgExerciseMinutes
-            ),
+            valueSummary: """
+            Average score \(ScoreCalculator.formatDisplayScore(stats.avgTotalScore)) of 10 across \(stats.daysWithData) of \(stats.daysInWindow) days. \
+            Sleep \(ScoreCalculator.formatDisplayScore(stats.avgSleepHours)) h, fiber \(String(format: "%.0f", stats.avgFiberGrams)) g, \
+            \(movement.metricName) \(String(format: "%.0f", stats.avgMovementValue)) \(movement.unit).
+            """,
             baselineComparison: "Comparisons use this selected \(days)-day window only.",
             freshness: "Window ends on \(end.isEmpty ? "the latest saved day" : DateHelpers.formatDisplayDate(end)).",
             missingData: missing
@@ -212,10 +206,7 @@ enum CoachFocusContextBuilder {
             name: "Fiber", value: record.fiberGrams, goal: Double(record.fiberGoal.rawValue),
             unit: "g", decimals: 1, points: record.fiberScore, maxPoints: 4
         )
-        let exercise = CoachSnapshotBuilder.status(
-            name: "Exercise", value: record.exerciseMinutes, goal: Double(record.exerciseGoalMinutes),
-            unit: "min", decimals: 0, points: record.exerciseScore, maxPoints: 2
-        )
+        let exercise = CoachSnapshotBuilder.movementStatus(for: record)
         let missingBits = [sleep, fiber, exercise].filter { $0.level == .missing }.map(\.name)
         return CoachFocusContext(
             feature: .history,

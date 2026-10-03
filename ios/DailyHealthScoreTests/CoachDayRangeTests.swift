@@ -12,18 +12,23 @@ final class CoachDayRangeTests: XCTestCase {
         sleep: Double = 7.0,
         fiber: Double = 30,
         exercise: Double = 30,
+        steps: Double = 0,
+        movement: MovementGoal = .exerciseMinutes,
         hrv: Double? = nil
     ) -> DailyRecord {
-        let metrics = DailyMetrics(sleepHours: sleep, fiberGrams: fiber, exerciseMinutes: exercise)
-        let computed = ScoreCalculator.calculate(metrics: metrics, settings: settings)
+        let goal = UserSettings(sleepGoal: settings.sleepGoal, fiberGoal: settings.fiberGoal, movementGoal: movement)
+        let metrics = DailyMetrics(sleepHours: sleep, fiberGrams: fiber, exerciseMinutes: exercise, stepCount: steps)
+        let computed = ScoreCalculator.calculate(metrics: metrics, settings: goal)
         return DailyRecord(
             date: date,
             sleepHours: sleep,
             fiberGrams: fiber,
             exerciseMinutes: exercise,
+            stepCount: steps,
             sleepHrvSDNNMs: hrv,
             sleepGoal: settings.sleepGoal,
             fiberGoal: settings.fiberGoal,
+            movementGoal: movement,
             sleepScore: computed.sleepScore,
             fiberScore: computed.fiberScore,
             exerciseScore: computed.exerciseScore,
@@ -86,7 +91,7 @@ final class CoachDayRangeTests: XCTestCase {
         XCTAssertTrue(text.contains("Fri Sep 4"))
         XCTAssertTrue(text.contains("sleep 6.2 h of 7.5"))
         XCTAssertTrue(text.contains("fiber 18.0 g of 40"))
-        XCTAssertTrue(text.contains("exercise 12 min of 30"))
+        XCTAssertTrue(text.contains("exercise minutes 12 of 30"))
         XCTAssertTrue(text.contains("sleep HRV 47 ms"))
         XCTAssertTrue(text.contains("Today is Tue Sep 22, 2026."))
     }
@@ -106,9 +111,20 @@ final class CoachDayRangeTests: XCTestCase {
 
         XCTAssertTrue(text.contains("Sep 1 to Sep 7, 2026 — 7 days, 6 with data."))
         XCTAssertTrue(text.contains("Average across days with data: score"))
-        XCTAssertTrue(text.contains("sleep 7.0 h, fiber 20.0 g, exercise 20 min."))
+        XCTAssertTrue(text.contains("sleep 7.0 h, fiber 20.0 g, exercise minutes 20."))
         XCTAssertTrue(text.contains("No record for Sep 3. Unlogged, not zero."))
         XCTAssertEqual(text.components(separatedBy: "score 7").count - 1, 7, "six day lines plus the average")
+    }
+
+    func test_stepGoalRendersStepsAndIgnoresExerciseMinutes() {
+        let window = CoachDayRange.Window(startKey: "2026-09-04", endKey: "2026-09-04")
+        let text = CoachDayRange.payload(
+            records: [record("2026-09-04", exercise: 30, steps: 2_000, movement: .steps8000)],
+            window: window,
+            todayKey: today
+        )
+        XCTAssertTrue(text.contains("steps 2000 of 8000"))
+        XCTAssertFalse(text.contains("exercise minutes"))
     }
 
     /// A quarter of day-lines is a worse answer than the shape of the weeks.

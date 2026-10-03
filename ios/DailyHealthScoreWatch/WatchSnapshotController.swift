@@ -104,8 +104,9 @@ final class WatchSnapshotController: NSObject, ObservableObject {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         guard let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis),
               let fiber = HKObjectType.quantityType(forIdentifier: .dietaryFiber),
-              let exercise = HKObjectType.quantityType(forIdentifier: .appleExerciseTime) else { return }
-        HKHealthStore().requestAuthorization(toShare: [], read: [sleep, fiber, exercise]) { _, _ in }
+              let exercise = HKObjectType.quantityType(forIdentifier: .appleExerciseTime),
+              let steps = HKObjectType.quantityType(forIdentifier: .stepCount) else { return }
+        HKHealthStore().requestAuthorization(toShare: [], read: [sleep, fiber, exercise, steps]) { _, _ in }
         #endif
     }
 

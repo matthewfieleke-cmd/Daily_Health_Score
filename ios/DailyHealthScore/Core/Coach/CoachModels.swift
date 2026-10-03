@@ -168,12 +168,15 @@ struct CoachSnapshot: Equatable, Sendable {
 
     /// Goals restated verbatim so "what is my goal?" can be answered exactly.
     var goalsBlock: String {
-        String(
-            format: "Sleep goal %.1f h/night · Fiber goal %.0f g/day · Exercise goal %.0f min/day",
+        let movementGoal = MovementGoal.formatCount(exercise.goal)
+        let movement = exercise.unit == "steps"
+            ? "\(exercise.name) goal \(movementGoal)/day"
+            : "\(exercise.name) goal \(movementGoal) min/day"
+        return String(
+            format: "Sleep goal %.1f h/night · Fiber goal %.0f g/day · ",
             sleep.goal,
-            fiber.goal,
-            exercise.goal
-        )
+            fiber.goal
+        ) + movement
     }
 
     /// Date and goals only. Used when the question is not about today's numbers,
@@ -212,7 +215,8 @@ struct CoachSnapshot: Equatable, Sendable {
             weekly.append(String(format: "avg fiber %.0f g", weekAvgFiber))
         }
         if let weekAvgExercise {
-            weekly.append(String(format: "avg exercise %.0f min", weekAvgExercise))
+            let noun = exercise.unit == "steps" ? "steps" : "exercise minutes"
+            weekly.append(String(format: "avg \(noun) %.0f", weekAvgExercise))
         }
         weekly.append("fiber logged on \(fiberDaysLoggedInWeek) of 7 days")
         lines.append(weekly.joined(separator: "; "))
@@ -257,7 +261,8 @@ struct CoachSnapshot: Equatable, Sendable {
             weekly.append(String(format: "average fiber %.0f g", weekAvgFiber))
         }
         if let weekAvgExercise {
-            weekly.append(String(format: "average exercise %.0f min", weekAvgExercise))
+            let noun = exercise.unit == "steps" ? "steps" : "exercise minutes"
+            weekly.append(String(format: "average \(noun) %.0f", weekAvgExercise))
         }
         lines.append("This week: \(weekly.joined(separator: "; ")).")
         lines.append("Fiber logged on \(fiberDaysLoggedInWeek) of 7 days.")
@@ -268,8 +273,9 @@ struct CoachSnapshot: Equatable, Sendable {
     }
 
     private static func toolFactLine(_ metric: CoachMetricStatus) -> String {
-        let valueDecimals = metric.unit == "min" ? 0 : 1
-        let goalDecimals = metric.unit == "min" || metric.goal.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 1
+        let wholeNumber = metric.unit == "min" || metric.unit == "steps"
+        let valueDecimals = wholeNumber ? 0 : 1
+        let goalDecimals = wholeNumber || metric.goal.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 1
         let valueText = String(format: "%.\(valueDecimals)f", metric.value)
         let goalText = String(format: "%.\(goalDecimals)f", metric.goal)
         if metric.level == .missing {

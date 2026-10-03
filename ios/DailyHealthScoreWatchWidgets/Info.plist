@@ -27,7 +27,7 @@
 		</dict>
 	</dict>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Daily Health Score reads your sleep, dietary fiber, and exercise minutes from Apple Health so the Watch face can show today’s score.</string>
+	<string>Daily Health Score reads your sleep, dietary fiber, exercise minutes, and steps from Apple Health so the Watch face can show today’s score.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Daily Health Score does not write data to Apple Health. This description is required because HealthKit may reference write APIs; the app only reads authorized health types.</string>
 </dict>

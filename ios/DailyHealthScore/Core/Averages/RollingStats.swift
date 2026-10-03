@@ -7,6 +7,8 @@ struct RollingStats {
     var avgSleepHours: Double
     var avgFiberGrams: Double
     var avgExerciseMinutes: Double
+    /// Average of the value that earned the movement points (minutes or steps).
+    var avgMovementValue: Double
     var avgSleepScore: Double
     var avgFiberScore: Double
     var avgExerciseScore: Double
@@ -24,9 +26,14 @@ enum RollingStatsCalculator {
                 metrics: DailyMetrics(
                     sleepHours: record.sleepHours,
                     fiberGrams: record.fiberGrams,
-                    exerciseMinutes: record.exerciseMinutes
+                    exerciseMinutes: record.exerciseMinutes,
+                    stepCount: record.stepCount
                 ),
-                settings: UserSettings(sleepGoal: record.sleepGoal, fiberGoal: record.fiberGoal)
+                settings: UserSettings(
+                    sleepGoal: record.sleepGoal,
+                    fiberGoal: record.fiberGoal,
+                    movementGoal: record.movementGoal
+                )
             )
         }
 
@@ -42,6 +49,7 @@ enum RollingStatsCalculator {
             avgSleepHours: mean(inWindow.map(\.sleepHours)),
             avgFiberGrams: mean(inWindow.map(\.fiberGrams)),
             avgExerciseMinutes: mean(inWindow.map(\.exerciseMinutes)),
+            avgMovementValue: mean(inWindow.map(\.movementValue)),
             avgSleepScore: mean(recalculated.map(\.sleepScore)),
             avgFiberScore: mean(recalculated.map(\.fiberScore)),
             avgExerciseScore: mean(recalculated.map(\.exerciseScore)),

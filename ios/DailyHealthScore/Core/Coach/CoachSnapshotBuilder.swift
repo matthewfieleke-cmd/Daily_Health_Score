@@ -52,25 +52,31 @@ enum CoachSnapshotBuilder {
                 points: today.fiberScore,
                 maxPoints: 4
             ),
-            exercise: status(
-                name: "Exercise",
-                value: today.exerciseMinutes,
-                goal: Double(today.exerciseGoalMinutes),
-                unit: "min",
-                decimals: 0,
-                points: today.exerciseScore,
-                maxPoints: 2
-            ),
+            exercise: movementStatus(for: today),
             primaryFocus: today.primaryFocus,
             weekDaysWithData: weekStats?.daysWithData ?? 0,
             weekAvgScore: weekStats?.avgTotalScore,
             weekAvgSleep: weekStats?.avgSleepHours,
             weekAvgFiber: weekStats?.avgFiberGrams,
-            weekAvgExercise: weekStats?.avgExerciseMinutes,
+            weekAvgExercise: weekRecords.isEmpty
+                ? nil
+                : weekRecords.map(\.movementValue).reduce(0, +) / Double(weekRecords.count),
             fiberDaysLoggedInWeek: fiberDays,
             hrvSummary: hrvSummary,
             smartGoals: CoachGoalSummarizer.lines(for: goals),
             bodyLine: bodyTrend?.promptBlock
+        )
+    }
+
+    static func movementStatus(for record: DailyRecord) -> CoachMetricStatus {
+        status(
+            name: record.movementGoal.metricName,
+            value: record.movementValue,
+            goal: record.movementGoal.goalValue,
+            unit: record.movementGoal.unit,
+            decimals: 0,
+            points: record.exerciseScore,
+            maxPoints: 2
         )
     }
 

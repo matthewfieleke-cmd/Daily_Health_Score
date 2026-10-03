@@ -48,5 +48,15 @@ final class HealthSyncPolicyTests: XCTestCase {
                 hasExistingRecord: false
             )
         )
+
+        let stepsOnly = HealthDayMetrics(sleepHours: 0, fiberGrams: 0, exerciseMinutes: 0, stepCount: 4_000)
+        XCTAssertTrue(
+            HealthSyncPolicy.shouldPersistDay(
+                dateKey: "2026-05-30",
+                todayKey: today,
+                metrics: stepsOnly,
+                hasExistingRecord: false
+            )
+        )
     }
 }

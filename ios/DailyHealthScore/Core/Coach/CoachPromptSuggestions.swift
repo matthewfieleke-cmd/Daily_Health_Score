@@ -84,9 +84,13 @@ enum CoachPromptSuggestions {
         if fiberGap > 0, !evening {
             return "How do I get \(Int(fiberGap.rounded())) more grams of fiber today?"
         }
-        let exerciseGap = Double(record.exerciseGoalMinutes) - record.exerciseMinutes
-        if exerciseGap > 0, !evening {
-            return "What's a realistic way to fit in \(Int(exerciseGap.rounded())) minutes?"
+        let movementGap = record.movementGoal.goalValue - record.movementValue
+        if movementGap > 0, !evening {
+            let amount = MovementGoal.formatCount(movementGap)
+            if record.movementGoal.countsSteps {
+                return "What's a realistic way to fit in \(amount) more steps?"
+            }
+            return "What's a realistic way to fit in \(amount) minutes?"
         }
         if record.sleepHours > 0, record.sleepHours < record.sleepGoal.rawValue {
             return "Why does short sleep affect me so much?"

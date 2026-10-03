@@ -238,15 +238,15 @@ struct TodayView: View {
                 Button("Ask Coach about this") { askCoach(about: .fiber, record: record) }
             }
             CompactMetricCard(
-                title: "Exercise",
-                metricValue: record.exerciseMinutes,
-                unitSuffix: "min",
+                title: record.movementGoal.metricName,
+                metricValue: record.movementValue,
+                unitSuffix: record.movementGoal.unit,
                 usesIntegerDisplay: true,
                 scoreValue: record.exerciseScore,
                 maxScore: 2,
-                goalValue: Double(record.exerciseGoalMinutes),
+                goalValue: record.movementGoal.goalValue,
                 animationProgress: dialUpProgress,
-                systemImage: "figure.run",
+                systemImage: record.movementGoal.systemImage,
                 tint: AppTheme.tint(for: PrimaryFocus.exercise)
             )
             .onTapGesture { askCoach(about: .exercise, record: record) }
@@ -362,7 +362,7 @@ private struct CompactMetricCard: View {
 
     private var metricDisplayText: String {
         if usesIntegerDisplay {
-            return "\(Int(displayedMetric.rounded()))"
+            return MovementGoal.formatCount(displayedMetric)
         }
         return ScoreCalculator.formatDisplayScore(displayedMetric)
     }
@@ -382,8 +382,8 @@ private struct CompactMetricCard: View {
                 Text(title)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {

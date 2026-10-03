@@ -107,9 +107,13 @@ struct RollingSummaryView: View {
             StatTile(label: "Fiber",    value: "\(ScoreCalculator.formatDisplayScore(stats.avgFiberGrams)) g",
                      sub: "\(ScoreCalculator.formatDisplayScore(stats.avgFiberScore)) / 4",
                      icon: "leaf.fill", tint: AppTheme.leaf),
-            StatTile(label: "Exercise", value: "\(Int(stats.avgExerciseMinutes.rounded())) min",
-                     sub: "\(ScoreCalculator.formatDisplayScore(stats.avgExerciseScore)) / 2",
-                     icon: "figure.run", tint: AppTheme.tint(for: PrimaryFocus.exercise)),
+            StatTile(
+                label: movementGoal(in: stats).metricName,
+                value: "\(MovementGoal.formatCount(stats.avgMovementValue)) \(movementGoal(in: stats).unit)",
+                sub: "\(ScoreCalculator.formatDisplayScore(stats.avgExerciseScore)) / 2",
+                icon: movementGoal(in: stats).systemImage,
+                tint: AppTheme.tint(for: PrimaryFocus.exercise)
+            ),
         ]
         return LazyVGrid(
             columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
@@ -191,11 +195,15 @@ struct RollingSummaryView: View {
         }
     }
 
+    private func movementGoal(in stats: RollingStats) -> MovementGoal {
+        stats.recordsInWindow.first?.movementGoal ?? .exerciseMinutes
+    }
+
     private func metricLine(for record: DailyRecord) -> String {
         let sleep = ScoreCalculator.formatDisplayScore(record.sleepHours)
         let fiber = ScoreCalculator.formatDisplayScore(record.fiberGrams)
-        let exercise = Int(record.exerciseMinutes.rounded())
-        return "Sleep \(sleep)h · Fiber \(fiber)g · Exercise \(exercise) min"
+        let movement = "\(record.movementGoal.metricName) \(MovementGoal.formatCount(record.movementValue))"
+        return "Sleep \(sleep)h · Fiber \(fiber)g · \(movement)"
     }
 
     private func scoreChip(_ score: Double) -> some View {

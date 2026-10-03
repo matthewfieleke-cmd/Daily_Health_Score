@@ -74,6 +74,45 @@ final class ScoreCalculatorTests: XCTestCase {
         )
     }
 
+    func test_stepGoalScalesToTwoPointsAndIgnoresExerciseMinutes() {
+        let settings = UserSettings(sleepGoal: .sevenHalf, fiberGoal: .forty, movementGoal: .steps8000)
+        let half = ScoreCalculator.calculate(
+            metrics: DailyMetrics(sleepHours: 0, fiberGrams: 0, exerciseMinutes: 30, stepCount: 4_000),
+            settings: settings
+        )
+        XCTAssertEqual(half.exerciseScore, 1, accuracy: 1e-9)
+        XCTAssertEqual(half.exercisePercent, 0.5, accuracy: 1e-9)
+
+        let quarter = ScoreCalculator.calculate(
+            metrics: DailyMetrics(sleepHours: 0, fiberGrams: 0, exerciseMinutes: 0, stepCount: 2_000),
+            settings: settings
+        )
+        XCTAssertEqual(quarter.exerciseScore, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(ScoreCalculator.formatDisplayScore(quarter.exerciseScore), "0.5")
+
+        let over = ScoreCalculator.calculate(
+            metrics: DailyMetrics(sleepHours: 0, fiberGrams: 0, exerciseMinutes: 0, stepCount: 12_000),
+            settings: UserSettings(sleepGoal: .sevenHalf, fiberGoal: .forty, movementGoal: .steps10000)
+        )
+        XCTAssertEqual(over.exerciseScore, 2, accuracy: 1e-9)
+
+        let minutesStillScoreMinutes = ScoreCalculator.calculate(
+            metrics: DailyMetrics(sleepHours: 0, fiberGrams: 0, exerciseMinutes: 15, stepCount: 8_000),
+            settings: defaultSettings
+        )
+        XCTAssertEqual(minutesStillScoreMinutes.exerciseScore, 1, accuracy: 1e-9)
+    }
+
+    func test_stepDisplayRoundsToNearestTenth() {
+        let settings = UserSettings(sleepGoal: .sevenHalf, fiberGoal: .forty, movementGoal: .steps8000)
+        let computed = ScoreCalculator.calculate(
+            metrics: DailyMetrics(sleepHours: 0, fiberGrams: 0, exerciseMinutes: 0, stepCount: 2_500),
+            settings: settings
+        )
+        XCTAssertEqual(computed.exerciseScore, 0.625, accuracy: 1e-9)
+        XCTAssertEqual(ScoreCalculator.formatDisplayScore(computed.exerciseScore), "0.6")
+    }
+
     func test_alternativeSleepAndFiberGoals_changeScoring() {
         let settings = UserSettings(sleepGoal: .eight, fiberGoal: .fifty)
         let computed = ScoreCalculator.calculate(

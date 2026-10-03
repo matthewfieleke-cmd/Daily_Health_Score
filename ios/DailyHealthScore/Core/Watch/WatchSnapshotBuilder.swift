@@ -12,7 +12,7 @@ enum WatchSnapshotBuilder {
         let record = today
         let sleepGoal = record?.sleepGoal.rawValue ?? SleepGoalHours.sevenHalf.rawValue
         let fiberGoal = Double(record?.fiberGoal.rawValue ?? FiberGoalGrams.forty.rawValue)
-        let exerciseGoal = Double(record?.exerciseGoalMinutes ?? Int(ScoreCalculator.exerciseGoalMinutes))
+        let movement = record?.movementGoal ?? .exerciseMinutes
 
         return WatchSnapshot(
             dateKey: record?.date ?? DateHelpers.localDateKey(from: now),
@@ -34,10 +34,10 @@ enum WatchSnapshotBuilder {
                 maxPoints: 4
             ),
             exercise: WatchPillarSnapshot(
-                name: "Exercise",
-                value: record?.exerciseMinutes ?? 0,
-                goal: exerciseGoal,
-                unit: "min",
+                name: movement.metricName,
+                value: record?.movementValue ?? 0,
+                goal: movement.goalValue,
+                unit: movement.unit,
                 points: record?.exerciseScore ?? 0,
                 maxPoints: 2
             ),

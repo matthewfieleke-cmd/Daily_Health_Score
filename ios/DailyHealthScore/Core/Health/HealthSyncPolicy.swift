@@ -12,6 +12,6 @@ enum HealthSyncPolicy {
     ) -> Bool {
         if dateKey == todayKey { return true }
         if hasExistingRecord { return true }
-        return metrics.sleepHours > 0 || metrics.fiberGrams > 0 || metrics.exerciseMinutes > 0
+        return metrics.sleepHours > 0 || metrics.fiberGrams > 0 || metrics.exerciseMinutes > 0 || metrics.stepCount > 0
     }
 }

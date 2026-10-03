@@ -284,11 +284,7 @@ final class AppState: ObservableObject {
             ?? HealthDayMetrics(sleepHours: 0, fiberGrams: 0, exerciseMinutes: 0)
         let record = RecordBuilder.build(
             date: today,
-            metrics: DailyMetrics(
-                sleepHours: healthMetrics.sleepHours,
-                fiberGrams: healthMetrics.fiberGrams,
-                exerciseMinutes: healthMetrics.exerciseMinutes
-            ),
+            metrics: healthMetrics.dailyMetrics,
             settings: settingsStore.settings,
             settingsStore: settingsStore,
             existing: existing,
@@ -326,11 +322,7 @@ final class AppState: ObservableObject {
             }
             return RecordBuilder.build(
                 date: dateKey,
-                metrics: DailyMetrics(
-                    sleepHours: healthMetrics.sleepHours,
-                    fiberGrams: healthMetrics.fiberGrams,
-                    exerciseMinutes: healthMetrics.exerciseMinutes
-                ),
+                metrics: healthMetrics.dailyMetrics,
                 settings: settingsStore.settings,
                 settingsStore: settingsStore,
                 existing: existing,
@@ -348,7 +340,8 @@ final class AppState: ObservableObject {
         let metrics = DailyMetrics(
             sleepHours: existing.sleepHours,
             fiberGrams: existing.fiberGrams,
-            exerciseMinutes: existing.exerciseMinutes
+            exerciseMinutes: existing.exerciseMinutes,
+            stepCount: existing.stepCount
         )
         let computed = ScoreCalculator.calculate(metrics: metrics, settings: settingsStore.settings)
         let focus = ScoreCalculator.determinePrimaryFocus(computed)
@@ -364,9 +357,11 @@ final class AppState: ObservableObject {
             sleepHours: existing.sleepHours,
             fiberGrams: existing.fiberGrams,
             exerciseMinutes: existing.exerciseMinutes,
+            stepCount: existing.stepCount,
             sleepHrvSDNNMs: existing.sleepHrvSDNNMs,
             sleepGoal: settingsStore.settings.sleepGoal,
             fiberGoal: settingsStore.settings.fiberGoal,
+            movementGoal: settingsStore.settings.movementGoal,
             sleepScore: computed.sleepScore,
             fiberScore: computed.fiberScore,
             exerciseScore: computed.exerciseScore,

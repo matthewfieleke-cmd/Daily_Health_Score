@@ -9,6 +9,8 @@ enum HealthChangeKind: Equatable, Sendable {
     case fiber
     /// Minute-by-minute Exercise Minutes. Face updates only if a workout also ended.
     case exerciseMinutes
+    /// Step count updates all day. Face updates only if a workout also ended.
+    case steps
     /// An `HKWorkout` was saved (user ended a walk, hike, etc.).
     case workout
 }
@@ -76,7 +78,7 @@ enum ComplicationPushPolicy {
             return fiberChanged || scoreChanged
         case .workout:
             return exerciseChanged || scoreChanged
-        case .exerciseMinutes:
+        case .exerciseMinutes, .steps:
             guard endedWorkoutSinceLastPush else { return false }
             return exerciseChanged || scoreChanged
         }

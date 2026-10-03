@@ -6,6 +6,7 @@ final class SettingsStore: ObservableObject {
     private enum Keys {
         static let sleepGoal = "dhs.sleepGoal"
         static let fiberGoal = "dhs.fiberGoal"
+        static let movementGoal = "dhs.movementGoal"
         static let usedSuggestions = "dhs.usedSuggestions"
         static let usedDiscouragement = "dhs.usedDiscouragement"
         static let usedMotivation = "dhs.usedMotivation"
@@ -50,7 +51,9 @@ final class SettingsStore: ObservableObject {
         let fiberRaw = UserDefaults.standard.integer(forKey: Keys.fiberGoal)
         let sleep = SleepGoalHours(rawValue: sleepRaw == 0 ? 7.5 : sleepRaw) ?? .sevenHalf
         let fiber = FiberGoalGrams(rawValue: fiberRaw == 0 ? 40 : fiberRaw) ?? .forty
-        settings = UserSettings(sleepGoal: sleep, fiberGoal: fiber)
+        let movement = UserDefaults.standard.string(forKey: Keys.movementGoal)
+            .flatMap(MovementGoal.init(rawValue:)) ?? .exerciseMinutes
+        settings = UserSettings(sleepGoal: sleep, fiberGoal: fiber, movementGoal: movement)
         hrvSensitivity = UserDefaults.standard.string(forKey: Keys.hrvSensitivity)
             .flatMap(HRVSensitivity.init(rawValue:)) ?? .balanced
         if UserDefaults.standard.object(forKey: Keys.paceNudgesEnabled) == nil {
@@ -126,6 +129,7 @@ final class SettingsStore: ObservableObject {
     private func persistSettings() {
         UserDefaults.standard.set(settings.sleepGoal.rawValue, forKey: Keys.sleepGoal)
         UserDefaults.standard.set(settings.fiberGoal.rawValue, forKey: Keys.fiberGoal)
+        UserDefaults.standard.set(settings.movementGoal.rawValue, forKey: Keys.movementGoal)
     }
 
     private func loadRotationState() {

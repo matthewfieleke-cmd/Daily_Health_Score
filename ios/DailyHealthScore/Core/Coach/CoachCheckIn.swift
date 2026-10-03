@@ -134,7 +134,7 @@ enum CoachCheckInLogic {
     /// Health has synced something for today. Before that, writing a card
     /// would describe an empty day as a bad one.
     static func hasData(_ record: DailyRecord) -> Bool {
-        record.sleepHours > 0 || record.fiberGrams > 0 || record.exerciseMinutes > 0
+        record.sleepHours > 0 || record.fiberGrams > 0 || record.movementValue > 0
     }
 
     /// The shape of the day as the card describes it: whether sleep is in, and
@@ -148,7 +148,7 @@ enum CoachCheckInLogic {
             ? "none"
             : (record.sleepHours >= record.sleepGoal.rawValue ? "met" : "below")
         let fiber = record.fiberGrams >= Double(record.fiberGoal.rawValue) ? "met" : "open"
-        let exercise = record.exerciseMinutes >= Double(record.exerciseGoalMinutes) ? "met" : "open"
+        let exercise = record.movementValue >= record.movementGoal.goalValue ? "met" : "open"
         return "sleep=\(sleep),fiber=\(fiber),exercise=\(exercise)"
     }
 
