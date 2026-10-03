@@ -76,7 +76,7 @@ enum SuggestionLibrary {
         ContentEntry(id: "food-group-day-02", text: "A handful of berries covers a fruit serving and brings more antioxidants than raisins or fruit in syrup."),
         ContentEntry(id: "food-group-day-03", text: "A cupped hand of beans counts as legumes. That is separate from the vegetable fist."),
         ContentEntry(id: "food-group-day-04", text: "If lunch is already set, add greens to it instead of rebuilding the plate."),
-        ContentEntry(id: "food-group-day-05", text: "One palm of fish covers that group for the day."),
+        ContentEntry(id: "food-group-day-05", text: "One palm of fish, tofu, or tempeh covers healthy protein for the day. Beans already logged as legumes do not need to be logged again."),
         ContentEntry(id: "food-group-day-06", text: "A sugary drink, processed meat, or a fast-food meal is one limited serving. The points start yours."),
         ContentEntry(id: "food-group-day-07", text: "Logging part of the day still moves the score. You do not need every group."),
         ContentEntry(id: "food-group-day-08", text: "Whole grains: a cupped hand of cooked oats, brown rice, or barley, not white rice."),

@@ -72,13 +72,25 @@ enum FoodGroup: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
+    /// Illustration in the asset catalog. The stored case name stays `fish`.
+    var imageName: String {
+        switch self {
+        case .vegetables: return "FoodGroupVegetables"
+        case .fruit: return "FoodGroupFruit"
+        case .wholeGrains: return "FoodGroupWholeGrains"
+        case .legumesNuts: return "FoodGroupLegumes"
+        case .fish: return "FoodGroupProtein"
+        case .limited: return "FoodGroupLimited"
+        }
+    }
+
     var title: String {
         switch self {
         case .vegetables: return "Vegetables"
         case .fruit: return "Fruit"
         case .wholeGrains: return "Whole grains"
         case .legumesNuts: return "Legumes / nuts"
-        case .fish: return "Fish"
+        case .fish: return "Healthy protein (fish or plant protein)"
         case .limited: return "Foods to limit"
         }
     }
@@ -89,7 +101,7 @@ enum FoodGroup: String, CaseIterable, Identifiable, Sendable {
         case .fruit: return "1 fist, or a handful of berries"
         case .wholeGrains: return "1 cupped hand, cooked"
         case .legumesNuts: return "1 cupped hand of beans, or a small handful of nuts"
-        case .fish: return "1 palm"
+        case .fish: return "1 palm of fish, tofu, or tempeh"
         case .limited: return "1 glass, 1 processed meat, or 1 fast-food meal"
         }
     }
@@ -108,54 +120,110 @@ enum FoodGroup: String, CaseIterable, Identifiable, Sendable {
     /// Eat-more groups. Limit is scored in the other direction.
     var isEatMore: Bool { self != .limited }
 
-    var examples: [String] {
+    /// What the info sheet says. Scoring is unchanged; this is the explanation.
+    var guide: FoodGroupGuide {
         switch self {
         case .vegetables:
-            return [
-                "Dark leafy greens, broccoli, cauliflower, purple cabbage, and kale.",
-                "A fist of cooked vegetables, or a fist of raw leaves.",
-                "Beans belong under Legumes / nuts, not here.",
-                "Potatoes are not a vegetable serving."
-            ]
+            return FoodGroupGuide(
+                summary: "A pattern built around vegetables is one of the most consistent findings in heart and diabetes guidance. On a typical 2,000-calorie day, that is about 3 servings, from more than one color.",
+                serving: "One fist of cooked vegetables, or a fist of raw leaves.",
+                counts: [
+                    "Broccoli, cauliflower, cabbage, kale, and other cruciferous vegetables.",
+                    "Leafy greens, peppers, carrots, tomatoes, and other non-starchy vegetables.",
+                    "Fresh, frozen, or canned vegetables with no added sauce."
+                ],
+                doesNotCount: [
+                    "White potatoes and fries. Heart guidance does not treat them as the vegetables linked with lower risk.",
+                    "Beans, lentils, and peas. Log those under Legumes / nuts.",
+                    "Vegetable juice."
+                ],
+                note: Self.antioxidantNote
+            )
         case .fruit:
-            return [
-                "Berries, a fist of whole fruit, or a handful of berries.",
-                "Raisins and canned peaches in heavy syrup still count as a serving.",
-                "They do less of the work berries do.",
-                "Juice is not a fruit serving."
-            ]
+            return FoodGroupGuide(
+                summary: "Whole fruit, about 2 servings a day, is the form these guidelines prefer. The fiber and water are part of why it helps.",
+                serving: "One fist of whole fruit, or a handful of berries.",
+                counts: [
+                    "Berries, apples, pears, citrus, and other whole fruit.",
+                    "Frozen fruit with nothing added.",
+                    "Raisins and fruit canned in syrup still count. Berries and unsweetened whole fruit do more of the useful work."
+                ],
+                doesNotCount: [
+                    "Juice, including 100% juice. Guidelines treat juice as something to limit, not as a whole-fruit serving.",
+                    "Fruit drinks, sweetened smoothies, and fruit snacks."
+                ],
+                note: Self.antioxidantNote
+            )
         case .wholeGrains:
-            return [
-                "A cupped hand of cooked oats, brown rice, quinoa, or barley.",
-                "One slice of whole-grain bread.",
-                "Refined bread and white rice do not count."
-            ]
+            return FoodGroupGuide(
+                summary: "Choose grains that are still whole. A common goal is 2 to 4 servings a day. This log uses 3. Whole grains in place of refined grains improve cholesterol and blood sugar in trials.",
+                serving: "One cupped hand of cooked grain, or one slice of whole-grain bread.",
+                counts: [
+                    "Cooked oats, brown rice, quinoa, barley, or bulgur.",
+                    "One slice of bread whose first ingredient is a whole grain.",
+                    "Whole-grain pasta, in the same cupped-hand portion."
+                ],
+                doesNotCount: [
+                    "White rice, white bread, and other refined grains.",
+                    "A food labeled multigrain or wheat when the first ingredient is not a whole grain."
+                ]
+            )
         case .legumesNuts:
-            return [
-                "A cupped hand of beans or lentils.",
-                "A small handful of nuts.",
-                "Peanut butter: a small spoon, not a cup."
-            ]
+            return FoodGroupGuide(
+                summary: "Beans, lentils, nuts, and seeds are the plant proteins heart guidance puts first. They are their own group here, separate from the vegetable fist and from the healthy-protein palm.",
+                serving: "One cupped hand of cooked beans or lentils, or a small handful of nuts. Nut butter is about 2 tablespoons: a small spoon, not a cup.",
+                counts: [
+                    "Beans, lentils, split peas, and hummus.",
+                    "A small handful of unsalted or lightly salted nuts or seeds.",
+                    "About 2 tablespoons of peanut butter or another nut butter."
+                ],
+                doesNotCount: [
+                    "The same beans logged again under Healthy protein. Count each food once.",
+                    "A cup of nut butter, or nuts coated in candy or sugar."
+                ]
+            )
         case .fish:
-            return [
-                "A palm of fish.",
-                "Tuna, salmon, sardines, and other fish count.",
-                "Chicken and red meat do not count here."
-            ]
+            return FoodGroupGuide(
+                summary: "This serving is fish or a plant protein, not poultry or red meat. Heart guidance favors fish or other seafood about twice a week, cooked without frying, and plant proteins such as tofu and tempeh.",
+                serving: "One palm, about 3 ounces cooked. Fish, tofu, or tempeh.",
+                counts: [
+                    "Salmon, sardines, tuna, and other fish, baked, broiled, or grilled.",
+                    "Other seafood in the same palm-sized portion.",
+                    "Tofu, tempeh, or a palm of edamame when it is not already logged as a legume."
+                ],
+                doesNotCount: [
+                    "Chicken, eggs, and red meat. They are protein, but they are not this serving.",
+                    "Fried fish. The benefit seen with fish does not show up when it is fried.",
+                    "Beans, lentils, or nuts already logged under Legumes / nuts."
+                ]
+            )
         case .limited:
-            return [
-                "One glass or can of a sugary drink.",
-                "One serving of processed meat, such as bacon, sausage, or deli meat.",
-                "One fast-food or ultra-processed meal."
-            ]
+            return FoodGroupGuide(
+                summary: "These points start yours. Each serving you log gives a third of them back, and three servings remove the point. Heart guidance is most direct about sugary drinks, processed meat, and ultra-processed meals.",
+                serving: "One glass or can of a sugary drink, one processed meat, or one fast-food meal.",
+                counts: [
+                    "One glass or can of soda, sweet tea, or another sugary drink.",
+                    "One serving of bacon, sausage, a hot dog, or deli meat.",
+                    "One fast-food meal or other ultra-processed meal."
+                ],
+                doesNotCount: [
+                    "Fruit, nuts, beans, or a meal you cooked. Those belong in the groups above.",
+                    "Salt and alcohol are worth watching. They are not this counter."
+                ]
+            )
         }
     }
 
-    var showsAntioxidantNote: Bool {
-        self == .vegetables || self == .fruit
-    }
-
     static let antioxidantNote = "Dark leafy greens, cruciferous vegetables such as broccoli, cauliflower, purple cabbage, and kale, and berries are particularly high in antioxidants, which help our cells stay healthy."
+}
+
+struct FoodGroupGuide: Equatable, Sendable {
+    var summary: String
+    var serving: String
+    var counts: [String]
+    var doesNotCount: [String]
+    /// Shown only for vegetables and fruit.
+    var note: String? = nil
 }
 
 enum FoodGroupScore {
