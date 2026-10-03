@@ -51,7 +51,7 @@ Do **not** `git stash pop` afterward. `main` already has the Private Cloud Compu
 
 1. Select your iPhone as the run destination.
 2. Build & Run.
-3. When prompted, allow **read** access to Sleep, Fiber, and Exercise.
+3. When prompted, allow **read** access to Sleep, Fiber, Exercise Minutes, and Steps.
 4. **Today** syncs from Health on launch and when returning to the app.
 
 ## Watch companion (Series 10 / Ultra 4)
@@ -106,7 +106,8 @@ The iPhone app can still run if the Watch companion is waiting. A missing Watch 
 
 - **Sleep**: asleep samples whose **end** falls on the calendar day (wake-day attribution).
 - **Fiber**: `dietaryFiber` sum for the day.
-- **Exercise**: `appleExerciseTime` (Exercise Minutes).
+- **Exercise Minutes**: `appleExerciseTime`.
+- **Steps**: `stepCount`. Both are read on every sync. Settings chooses which one earns the 2 movement points: 30 Exercise Minutes, 8,000 Steps, or 10,000 Steps.
 
 Tune `HealthKitService.swift` if your sleep totals differ from the Health app.
 

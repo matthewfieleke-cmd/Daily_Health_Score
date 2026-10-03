@@ -15,6 +15,7 @@ struct TodayCoachCheckInCard: View {
     var onReply: () -> Void
     var onContinueReply: (UUID) -> Void
     var onIntake: () -> Void
+    var onShowChart: (TrendMetric) -> Void = { _ in }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -64,6 +65,7 @@ struct TodayCoachCheckInCard: View {
                 }
             }
 
+            chartDoor
             door(kind: kind, now: now)
         }
         .padding(14)
@@ -224,6 +226,46 @@ struct TodayCoachCheckInCard: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var chartDoor: some View {
+        if let card = coach.memory.cachedCheckIn,
+           card.dateKey == record?.date,
+           let metric = card.chartMetric,
+           let trend = CompletedTrendBuilder.build(
+            metric: metric,
+            records: appState.recordStore.records,
+            settings: UserSettings(
+                sleepGoal: record?.sleepGoal ?? .sevenHalf,
+                fiberGoal: record?.fiberGoal ?? .forty,
+                movementGoal: record?.movementGoal ?? .exerciseMinutes
+            )
+           ) {
+            Button {
+                onShowChart(metric)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chart.bar")
+                        .font(.caption)
+                    Text("See \(trend.title)")
+                        .font(.footnote.weight(.semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(AppTheme.primary)
+                .padding(.vertical, 9)
+                .padding(.horizontal, 11)
+                .frame(maxWidth: .infinity)
+                .background(AppTheme.leaf.opacity(0.14))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the finished-day chart. Close returns here.")
+        }
     }
 
     @ViewBuilder

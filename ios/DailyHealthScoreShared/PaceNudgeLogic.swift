@@ -99,6 +99,7 @@ enum PaceNudgeLogic {
         fiberGoal: Double,
         exerciseMinutes: Double,
         exerciseGoal: Double,
+        movementUnit: String = "min",
         now: Date = Date(),
         calendar: Calendar = .current,
         skipIfAlreadyPassed: Bool = true
@@ -121,7 +122,8 @@ enum PaceNudgeLogic {
                     fiberGrams: fiberGrams,
                     fiberGoal: fiberGoal,
                     exerciseMinutes: exerciseMinutes,
-                    exerciseGoal: exerciseGoal
+                    exerciseGoal: exerciseGoal,
+                    movementUnit: movementUnit
                 )
             )
         case (true, false):
@@ -136,7 +138,7 @@ enum PaceNudgeLogic {
                 slot: slot,
                 kind: .exercise,
                 title: "Movement",
-                body: exerciseCopy(slot: slot, minutes: exerciseMinutes, goal: exerciseGoal)
+                body: exerciseCopy(slot: slot, minutes: exerciseMinutes, goal: exerciseGoal, movementUnit: movementUnit)
             )
         case (false, false):
             return nil
@@ -149,6 +151,7 @@ enum PaceNudgeLogic {
         fiberGoal: Double,
         exerciseMinutes: Double,
         exerciseGoal: Double,
+        movementUnit: String = "min",
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> [PaceNudgeDecision] {
@@ -159,6 +162,7 @@ enum PaceNudgeLogic {
                 fiberGoal: fiberGoal,
                 exerciseMinutes: exerciseMinutes,
                 exerciseGoal: exerciseGoal,
+                movementUnit: movementUnit,
                 now: now,
                 calendar: calendar,
                 skipIfAlreadyPassed: true
@@ -183,20 +187,29 @@ enum PaceNudgeLogic {
         fiberGrams: Double,
         fiberGoal: Double,
         exerciseMinutes: Double,
-        exerciseGoal: Double
+        exerciseGoal: Double,
+        movementUnit: String
     ) -> String {
         let gramsText = Int(fiberGrams.rounded())
         let fiberGoalText = Int(fiberGoal.rounded())
-        let minutesText = Int(exerciseMinutes.rounded())
-        let exerciseGoalText = Int(exerciseGoal.rounded())
+        let movementText = Int(exerciseMinutes.rounded())
+        let movementGoalText = Int(exerciseGoal.rounded())
+        let movement = movementPhrase(value: movementText, goal: movementGoalText, unit: movementUnit)
         switch slot {
         case .afternoon:
-            return "Movement is at \(minutesText) of \(exerciseGoalText) min and fiber is \(gramsText) of \(fiberGoalText) g. A short walk plus beans, berries, or a salad — or log a meal on iPhone — will get both on the board."
+            return "Movement is at \(movement) and fiber is \(gramsText) of \(fiberGoalText) g. A short walk plus beans, berries, or a salad — or log a meal on iPhone — will get both on the board."
         case .lateAfternoon:
-            return "Still \(minutesText) of \(exerciseGoalText) min and \(gramsText) of \(fiberGoalText) g fiber. A brisk walk before dinner and a high-fiber dinner (or log it on iPhone) will catch this up."
+            return "Still \(movement) and \(gramsText) of \(fiberGoalText) g fiber. A brisk walk before dinner and a high-fiber dinner (or log it on iPhone) will catch this up."
         case .evening:
-            return "Still short: \(minutesText) of \(exerciseGoalText) min and \(gramsText) of \(fiberGoalText) g fiber. A short walk and logging tonight’s food on iPhone — or a cup of beans or fruit — is enough."
+            return "Still short: \(movement) and \(gramsText) of \(fiberGoalText) g fiber. A short walk and logging tonight’s food on iPhone — or a cup of beans or fruit — is enough."
         }
+    }
+
+    private static func movementPhrase(value: Int, goal: Int, unit: String) -> String {
+        if unit == "steps" {
+            return "\(value) of \(goal) steps"
+        }
+        return "\(value) of \(goal) min"
     }
 
     private static func fiberCopy(slot: PaceNudgeSlot, grams: Double, goal: Double) -> String {
@@ -212,17 +225,27 @@ enum PaceNudgeLogic {
         }
     }
 
-    private static func exerciseCopy(slot: PaceNudgeSlot, minutes: Double, goal: Double) -> String {
-        let minutesText = Int(minutes.rounded())
+    private static func exerciseCopy(slot: PaceNudgeSlot, minutes: Double, goal: Double, movementUnit: String) -> String {
+        let valueText = Int(minutes.rounded())
         let goalText = Int(goal.rounded())
         let remaining = max(Int((goal - minutes).rounded()), 0)
+        if movementUnit == "steps" {
+            switch slot {
+            case .afternoon:
+                return "Steps are still at \(valueText) of \(goalText). A walk this afternoon will move this toward the goal."
+            case .lateAfternoon:
+                return "\(remaining) steps left in the \(goalText)-step goal. A walk before dinner will close a lot of that."
+            case .evening:
+                return "Still short on steps (\(valueText) of \(goalText)). A short walk tonight is enough; this is not a workout."
+            }
+        }
         switch slot {
         case .afternoon:
-            return "Exercise is still at \(minutesText) of \(goalText) min. A 15-minute walk this afternoon is enough to get on the board."
+            return "Exercise Minutes are still at \(valueText) of \(goalText) min. A 15-minute walk this afternoon is enough to get on the board."
         case .lateAfternoon:
             return "\(remaining) min left in the \(goalText)-minute goal. That’s one brisk walk before dinner."
         case .evening:
-            return "Still short on movement (\(minutesText) of \(goalText) min). A short walk tonight is enough; this is not a workout."
+            return "Still short on Exercise Minutes (\(valueText) of \(goalText) min). A short walk tonight is enough; this is not a workout."
         }
     }
 }

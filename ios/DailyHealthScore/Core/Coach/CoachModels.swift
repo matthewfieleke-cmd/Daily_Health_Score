@@ -89,6 +89,8 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
     var fallbackReason: String? = nil
     /// JPEG file names in Coach photo storage. Empty for a text-only turn.
     var photoFileNames: [String] = []
+    /// Finished-day chart attached to this turn. Nil when the reply is words only.
+    var trendChart: TrendChartReference? = nil
 
     init(
         id: UUID = UUID(),
@@ -98,7 +100,8 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
         threadId: UUID? = nil,
         modelTier: CoachModelTier? = nil,
         fallbackReason: String? = nil,
-        photoFileNames: [String] = []
+        photoFileNames: [String] = [],
+        trendChart: TrendChartReference? = nil
     ) {
         self.id = id
         self.role = role
@@ -108,6 +111,7 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
         self.modelTier = modelTier
         self.fallbackReason = fallbackReason
         self.photoFileNames = photoFileNames
+        self.trendChart = trendChart
     }
 }
 
@@ -168,12 +172,15 @@ struct CoachSnapshot: Equatable, Sendable {
 
     /// Goals restated verbatim so "what is my goal?" can be answered exactly.
     var goalsBlock: String {
-        String(
-            format: "Sleep goal %.1f h/night · Fiber goal %.0f g/day · Exercise goal %.0f min/day",
+        let movementGoal = MovementGoal.formatCount(exercise.goal)
+        let movement = exercise.unit == "steps"
+            ? "\(exercise.name) goal \(movementGoal)/day"
+            : "\(exercise.name) goal \(movementGoal) min/day"
+        return String(
+            format: "Sleep goal %.1f h/night · Fiber goal %.0f g/day · ",
             sleep.goal,
-            fiber.goal,
-            exercise.goal
-        )
+            fiber.goal
+        ) + movement
     }
 
     /// Date and goals only. Used when the question is not about today's numbers,
@@ -201,7 +208,7 @@ struct CoachSnapshot: Equatable, Sendable {
         }
         lines.append("WEAKEST PILLAR RIGHT NOW: \(primaryFocus.rawValue)")
 
-        var weekly: [String] = ["7-DAY CONTEXT: \(weekDaysWithData) of 7 days have records"]
+        var weekly: [String] = ["COMPLETED DAYS: \(weekDaysWithData) finished days through yesterday. Today is excluded. Missing logs count as zero in these averages."]
         if let weekAvgScore {
             weekly.append(String(format: "avg score %.1f", weekAvgScore))
         }
@@ -212,9 +219,10 @@ struct CoachSnapshot: Equatable, Sendable {
             weekly.append(String(format: "avg fiber %.0f g", weekAvgFiber))
         }
         if let weekAvgExercise {
-            weekly.append(String(format: "avg exercise %.0f min", weekAvgExercise))
+            let noun = exercise.unit == "steps" ? "steps" : "exercise minutes"
+            weekly.append(String(format: "avg \(noun) %.0f", weekAvgExercise))
         }
-        weekly.append("fiber logged on \(fiberDaysLoggedInWeek) of 7 days")
+        weekly.append("fiber logged on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days")
         lines.append(weekly.joined(separator: "; "))
 
         if let hrvSummary {
@@ -246,7 +254,7 @@ struct CoachSnapshot: Equatable, Sendable {
         for metric in metrics {
             lines.append(Self.toolFactLine(metric))
         }
-        var weekly = ["\(weekDaysWithData) of 7 days have records"]
+        var weekly = ["\(weekDaysWithData) finished days through yesterday. Today is excluded. Missing logs count as zero"]
         if let weekAvgScore {
             weekly.append(String(format: "average score %.1f", weekAvgScore))
         }
@@ -257,10 +265,11 @@ struct CoachSnapshot: Equatable, Sendable {
             weekly.append(String(format: "average fiber %.0f g", weekAvgFiber))
         }
         if let weekAvgExercise {
-            weekly.append(String(format: "average exercise %.0f min", weekAvgExercise))
+            let noun = exercise.unit == "steps" ? "steps" : "exercise minutes"
+            weekly.append(String(format: "average \(noun) %.0f", weekAvgExercise))
         }
         lines.append("This week: \(weekly.joined(separator: "; ")).")
-        lines.append("Fiber logged on \(fiberDaysLoggedInWeek) of 7 days.")
+        lines.append("Fiber logged on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days.")
         if let hrvSummary {
             lines.append(Self.plainHRVFact(hrvSummary))
         }
@@ -268,8 +277,9 @@ struct CoachSnapshot: Equatable, Sendable {
     }
 
     private static func toolFactLine(_ metric: CoachMetricStatus) -> String {
-        let valueDecimals = metric.unit == "min" ? 0 : 1
-        let goalDecimals = metric.unit == "min" || metric.goal.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 1
+        let wholeNumber = metric.unit == "min" || metric.unit == "steps"
+        let valueDecimals = wholeNumber ? 0 : 1
+        let goalDecimals = wholeNumber || metric.goal.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 1
         let valueText = String(format: "%.\(valueDecimals)f", metric.value)
         let goalText = String(format: "%.\(goalDecimals)f", metric.goal)
         if metric.level == .missing {

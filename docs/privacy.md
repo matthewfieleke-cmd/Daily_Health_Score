@@ -12,7 +12,7 @@ This policy describes how **Daily Health Score** handles information when you us
 
 ## Summary
 
-- The app reads **sleep**, **dietary fiber**, and **exercise minutes** from **Apple Health** (with your permission).
+- The app reads **sleep**, **dietary fiber**, **exercise minutes**, and **steps** from **Apple Health** (with your permission).
 - Scores and history are stored **on your device**.
 - We do **not** require an account, and this version does **not** upload your health data to our servers.
 - You can **export** or **clear** local data in **Settings**.
@@ -29,7 +29,8 @@ With your explicit permission, the app reads:
 |-------------|---------|
 | Sleep Analysis (asleep) | Calculate sleep hours and sleep score for each day |
 | Dietary Fiber | Calculate fiber intake and fiber score for each day |
-| Apple Exercise Time | Calculate exercise minutes and exercise score for each day |
+| Apple Exercise Time | Calculate Exercise Minutes. These earn the movement points when that goal is selected |
+| Step Count | Calculate Steps. These earn the movement points when an 8,000 or 10,000 step goal is selected |
 | Heart Rate Variability | Show sleep HRV trends and on-device research views (not part of the daily point score) |
 
 The app uses HealthKit’s read-only access for these types. It does not write health data to Apple Health unless a future version clearly states otherwise in the app and this policy.

@@ -19,12 +19,11 @@ enum WatchBrand {
     }
 
     static func tint(for pillar: String) -> Color {
-        switch pillar.lowercased() {
-        case "sleep": return primary
-        case "fiber": return leaf
-        case "exercise": return exercise
-        default: return primary
-        }
+        let name = pillar.lowercased()
+        if name.hasPrefix("sleep") { return primary }
+        if name.hasPrefix("fiber") { return leaf }
+        if name.hasPrefix("exercise") || name.hasPrefix("steps") { return exercise }
+        return primary
     }
 }
 

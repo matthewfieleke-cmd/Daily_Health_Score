@@ -7,6 +7,10 @@ final class DailyRecordEntity {
     var sleepHours: Double
     var fiberGrams: Double
     var exerciseMinutes: Double
+    /// Nil on records saved before Steps was read. Treated as 0 until the next Health sync.
+    var stepCount: Double?
+    /// Nil on records saved before the movement goal existed. Those days were scored on Exercise Minutes.
+    var movementGoalRaw: String?
     var sleepHrvSDNNMs: Double?
     var sleepGoalRaw: Double
     var fiberGoalRaw: Int
@@ -28,6 +32,8 @@ final class DailyRecordEntity {
         sleepHours = record.sleepHours
         fiberGrams = record.fiberGrams
         exerciseMinutes = record.exerciseMinutes
+        stepCount = record.stepCount
+        movementGoalRaw = record.movementGoal.rawValue
         sleepHrvSDNNMs = record.sleepHrvSDNNMs
         sleepGoalRaw = record.sleepGoal.rawValue
         fiberGoalRaw = record.fiberGoal.rawValue
@@ -51,9 +57,11 @@ final class DailyRecordEntity {
             sleepHours: sleepHours,
             fiberGrams: fiberGrams,
             exerciseMinutes: exerciseMinutes,
+            stepCount: stepCount ?? 0,
             sleepHrvSDNNMs: sleepHrvSDNNMs,
             sleepGoal: SleepGoalHours(rawValue: sleepGoalRaw) ?? .sevenHalf,
             fiberGoal: FiberGoalGrams(rawValue: fiberGoalRaw) ?? .forty,
+            movementGoal: MovementGoal(rawValue: movementGoalRaw ?? "") ?? .exerciseMinutes,
             sleepScore: sleepScore,
             fiberScore: fiberScore,
             exerciseScore: exerciseScore,
@@ -73,6 +81,8 @@ final class DailyRecordEntity {
         sleepHours = record.sleepHours
         fiberGrams = record.fiberGrams
         exerciseMinutes = record.exerciseMinutes
+        stepCount = record.stepCount
+        movementGoalRaw = record.movementGoal.rawValue
         sleepHrvSDNNMs = record.sleepHrvSDNNMs
         sleepGoalRaw = record.sleepGoal.rawValue
         fiberGoalRaw = record.fiberGoal.rawValue

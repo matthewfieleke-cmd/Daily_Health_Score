@@ -11,10 +11,23 @@ enum CoachSnapshotBuilder {
         calendar: Calendar = .current,
         bodyTrend: BodyTrend? = nil
     ) -> CoachSnapshot {
-        let weekKeys = DateHelpers.rollingDateKeys(days: 7)
-        let weekStats = RollingStatsCalculator.compute(records: records, windowKeys: weekKeys)
-        let weekRecords = weekStats?.recordsInWindow ?? []
-        let fiberDays = weekRecords.filter { $0.fiberGrams > 0 }.count
+        let settings = UserSettings(
+            sleepGoal: today.sleepGoal,
+            fiberGoal: today.fiberGoal,
+            movementGoal: today.movementGoal
+        )
+        let filledWeek = CompletedTrendBuilder.filledRecords(
+            days: 7,
+            records: records,
+            settings: settings,
+            now: now,
+            calendar: calendar
+        )
+        let weekKeys = filledWeek.map(\.date)
+        let weekStats = weekKeys.isEmpty
+            ? nil
+            : RollingStatsCalculator.compute(records: filledWeek, windowKeys: weekKeys)
+        let fiberDays = records.filter { weekKeys.contains($0.date) && $0.fiberGrams > 0 }.count
 
         // HRV only enters the prompt once some nights exist; otherwise the coach
         // would discuss a metric the person is not collecting.
@@ -52,25 +65,35 @@ enum CoachSnapshotBuilder {
                 points: today.fiberScore,
                 maxPoints: 4
             ),
-            exercise: status(
-                name: "Exercise",
-                value: today.exerciseMinutes,
-                goal: Double(today.exerciseGoalMinutes),
-                unit: "min",
-                decimals: 0,
-                points: today.exerciseScore,
-                maxPoints: 2
-            ),
+            exercise: movementStatus(for: today),
             primaryFocus: today.primaryFocus,
             weekDaysWithData: weekStats?.daysWithData ?? 0,
             weekAvgScore: weekStats?.avgTotalScore,
-            weekAvgSleep: weekStats?.avgSleepHours,
-            weekAvgFiber: weekStats?.avgFiberGrams,
-            weekAvgExercise: weekStats?.avgExerciseMinutes,
+            weekAvgSleep: CompletedTrendBuilder.build(
+                metric: .sleep, records: records, settings: settings, now: now, calendar: calendar
+            )?.average,
+            weekAvgFiber: CompletedTrendBuilder.build(
+                metric: .fiber, records: records, settings: settings, now: now, calendar: calendar
+            )?.average,
+            weekAvgExercise: CompletedTrendBuilder.build(
+                metric: .movement, records: records, settings: settings, now: now, calendar: calendar
+            )?.average,
             fiberDaysLoggedInWeek: fiberDays,
             hrvSummary: hrvSummary,
             smartGoals: CoachGoalSummarizer.lines(for: goals),
             bodyLine: bodyTrend?.promptBlock
+        )
+    }
+
+    static func movementStatus(for record: DailyRecord) -> CoachMetricStatus {
+        status(
+            name: record.movementGoal.metricName,
+            value: record.movementValue,
+            goal: record.movementGoal.goalValue,
+            unit: record.movementGoal.unit,
+            decimals: 0,
+            points: record.exerciseScore,
+            maxPoints: 2
         )
     }
 

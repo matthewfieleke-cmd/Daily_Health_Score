@@ -1,6 +1,6 @@
 # Daily Health Score — Support
 
-**Daily Health Score** is a native iPhone app that reads sleep, dietary fiber, and exercise minutes from **Apple Health** and turns them into a daily score (up to 10 points), with Today and 7 / 30 / 90-day views.
+**Daily Health Score** is a native iPhone app that reads sleep, dietary fiber, exercise minutes, and steps from **Apple Health** and turns them into a daily score (up to 10 points), with Today and 7 / 30 / 90-day views.
 
 This page is for App Store users who need help with the app.
 
@@ -23,7 +23,8 @@ Please include your iOS version (e.g. iOS 27.x) and a short description of the i
 - **Apple Health** with permission to read:
   - Sleep Analysis (asleep)
   - Dietary Fiber
-  - Apple Exercise Time (exercise minutes)
+  - Apple Exercise Time (Exercise Minutes)
+  - Step Count (Steps)
   - Heart Rate Variability (for sleep HRV trends)
 
 The app does not require an account. Data is stored on your device. Coach chat memory can be cleared in **Settings → Clear coach chat & memory**.
@@ -46,7 +47,7 @@ If you previously denied access: **Settings → Privacy & Security → Health �
 Common causes:
 
 - Health permission was not granted for one or more types.
-- There is no Health data yet for today (e.g. sleep logged tomorrow morning, fiber not logged, no exercise minutes).
+- There is no Health data yet for today (e.g. sleep logged tomorrow morning, fiber not logged, no exercise minutes or steps).
 - You are viewing a day with no recorded metrics.
 
 Grant Health access and ensure Apple Health shows sleep, fiber, and exercise for that day.
@@ -61,9 +62,11 @@ Sleep is attributed to the calendar day when asleep samples **end** (wake-day at
 |----------|------------|---------------------|
 | Sleep    | 4          | 7.5 hours (7 / 7.5 / 8 selectable) |
 | Fiber    | 4          | 40 g (30 / 40 / 50) |
-| Exercise | 2          | 30 minutes          |
+| Movement | 2          | 30 Exercise Minutes, or 8,000 or 10,000 Steps |
 
 Your **primary focus** highlights the weakest area for the day. When all goals are met, the app emphasizes **maintain** guidance.
+
+The **7-Day**, **30-Day**, and **90-Day** screens use finished days only. Today stays on the Today tab until the day is over. A finished day with nothing logged counts as zero in those averages.
 
 ### Where is my data stored?
 

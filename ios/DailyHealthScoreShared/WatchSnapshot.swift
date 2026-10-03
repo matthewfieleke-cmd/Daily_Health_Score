@@ -27,7 +27,7 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
 
     /// One-line pillar summary for the rectangular Watch face slot.
     var rectangularPillarLine: String {
-        "S \(sleep.compactFaceValue)  F \(fiber.compactFaceValue)  E \(exercise.compactFaceValue)"
+        "S \(sleep.compactFaceValue)  F \(fiber.compactFaceValue)  \(movementFaceToken) \(exercise.compactFaceValue)"
     }
 
     var rectangularPillarLineSleepFiber: String {
@@ -35,11 +35,18 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
     }
 
     var rectangularPillarLineExercise: String {
-        "E \(exercise.compactFaceValue)"
+        "\(movementFaceToken) \(exercise.compactFaceValue)"
     }
 
     var rectangularAccessibilityLine: String {
-        "Sleep \(sleep.compactFaceValue), fiber \(fiber.compactFaceValue), exercise \(exercise.compactFaceValue)"
+        let movement = exercise.unit == "steps"
+            ? "steps \(exercise.compactFaceValue)"
+            : "exercise \(exercise.compactFaceValue)"
+        return "Sleep \(sleep.compactFaceValue), fiber \(fiber.compactFaceValue), \(movement)"
+    }
+
+    private var movementFaceToken: String {
+        exercise.unit == "steps" ? "Steps" : "E"
     }
 
     func isForDay(_ date: Date, calendar: Calendar = .current) -> Bool {
@@ -123,7 +130,8 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
             fiber.unit,
             String(exercise.value),
             exercise.unit,
-            String(Int(updatedAt.timeIntervalSince1970))
+            String(Int(updatedAt.timeIntervalSince1970)),
+            String(exercise.goal)
         ].joined(separator: "|")
     }
 
@@ -135,6 +143,9 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
               let exerciseValue = Double(parts[6]),
               let score = Double(parts[1]),
               let updated = TimeInterval(parts[8]) else { return nil }
+        let countsSteps = parts[7] == "steps"
+        let fallbackGoal = countsSteps ? 8_000.0 : 30.0
+        let exerciseGoal = parts.count >= 10 ? Double(parts[9]) ?? fallbackGoal : fallbackGoal
         return WatchSnapshot(
             dateKey: parts[0],
             totalScore: score,
@@ -145,7 +156,12 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
                 name: "Fiber", value: fiberValue, goal: 40, unit: parts[5], points: 0, maxPoints: 4
             ),
             exercise: WatchPillarSnapshot(
-                name: "Exercise", value: exerciseValue, goal: 30, unit: parts[7], points: 0, maxPoints: 2
+                name: countsSteps ? "Steps" : "Exercise Minutes",
+                value: exerciseValue,
+                goal: exerciseGoal,
+                unit: parts[7],
+                points: 0,
+                maxPoints: 2
             ),
             goals: [],
             updatedAt: Date(timeIntervalSince1970: updated),
@@ -163,7 +179,7 @@ struct WatchPillarSnapshot: Codable, Equatable, Sendable {
     var maxPoints: Double
 
     var formattedValue: String {
-        if unit == "min" {
+        if unit == "min" || unit == "steps" {
             return "\(Int(value.rounded()))"
         }
         let rounded = (value * 10).rounded() / 10
@@ -174,7 +190,7 @@ struct WatchPillarSnapshot: Codable, Equatable, Sendable {
     }
 
     var formattedGoal: String {
-        if unit == "min" || unit == "g" {
+        if unit == "min" || unit == "g" || unit == "steps" {
             return "\(Int(goal.rounded()))"
         }
         let rounded = (goal * 10).rounded() / 10
@@ -199,6 +215,8 @@ struct WatchPillarSnapshot: Codable, Equatable, Sendable {
             return "\(formattedValue)g"
         case "min", "m", "minutes":
             return "\(formattedValue)m"
+        case "steps":
+            return formattedValue
         default:
             return "\(formattedValue)\(unit)"
         }

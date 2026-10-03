@@ -1,6 +1,6 @@
 # Daily Health Score
 
-A native iOS app that scores each day on three pillars — **sleep**, **dietary fiber**, and **exercise minutes** — against adjustable goals (10 points max), with **Today** and **7 / 30 / 90-day** rolling views.
+A native iOS app that scores each day on three pillars — **sleep**, **dietary fiber**, and **movement** — against adjustable goals (10 points max), with **Today** and **7 / 30 / 90-day** rolling views. Movement is either Exercise Minutes or Steps. The rolling views use finished days only. Today stays on the Today screen until the day is over. A day with nothing logged counts as zero in those averages.
 
 All metrics are read directly from **Apple Health**. Data stays on the device (SwiftData, roughly 125-day retention). No server, no account, no Apple Shortcut required.
 
@@ -14,7 +14,7 @@ See **[ios/README.md](ios/README.md)** for Xcode setup and run instructions.
 |--------|------------|--------------|
 | Sleep | 4 | 7.5 hours (7, 7.5, or 8 selectable) |
 | Fiber | 4 | 40 g (30, 40, or 50) |
-| Exercise | 2 | 30 minutes (fixed) |
+| Movement | 2 | 30 Exercise Minutes, or 8,000 or 10,000 Steps |
 
 Primary focus = the weakest metric (ties resolve sleep → fiber → exercise). When every goal is met, the day enters **maintain** mode with maintenance-oriented suggestions.
 
@@ -22,7 +22,8 @@ Primary focus = the weakest metric (ties resolve sleep → fiber → exercise). 
 
 - **Sleep**: `HKCategoryTypeIdentifierSleepAnalysis` asleep samples whose end falls on the calendar day (wake-day attribution). Samples from multiple sources (e.g. Apple Watch + AutoSleep + iPhone Bedtime) are **merged as a union of time ranges** before summing, so the total matches Apple Health's "Time Asleep" display rather than double-counting overlapping samples.
 - **Fiber**: `HKQuantityTypeIdentifierDietaryFiber` cumulative sum for the day.
-- **Exercise**: `HKQuantityTypeIdentifierAppleExerciseTime` cumulative sum for the day.
+- **Exercise Minutes**: `HKQuantityTypeIdentifierAppleExerciseTime` cumulative sum for the day.
+- **Steps**: `HKQuantityTypeIdentifierStepCount` cumulative sum for the day. Both are always read. The selected movement goal is the one that earns the 2 points.
 
 The pure attribution logic lives in `ios/DailyHealthScore/Core/Health/SleepAttribution.swift` and is covered by `ios/DailyHealthScoreTests/SleepAttributionTests.swift`.
 

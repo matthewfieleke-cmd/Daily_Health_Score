@@ -1,15 +1,17 @@
 import Foundation
 
 enum ScoreCalculator {
-    static let exerciseGoalMinutes: Double = 30
+    static let exerciseGoalMinutes: Double = MovementGoal.exerciseMinutes.goalValue
     private static let tiePriority: [PrimaryFocus] = [.sleep, .fiber, .exercise]
 
     static func calculate(metrics: DailyMetrics, settings: UserSettings) -> ScoreComputation {
         let sleepGoal = settings.sleepGoal.rawValue
         let fiberGoal = Double(settings.fiberGoal.rawValue)
+        let movementGoal = settings.movementGoal.goalValue
+        let movementValue = settings.movementGoal.countsSteps ? metrics.stepCount : metrics.exerciseMinutes
         let sleepScore = min(metrics.sleepHours / sleepGoal, 1) * 4
         let fiberScore = min(metrics.fiberGrams / fiberGoal, 1) * 4
-        let exerciseScore = min(metrics.exerciseMinutes / exerciseGoalMinutes, 1) * 2
+        let exerciseScore = movementPoints(value: movementValue, goal: movementGoal)
         let totalScore = sleepScore + fiberScore + exerciseScore
         return ScoreComputation(
             sleepScore: sleepScore,
@@ -18,8 +20,14 @@ enum ScoreCalculator {
             totalScore: totalScore,
             sleepPercent: metrics.sleepHours / sleepGoal,
             fiberPercent: metrics.fiberGrams / fiberGoal,
-            exercisePercent: metrics.exerciseMinutes / exerciseGoalMinutes
+            exercisePercent: movementGoal > 0 ? movementValue / movementGoal : 0
         )
+    }
+
+    /// 2 points at the goal, linear underneath, nothing above 2.
+    static func movementPoints(value: Double, goal: Double) -> Double {
+        guard goal > 0 else { return 0 }
+        return min(max(value, 0) / goal, 1) * 2
     }
 
     static func determinePrimaryFocus(_ scores: ScoreComputation) -> PrimaryFocus {

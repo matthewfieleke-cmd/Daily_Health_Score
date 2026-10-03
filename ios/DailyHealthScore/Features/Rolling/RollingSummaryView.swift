@@ -7,11 +7,14 @@ struct RollingSummaryView: View {
     @State private var coachFocus: CoachFocusContext?
 
     private var stats: RollingStats? {
-        let keys = DateHelpers.rollingDateKeys(days: days)
-        return RollingStatsCalculator.compute(
+        let settings = appState.settingsStore.settings
+        let filled = CompletedTrendBuilder.filledRecords(
+            days: days,
             records: appState.recordStore.records,
-            windowKeys: keys
+            settings: settings
         )
+        guard !filled.isEmpty else { return nil }
+        return RollingStatsCalculator.compute(records: filled, windowKeys: filled.map(\.date))
     }
 
     var body: some View {
@@ -23,7 +26,7 @@ struct RollingSummaryView: View {
                         VStack(spacing: AppTheme.Layout.sectionSpacing) {
                             header(for: stats)
                             AskCoachButton {
-                                let keys = DateHelpers.rollingDateKeys(days: days)
+                                let keys = stats.recordsInWindow.map(\.date).sorted()
                                 coachFocus = CoachFocusContextBuilder.history(
                                     stats: stats,
                                     days: days,
@@ -84,9 +87,10 @@ struct RollingSummaryView: View {
                 }
                 .frame(width: 56, height: 56)
             }
-            Text("Based on \(stats.daysWithData) of the last \(stats.daysInWindow) days.")
+            Text(completedCaption(for: stats))
                 .font(.footnote)
                 .foregroundStyle(.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -107,9 +111,13 @@ struct RollingSummaryView: View {
             StatTile(label: "Fiber",    value: "\(ScoreCalculator.formatDisplayScore(stats.avgFiberGrams)) g",
                      sub: "\(ScoreCalculator.formatDisplayScore(stats.avgFiberScore)) / 4",
                      icon: "leaf.fill", tint: AppTheme.leaf),
-            StatTile(label: "Exercise", value: "\(Int(stats.avgExerciseMinutes.rounded())) min",
-                     sub: "\(ScoreCalculator.formatDisplayScore(stats.avgExerciseScore)) / 2",
-                     icon: "figure.run", tint: AppTheme.tint(for: PrimaryFocus.exercise)),
+            StatTile(
+                label: movementGoal(in: stats).metricName,
+                value: "\(MovementGoal.formatCount(stats.avgMovementValue)) \(movementGoal(in: stats).unit)",
+                sub: "\(ScoreCalculator.formatDisplayScore(stats.avgExerciseScore)) / 2",
+                icon: movementGoal(in: stats).systemImage,
+                tint: AppTheme.tint(for: PrimaryFocus.exercise)
+            ),
         ]
         return LazyVGrid(
             columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
@@ -117,24 +125,37 @@ struct RollingSummaryView: View {
         ) {
             ForEach(items) { tile in
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
+                    HStack(alignment: .top, spacing: 8) {
                         Image(systemName: tile.icon)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(tile.tint)
                             .frame(width: 22, height: 22)
                             .background(Circle().fill(tile.tint.opacity(0.15)))
-                        Text(tile.label.uppercased())
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .tracking(0.5)
+                        ZStack(alignment: .topLeading) {
+                            Text("EXERCISE\nMINUTES")
+                                .font(.caption2.weight(.semibold))
+                                .lineLimit(2)
+                                .hidden()
+                                .accessibilityHidden(true)
+                            Text(tile.label.uppercased())
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.75)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
                     Text(tile.value)
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                     Text(tile.sub)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                        .lineLimit(1)
                 }
                 .dhsCard()
             }
@@ -168,6 +189,8 @@ struct RollingSummaryView: View {
                             Text(metricLine(for: record))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
                         }
                         Spacer()
                         scoreChip(record.totalScore)
@@ -191,11 +214,39 @@ struct RollingSummaryView: View {
         }
     }
 
+    private func completedCaption(for stats: RollingStats) -> String {
+        let oldest = stats.recordsInWindow.last?.date
+        let newest = stats.recordsInWindow.first?.date
+        let range: String
+        if let oldest, let newest, oldest != newest {
+            range = "\(shortDay(oldest))–\(shortDay(newest)). "
+        } else if let newest {
+            range = "\(shortDay(newest)). "
+        } else {
+            range = ""
+        }
+        let progress = "Today is still in progress and is not included. "
+        if stats.daysInWindow < days {
+            let noun = stats.daysInWindow == 1 ? "day" : "days"
+            return "\(range)\(stats.daysInWindow) completed \(noun) so far. \(progress)Days with nothing logged count as zero."
+        }
+        return "\(range)\(progress)Days with nothing logged count as zero."
+    }
+
+    private func shortDay(_ key: String) -> String {
+        guard let date = DateHelpers.date(from: key) else { return key }
+        return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    private func movementGoal(in stats: RollingStats) -> MovementGoal {
+        stats.recordsInWindow.first?.movementGoal ?? .exerciseMinutes
+    }
+
     private func metricLine(for record: DailyRecord) -> String {
         let sleep = ScoreCalculator.formatDisplayScore(record.sleepHours)
         let fiber = ScoreCalculator.formatDisplayScore(record.fiberGrams)
-        let exercise = Int(record.exerciseMinutes.rounded())
-        return "Sleep \(sleep)h · Fiber \(fiber)g · Exercise \(exercise) min"
+        let movement = "\(MovementGoal.formatCount(record.movementValue)) \(record.movementGoal.unit)"
+        return "Sleep \(sleep)h · Fiber \(fiber)g · \(movement)"
     }
 
     private func scoreChip(_ score: Double) -> some View {
@@ -217,9 +268,9 @@ struct RollingSummaryView: View {
 
     private var emptyState: some View {
         ContentUnavailableView(
-            "No records",
+            "No completed days yet",
             systemImage: "calendar",
-            description: Text("No records in the last \(days) days yet.")
+            description: Text("Today is still in progress. Finished days will show here tomorrow.")
         )
     }
 }

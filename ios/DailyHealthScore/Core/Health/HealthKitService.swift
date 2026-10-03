@@ -6,8 +6,18 @@ struct HealthDayMetrics: Equatable {
     var sleepHours: Double
     var fiberGrams: Double
     var exerciseMinutes: Double
+    var stepCount: Double = 0
     var sleepHrvSDNNMs: Double? = nil
     var sleepHasUnsettledSession: Bool = false
+
+    var dailyMetrics: DailyMetrics {
+        DailyMetrics(
+            sleepHours: sleepHours,
+            fiberGrams: fiberGrams,
+            exerciseMinutes: exerciseMinutes,
+            stepCount: stepCount
+        )
+    }
 }
 
 enum HealthKitError: LocalizedError {
@@ -18,7 +28,7 @@ enum HealthKitError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unavailable: return "Health data is not available on this device."
-        case .unauthorized: return "Allow Daily Health Score to read Sleep, Fiber, Exercise, and Heart Rate Variability in Settings → Health."
+        case .unauthorized: return "Allow Daily Health Score to read Sleep, Fiber, Exercise Minutes, Steps, and Heart Rate Variability in Settings → Health."
         case .queryFailed(let detail): return detail
         }
     }
@@ -43,10 +53,11 @@ final class HealthKitService {
         guard let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis),
               let fiber = HKObjectType.quantityType(forIdentifier: .dietaryFiber),
               let exercise = HKObjectType.quantityType(forIdentifier: .appleExerciseTime),
+              let steps = HKObjectType.quantityType(forIdentifier: .stepCount),
               let hrv = HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else {
             throw HealthKitError.unavailable
         }
-        var readTypes: Set<HKObjectType> = [sleep, fiber, exercise, hrv, HKObjectType.workoutType()]
+        var readTypes: Set<HKObjectType> = [sleep, fiber, exercise, steps, hrv, HKObjectType.workoutType()]
         // Weight, height, BMI, age, and sex feed the Coach only; the score never
         // sees them. Age and sex keep the Coach from guessing either.
         for identifier in [HKQuantityTypeIdentifier.bodyMass, .height, .bodyMassIndex] {
@@ -62,25 +73,28 @@ final class HealthKitService {
         try await store.requestAuthorization(toShare: [], read: readTypes)
     }
 
-    /// Wakes the app when sleep, fiber, exercise minutes, or a workout land in
+    /// Wakes the app when sleep, fiber, exercise minutes, steps, or a workout land in
     /// Health so today can be rebuilt and pushed to the Watch without opening
     /// the iPhone UI.
     func startBackgroundDelivery() async {
         guard isAvailable else { return }
         guard let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis),
               let fiber = HKObjectType.quantityType(forIdentifier: .dietaryFiber),
-              let exercise = HKObjectType.quantityType(forIdentifier: .appleExerciseTime) else {
+              let exercise = HKObjectType.quantityType(forIdentifier: .appleExerciseTime),
+              let steps = HKObjectType.quantityType(forIdentifier: .stepCount) else {
             return
         }
         await enableDelivery(for: sleep, frequency: .immediate)
         await enableDelivery(for: fiber, frequency: .immediate)
         await enableDelivery(for: exercise, frequency: .immediate)
+        await enableDelivery(for: steps, frequency: .immediate)
         await enableDelivery(for: HKObjectType.workoutType(), frequency: .immediate)
         guard !didStartObservers else { return }
         didStartObservers = true
         observe(sleep, kind: .sleep)
         observe(fiber, kind: .fiber)
         observe(exercise, kind: .exerciseMinutes)
+        observe(steps, kind: .steps)
         observe(HKObjectType.workoutType(), kind: .workout)
     }
 
@@ -132,6 +146,9 @@ final class HealthKitService {
         async let exerciseMinutes = resilient {
             try await self.fetchExerciseMinutes(dayStart: dayStart, dayEnd: dayEnd)
         }
+        async let stepCount = resilient {
+            try await self.fetchStepCount(dayStart: dayStart, dayEnd: dayEnd)
+        }
 
         let bundle = await sleepBundle
         let sleepHrvSDNNMs = await resilientOptional {
@@ -149,6 +166,7 @@ final class HealthKitService {
             sleepHours: bundle?.hours ?? 0,
             fiberGrams: fiberGrams,
             exerciseMinutes: exerciseMinutes,
+            stepCount: stepCount,
             sleepHrvSDNNMs: sleepHrvSDNNMs,
             sleepHasUnsettledSession: bundle?.hasUnsettledSession ?? false
         )
@@ -177,6 +195,15 @@ final class HealthKitService {
         try await sumQuantity(
             identifier: .appleExerciseTime,
             unit: .minute(),
+            dayStart: dayStart,
+            dayEnd: dayEnd
+        )
+    }
+
+    private func fetchStepCount(dayStart: Date, dayEnd: Date) async throws -> Double {
+        try await sumQuantity(
+            identifier: .stepCount,
+            unit: .count(),
             dayStart: dayStart,
             dayEnd: dayEnd
         )

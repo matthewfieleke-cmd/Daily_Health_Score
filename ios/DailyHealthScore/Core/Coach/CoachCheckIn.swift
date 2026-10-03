@@ -30,6 +30,11 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
     var replyThreadID: UUID?
     var isFallback: Bool
     var generatedAt: Date
+    /// sleep, fiber, or movement when the card offers a chart. Empty otherwise.
+    var chartMetricRaw: String = ""
+    var chartEndDateKey: String = ""
+    var chartDayCount: Int = 0
+    var chartMovementGoalRaw: String = ""
 
     init(
         kind: CoachCheckInKind,
@@ -41,7 +46,11 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         thoughts: [String] = [],
         replyThreadID: UUID? = nil,
         isFallback: Bool = false,
-        generatedAt: Date = Date()
+        generatedAt: Date = Date(),
+        chartMetricRaw: String = "",
+        chartEndDateKey: String = "",
+        chartDayCount: Int = 0,
+        chartMovementGoalRaw: String = ""
     ) {
         self.kind = kind
         self.dateKey = dateKey
@@ -53,6 +62,24 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         self.replyThreadID = replyThreadID
         self.isFallback = isFallback
         self.generatedAt = generatedAt
+        self.chartMetricRaw = chartMetricRaw
+        self.chartEndDateKey = chartEndDateKey
+        self.chartDayCount = chartDayCount
+        self.chartMovementGoalRaw = chartMovementGoalRaw
+    }
+
+    var chartMetric: TrendMetric? {
+        TrendMetric(rawValue: chartMetricRaw)
+    }
+
+    var chartReference: TrendChartReference? {
+        guard let chartMetric, !chartEndDateKey.isEmpty, chartDayCount > 0 else { return nil }
+        return TrendChartReference(
+            metric: chartMetric,
+            endDateKey: chartEndDateKey,
+            dayCount: chartDayCount,
+            movementGoalRaw: chartMovementGoalRaw
+        )
     }
 
     /// What the card shows. Thoughts when the Coach wrote them; otherwise the
@@ -78,6 +105,7 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case kind, dateKey, healthLine, question, tomorrowLine, trendLine, thoughts, replyThreadID, isFallback, generatedAt
+        case chartMetricRaw, chartEndDateKey, chartDayCount, chartMovementGoalRaw
     }
 
     init(from decoder: Decoder) throws {
@@ -92,6 +120,10 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         replyThreadID = try container.decodeIfPresent(UUID.self, forKey: .replyThreadID)
         isFallback = try container.decodeIfPresent(Bool.self, forKey: .isFallback) ?? false
         generatedAt = try container.decodeIfPresent(Date.self, forKey: .generatedAt) ?? Date()
+        chartMetricRaw = try container.decodeIfPresent(String.self, forKey: .chartMetricRaw) ?? ""
+        chartEndDateKey = try container.decodeIfPresent(String.self, forKey: .chartEndDateKey) ?? ""
+        chartDayCount = try container.decodeIfPresent(Int.self, forKey: .chartDayCount) ?? 0
+        chartMovementGoalRaw = try container.decodeIfPresent(String.self, forKey: .chartMovementGoalRaw) ?? ""
     }
 
     func encode(to encoder: Encoder) throws {
@@ -106,6 +138,10 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         try container.encodeIfPresent(replyThreadID, forKey: .replyThreadID)
         try container.encode(isFallback, forKey: .isFallback)
         try container.encode(generatedAt, forKey: .generatedAt)
+        try container.encode(chartMetricRaw, forKey: .chartMetricRaw)
+        try container.encode(chartEndDateKey, forKey: .chartEndDateKey)
+        try container.encode(chartDayCount, forKey: .chartDayCount)
+        try container.encode(chartMovementGoalRaw, forKey: .chartMovementGoalRaw)
     }
 }
 
@@ -134,7 +170,7 @@ enum CoachCheckInLogic {
     /// Health has synced something for today. Before that, writing a card
     /// would describe an empty day as a bad one.
     static func hasData(_ record: DailyRecord) -> Bool {
-        record.sleepHours > 0 || record.fiberGrams > 0 || record.exerciseMinutes > 0
+        record.sleepHours > 0 || record.fiberGrams > 0 || record.movementValue > 0
     }
 
     /// The shape of the day as the card describes it: whether sleep is in, and
@@ -148,7 +184,7 @@ enum CoachCheckInLogic {
             ? "none"
             : (record.sleepHours >= record.sleepGoal.rawValue ? "met" : "below")
         let fiber = record.fiberGrams >= Double(record.fiberGoal.rawValue) ? "met" : "open"
-        let exercise = record.exerciseMinutes >= Double(record.exerciseGoalMinutes) ? "met" : "open"
+        let exercise = record.movementValue >= record.movementGoal.goalValue ? "met" : "open"
         return "sleep=\(sleep),fiber=\(fiber),exercise=\(exercise)"
     }
 

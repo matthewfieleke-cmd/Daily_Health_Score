@@ -40,7 +40,7 @@ enum WatchFaceScore {
                 maxPoints: 4
             ),
             exercise: WatchPillarSnapshot(
-                name: "Exercise",
+                name: "Exercise Minutes",
                 value: exerciseMinutes,
                 goal: exerciseGoalMinutes,
                 unit: "min",

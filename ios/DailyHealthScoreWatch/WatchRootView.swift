@@ -41,18 +41,24 @@ struct TodayBreakdownView: View {
     }
 
     private func pillarRow(_ pillar: WatchPillarSnapshot) -> some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(pillar.name)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(WatchBrand.tint(for: pillar.name))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                 Text("\(pillar.formattedValue) / \(pillar.formattedGoal) \(pillar.unit)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
             }
-            Spacer()
+            Spacer(minLength: 4)
             Text(pillar.formattedPoints)
                 .font(.caption.monospacedDigit())
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.vertical, 2)
     }

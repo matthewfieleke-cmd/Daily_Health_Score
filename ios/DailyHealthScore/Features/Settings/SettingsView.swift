@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var exportText = ""
     @State private var selectedSleepGoal: SleepGoalHours = .sevenHalf
     @State private var selectedFiberGoal: FiberGoalGrams = .forty
+    @State private var selectedMovementGoal: MovementGoal = .exerciseMinutes
 
     var body: some View {
         NavigationStack {
@@ -30,7 +31,11 @@ struct SettingsView: View {
                             Text("\(goal.rawValue) g").tag(goal)
                         }
                     }
-                    LabeledContent("Exercise goal", value: "30 min")
+                    Picker("Movement goal", selection: movementGoalBinding) {
+                        ForEach(MovementGoal.allCases) { goal in
+                            Text(goal.settingsLabel).tag(goal)
+                        }
+                    }
                 }
 
                 Section("Apple Health") {
@@ -138,10 +143,12 @@ struct SettingsView: View {
             .onAppear {
                 selectedSleepGoal = appState.settingsStore.settings.sleepGoal
                 selectedFiberGoal = appState.settingsStore.settings.fiberGoal
+                selectedMovementGoal = appState.settingsStore.settings.movementGoal
             }
             .onChange(of: appState.settingsStore.settings) { _, settings in
                 selectedSleepGoal = settings.sleepGoal
                 selectedFiberGoal = settings.fiberGoal
+                selectedMovementGoal = settings.movementGoal
             }
             .sheet(isPresented: $showEditDay) {
                 EditDayView()
@@ -207,6 +214,18 @@ struct SettingsView: View {
                 guard selectedSleepGoal != newGoal else { return }
                 selectedSleepGoal = newGoal
                 appState.settingsStore.settings.sleepGoal = newGoal
+                Task { await appState.refreshTodayAfterGoalChange() }
+            }
+        )
+    }
+
+    private var movementGoalBinding: Binding<MovementGoal> {
+        Binding(
+            get: { selectedMovementGoal },
+            set: { newGoal in
+                guard selectedMovementGoal != newGoal else { return }
+                selectedMovementGoal = newGoal
+                appState.settingsStore.settings.movementGoal = newGoal
                 Task { await appState.refreshTodayAfterGoalChange() }
             }
         )

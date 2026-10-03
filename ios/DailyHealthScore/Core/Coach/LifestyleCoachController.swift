@@ -162,6 +162,11 @@ final class LifestyleCoachController: ObservableObject {
                 now: now,
                 calendar: calendar
             )
+            let settings = UserSettings(
+                sleepGoal: record.sleepGoal,
+                fiberGoal: record.fiberGoal,
+                movementGoal: record.movementGoal
+            )
             let generated = try await model.generateCheckIn(
                 kind: kind,
                 snapshot: snapshot,
@@ -173,10 +178,35 @@ final class LifestyleCoachController: ObservableObject {
                     at: now,
                     calendar: calendar
                 ),
+                completedFacts: CompletedTrendBuilder.promptFacts(
+                    records: records,
+                    settings: settings,
+                    now: now,
+                    calendar: calendar
+                ),
                 now: now
             )
             guard checkInGenerationID == generationID else { return }
-            let fresh = carryingReplyLink(generated)
+            var fresh = carryingReplyLink(generated)
+            if let metric = TrendMetric.parse(fresh.chartMetricRaw),
+               let trendChart = CompletedTrendBuilder.build(
+                metric: metric,
+                records: records,
+                settings: settings,
+                now: now,
+                calendar: calendar
+               ) {
+                let reference = trendChart.reference(settings: settings)
+                fresh.chartMetricRaw = reference.metric.rawValue
+                fresh.chartEndDateKey = reference.endDateKey
+                fresh.chartDayCount = reference.dayCount
+                fresh.chartMovementGoalRaw = reference.movementGoalRaw
+            } else {
+                fresh.chartMetricRaw = ""
+                fresh.chartEndDateKey = ""
+                fresh.chartDayCount = 0
+                fresh.chartMovementGoalRaw = ""
+            }
             memory.saveCheckIn(fresh, key: key)
             checkIn = fresh
         } catch {
@@ -295,7 +325,14 @@ final class LifestyleCoachController: ObservableObject {
             let reason = result.tier == .onDevice
                 ? (result.fallbackReason ?? (CoachModelProvider.isServerQuotaExhausted ? "today’s Private Cloud Compute limit is reached" : nil))
                 : nil
-            memory.append(CoachChatTurn(role: .coach, text: result.message, modelTier: result.tier, fallbackReason: reason))
+            let coachTurn = CoachChatTurn(
+                role: .coach,
+                text: result.message,
+                modelTier: result.tier,
+                fallbackReason: reason,
+                trendChart: live.pendingTrend
+            )
+            memory.append(coachTurn)
             goalProposal = result.goalProposal
             pendingGoalCheckIn = result.goalCheckIn
             if result.proposalRejected {

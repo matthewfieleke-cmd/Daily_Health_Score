@@ -9,6 +9,8 @@ struct TodayView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var coachLaunch: CoachChatLaunch?
+    @State private var trendMetric: TrendMetric?
+    @State private var chatAfterChart: CoachChatLaunch?
     @State private var showIntake = false
     @State private var showSMARTGoals = false
     @State private var showHRVAnalysis = false
@@ -97,6 +99,22 @@ struct TodayView: View {
                 }
             }
         }
+        .sheet(item: $trendMetric, onDismiss: openChatAfterChart) { metric in
+            NavigationStack {
+                TrendChartScreen(
+                    records: appState.recordStore.records,
+                    settings: appState.settingsStore.settings,
+                    metric: metric,
+                    showsTalk: true,
+                    onTalk: {
+                        chatAfterChart = appState.coach.memory.cachedCheckIn?.replyThreadID.map {
+                            CoachChatLaunch.thread($0)
+                        } ?? .replyToCheckIn
+                        trendMetric = nil
+                    }
+                )
+            }
+        }
     }
 
     // MARK: - Body content
@@ -118,7 +136,8 @@ struct TodayView: View {
                     record: record,
                     onReply: { coachLaunch = .replyToCheckIn },
                     onContinueReply: { coachLaunch = .thread($0) },
-                    onIntake: { showIntake = true }
+                    onIntake: { showIntake = true },
+                    onShowChart: { trendMetric = $0 }
                 )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     // Remaining height is the grouped screen, not empty card chrome.
@@ -204,7 +223,7 @@ struct TodayView: View {
     // MARK: - Three compact metric cards in a single row
 
     private func metricRow(for record: DailyRecord) -> some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             CompactMetricCard(
                 title: "Sleep",
                 metricValue: record.sleepHours,
@@ -238,15 +257,15 @@ struct TodayView: View {
                 Button("Ask Coach about this") { askCoach(about: .fiber, record: record) }
             }
             CompactMetricCard(
-                title: "Exercise",
-                metricValue: record.exerciseMinutes,
-                unitSuffix: "min",
+                title: record.movementGoal.metricName,
+                metricValue: record.movementValue,
+                unitSuffix: record.movementGoal.unit,
                 usesIntegerDisplay: true,
                 scoreValue: record.exerciseScore,
                 maxScore: 2,
-                goalValue: Double(record.exerciseGoalMinutes),
+                goalValue: record.movementGoal.goalValue,
                 animationProgress: dialUpProgress,
-                systemImage: "figure.run",
+                systemImage: record.movementGoal.systemImage,
                 tint: AppTheme.tint(for: PrimaryFocus.exercise)
             )
             .onTapGesture { askCoach(about: .exercise, record: record) }
@@ -254,6 +273,13 @@ struct TodayView: View {
                 Button("Ask Coach about this") { askCoach(about: .exercise, record: record) }
             }
         }
+    }
+
+    private func openChatAfterChart() {
+        guard let chatAfterChart else { return }
+        let launch = chatAfterChart
+        self.chatAfterChart = nil
+        coachLaunch = launch
     }
 
     /// A metric tap starts a new chat that opens on that metric's numbers.
@@ -362,7 +388,7 @@ private struct CompactMetricCard: View {
 
     private var metricDisplayText: String {
         if usesIntegerDisplay {
-            return "\(Int(displayedMetric.rounded()))"
+            return MovementGoal.formatCount(displayedMetric)
         }
         return ScoreCalculator.formatDisplayScore(displayedMetric)
     }
@@ -373,28 +399,44 @@ private struct CompactMetricCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 5) {
+            HStack(alignment: .top, spacing: 5) {
                 Image(systemName: systemImage)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(tint)
                     .frame(width: 20, height: 20)
                     .background(Circle().fill(tint.opacity(0.15)))
-                Text(title)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                // Two lines are reserved on every card. "Steps" is one line and
+                // "Exercise Minutes" is two; the row must not change height.
+                ZStack(alignment: .topLeading) {
+                    Text("Exercise\nMinutes")
+                        .font(.caption2.weight(.semibold))
+                        .lineLimit(2)
+                        .hidden()
+                        .accessibilityHidden(true)
+                    Text(title)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(metricDisplayText)
                     .font(.headline.weight(.bold))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
                     .contentTransition(.numericText(value: displayedMetric))
                 Text(unitSuffix)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -410,6 +452,8 @@ private struct CompactMetricCard: View {
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .contentTransition(.numericText(value: displayedScore))
                 Spacer(minLength: 0)
                 if atOrOverGoal, progress >= 1 {
