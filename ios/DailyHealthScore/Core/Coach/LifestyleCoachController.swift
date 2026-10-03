@@ -95,6 +95,7 @@ final class LifestyleCoachController: ObservableObject {
         activities: [SMARTGoalActivity] = [],
         hrvSensitivity: HRVSensitivity = .balanced,
         bodyTrend: BodyTrend? = nil,
+        nutritionMode: NutritionMode = .fiber,
         force: Bool = false,
         now: Date = Date(),
         calendar: Calendar = .current
@@ -153,19 +154,22 @@ final class LifestyleCoachController: ObservableObject {
                 phase: DayPhase.current(from: now, calendar: calendar),
                 now: now,
                 calendar: calendar,
-                bodyTrend: bodyTrend
+                bodyTrend: bodyTrend,
+                nutritionMode: nutritionMode
             )
             let trend = CoachTrendDigest.build(
                 records: records,
                 goals: goals,
                 activities: activities,
+                nutritionMode: nutritionMode,
                 now: now,
                 calendar: calendar
             )
             let settings = UserSettings(
                 sleepGoal: record.sleepGoal,
-                fiberGoal: record.fiberGoal,
-                movementGoal: record.movementGoal
+                fiberGoal: .forty,
+                movementGoal: record.movementGoal,
+                nutritionMode: nutritionMode
             )
             let generated = try await model.generateCheckIn(
                 kind: kind,
@@ -201,11 +205,13 @@ final class LifestyleCoachController: ObservableObject {
                 fresh.chartEndDateKey = reference.endDateKey
                 fresh.chartDayCount = reference.dayCount
                 fresh.chartMovementGoalRaw = reference.movementGoalRaw
+                fresh.chartNutritionModeRaw = reference.nutritionModeRaw
             } else {
                 fresh.chartMetricRaw = ""
                 fresh.chartEndDateKey = ""
                 fresh.chartDayCount = 0
                 fresh.chartMovementGoalRaw = ""
+                fresh.chartNutritionModeRaw = ""
             }
             memory.saveCheckIn(fresh, key: key)
             checkIn = fresh
@@ -242,7 +248,8 @@ final class LifestyleCoachController: ObservableObject {
         planningGoal: Bool = false,
         focus: CoachFocusContext? = nil,
         activities: [SMARTGoalActivity] = [],
-        bodyTrend: BodyTrend? = nil
+        bodyTrend: BodyTrend? = nil,
+        nutritionMode: NutritionMode = .fiber
     ) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !photoFileNames.isEmpty else { return }
@@ -299,11 +306,13 @@ final class LifestyleCoachController: ObservableObject {
                     records: records,
                     goals: goals,
                     hrvSensitivity: hrvSensitivity,
-                    bodyTrend: bodyTrend
+                    bodyTrend: bodyTrend,
+                    nutritionMode: nutritionMode
                 )
             }
             live.records = records
             live.todayKey = todayKey
+            live.nutritionMode = nutritionMode
             live.goals = goals
             live.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
             live.memoryItems = memory.effectiveMemories
@@ -490,7 +499,8 @@ final class LifestyleCoachController: ObservableObject {
         goals: [SMARTGoal],
         activities: [SMARTGoalActivity],
         hrvSensitivity: HRVSensitivity,
-        bodyTrend: BodyTrend?
+        bodyTrend: BodyTrend?,
+        nutritionMode: NutritionMode = .fiber
     ) async -> CoachEvalResult {
         refreshAvailability()
         let started = Date()
@@ -537,11 +547,13 @@ final class LifestyleCoachController: ObservableObject {
                         records: records,
                         goals: goals,
                         hrvSensitivity: hrvSensitivity,
-                        bodyTrend: bodyTrend
+                        bodyTrend: bodyTrend,
+                        nutritionMode: nutritionMode
                     )
                 }
                 evalLive.records = records
                 evalLive.todayKey = todayRecord?.date ?? DateHelpers.localDateKey()
+                evalLive.nutritionMode = nutritionMode
                 evalLive.goals = goals
                 evalLive.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
                 evalLive.memoryItems = memory.effectiveMemories

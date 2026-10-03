@@ -11,6 +11,13 @@ final class DailyRecordEntity {
     var stepCount: Double?
     /// Nil on records saved before the movement goal existed. Those days were scored on Exercise Minutes.
     var movementGoalRaw: String?
+    var foodGroupsLogged: Bool = false
+    var foodGroupVegetables: Int = 0
+    var foodGroupFruit: Int = 0
+    var foodGroupGrains: Int = 0
+    var foodGroupLegumes: Int = 0
+    var foodGroupFish: Int = 0
+    var foodGroupLimited: Int = 0
     var sleepHrvSDNNMs: Double?
     var sleepGoalRaw: Double
     var fiberGoalRaw: Int
@@ -49,6 +56,7 @@ final class DailyRecordEntity {
         suggestionPhaseRaw = record.suggestionPhase?.rawValue
         createdAt = record.createdAt
         updatedAt = record.updatedAt
+        applyFoodGroups(record.foodGroups)
     }
 
     func toDailyRecord() -> DailyRecord {
@@ -62,6 +70,7 @@ final class DailyRecordEntity {
             sleepGoal: SleepGoalHours(rawValue: sleepGoalRaw) ?? .sevenHalf,
             fiberGoal: FiberGoalGrams(rawValue: fiberGoalRaw) ?? .forty,
             movementGoal: MovementGoal(rawValue: movementGoalRaw ?? "") ?? .exerciseMinutes,
+            foodGroups: foodGroupServings,
             sleepScore: sleepScore,
             fiberScore: fiberScore,
             exerciseScore: exerciseScore,
@@ -83,6 +92,7 @@ final class DailyRecordEntity {
         exerciseMinutes = record.exerciseMinutes
         stepCount = record.stepCount
         movementGoalRaw = record.movementGoal.rawValue
+        applyFoodGroups(record.foodGroups)
         sleepHrvSDNNMs = record.sleepHrvSDNNMs
         sleepGoalRaw = record.sleepGoal.rawValue
         fiberGoalRaw = record.fiberGoal.rawValue
@@ -97,5 +107,27 @@ final class DailyRecordEntity {
         suggestion = record.suggestion
         suggestionPhaseRaw = record.suggestionPhase?.rawValue
         updatedAt = record.updatedAt
+    }
+
+    private var foodGroupServings: FoodGroupServings {
+        FoodGroupServings(
+            vegetables: foodGroupVegetables,
+            fruit: foodGroupFruit,
+            wholeGrains: foodGroupGrains,
+            legumesNuts: foodGroupLegumes,
+            fish: foodGroupFish,
+            limited: foodGroupLimited,
+            isLogged: foodGroupsLogged
+        )
+    }
+
+    private func applyFoodGroups(_ servings: FoodGroupServings) {
+        foodGroupsLogged = servings.isLogged
+        foodGroupVegetables = servings.vegetables
+        foodGroupFruit = servings.fruit
+        foodGroupGrains = servings.wholeGrains
+        foodGroupLegumes = servings.legumesNuts
+        foodGroupFish = servings.fish
+        foodGroupLimited = servings.limited
     }
 }

@@ -33,7 +33,12 @@ enum CoachDayRange {
         return Window(startKey: Swift.max(first, earliest), endKey: Swift.min(last, todayKey))
     }
 
-    static func payload(records: [DailyRecord], window: Window, todayKey: String) -> String {
+    static func payload(
+        records: [DailyRecord],
+        window: Window,
+        todayKey: String,
+        nutritionMode: NutritionMode = .fiber
+    ) -> String {
         let keys = dateKeys(in: window)
         let byDate = Dictionary(records.map { ($0.date, $0) }, uniquingKeysWith: { _, latest in latest })
         let found = keys.compactMap { byDate[$0] }
@@ -43,20 +48,20 @@ enum CoachDayRange {
             guard let record = found.first else {
                 return "\(label(window.startKey)), \(year(window.startKey)): no record saved. Unlogged, not zero. \(today)"
             }
-            return "\(dayLine(record)) \(today)"
+            return "\(dayLine(record, nutritionMode: nutritionMode)) \(today)"
         }
 
         var lines = ["\(monthDay(window.startKey)) to \(monthDay(window.endKey)), \(year(window.endKey)) — \(keys.count) days, \(found.count) with data."]
-        if let averages = averageLine(found, label: "Average across days with data") {
+        if let averages = averageLine(found, label: "Average across days with data", nutritionMode: nutritionMode) {
             lines.append(averages)
         }
         if found.isEmpty {
             lines.append("No days in this window have a record. Unlogged, not zero.")
         } else if keys.count <= maxDetailDays {
-            lines.append(contentsOf: found.map(dayLine))
+            lines.append(contentsOf: found.map { dayLine($0, nutritionMode: nutritionMode) })
             lines.append(contentsOf: missingNote(keys: keys, byDate: byDate))
         } else {
-            lines.append(contentsOf: weekLines(keys: keys, byDate: byDate))
+            lines.append(contentsOf: weekLines(keys: keys, byDate: byDate, nutritionMode: nutritionMode))
         }
         lines.append(today)
         return lines.joined(separator: "\n")
@@ -91,11 +96,21 @@ enum CoachDayRange {
         return "exercise minutes \(shown)"
     }
 
-    private static func dayLine(_ record: DailyRecord) -> String {
+    private static func nutritionFact(_ record: DailyRecord, mode: NutritionMode) -> String {
+        if mode == .foodGroups {
+            let score = ScoreCalculator.formatDisplayScore(FoodGroupScore.points(record.foodGroups))
+            let state = record.foodGroups.isLogged ? "logged" : "not logged"
+            let grams = number(record.fiberGrams, decimals: 1)
+            return "food groups \(score) of 4 (\(state)); Apple Health fiber \(grams) g"
+        }
+        return "fiber \(number(record.fiberGrams, decimals: 1)) g of \(Int(UserSettings.fiberGoalGrams))"
+    }
+
+    private static func dayLine(_ record: DailyRecord, nutritionMode: NutritionMode) -> String {
         var parts = [
             "\(label(record.date)): score \(ScoreCalculator.formatDisplayScore(record.totalScore)) of 10",
             "sleep \(number(record.sleepHours, decimals: 1)) h of \(number(record.sleepGoal.rawValue, decimals: 1))",
-            "fiber \(number(record.fiberGrams, decimals: 1)) g of \(record.fiberGoal.rawValue)",
+            nutritionFact(record, mode: nutritionMode),
             movementFact(record)
         ]
         if let hrv = record.sleepHrvSDNNMs {
@@ -104,15 +119,22 @@ enum CoachDayRange {
         return parts.joined(separator: "; ") + "."
     }
 
-    private static func averageLine(_ records: [DailyRecord], label: String) -> String? {
+    private static func averageLine(_ records: [DailyRecord], label: String, nutritionMode: NutritionMode) -> String? {
         guard !records.isEmpty else { return nil }
         let count = Double(records.count)
         let score = records.map(\.totalScore).reduce(0, +) / count
         let sleep = records.map(\.sleepHours).reduce(0, +) / count
-        let fiber = records.map(\.fiberGrams).reduce(0, +) / count
         let movement = records.map(\.movementValue).reduce(0, +) / count
         let movementText = movementAverage(movement, goal: records.first?.movementGoal ?? .exerciseMinutes)
-        return "\(label): score \(ScoreCalculator.formatDisplayScore(score)) of 10, sleep \(number(sleep, decimals: 1)) h, fiber \(number(fiber, decimals: 1)) g, \(movementText)."
+        let nutrition: String
+        if nutritionMode == .foodGroups {
+            let points = records.map { FoodGroupScore.points($0.foodGroups) }.reduce(0, +) / count
+            nutrition = "food groups \(ScoreCalculator.formatDisplayScore(points)) of 4"
+        } else {
+            let fiber = records.map(\.fiberGrams).reduce(0, +) / count
+            nutrition = "fiber \(number(fiber, decimals: 1)) g"
+        }
+        return "\(label): score \(ScoreCalculator.formatDisplayScore(score)) of 10, sleep \(number(sleep, decimals: 1)) h, \(nutrition), \(movementText)."
     }
 
     private static func missingNote(keys: [String], byDate: [String: DailyRecord]) -> [String] {
@@ -123,13 +145,13 @@ enum CoachDayRange {
         return ["No record for \(named)\(rest). Unlogged, not zero."]
     }
 
-    private static func weekLines(keys: [String], byDate: [String: DailyRecord]) -> [String] {
+    private static func weekLines(keys: [String], byDate: [String: DailyRecord], nutritionMode: NutritionMode) -> [String] {
         stride(from: 0, to: keys.count, by: 7).compactMap { offset in
             let chunk = Array(keys[offset ..< Swift.min(offset + 7, keys.count)])
             guard let first = chunk.first, let last = chunk.last else { return nil }
             let found = chunk.compactMap { byDate[$0] }
             let span = "\(monthDay(first)) to \(monthDay(last))"
-            guard let averages = averageLine(found, label: "\(span), \(found.count) of \(chunk.count) days with data") else {
+            guard let averages = averageLine(found, label: "\(span), \(found.count) of \(chunk.count) days with data", nutritionMode: nutritionMode) else {
                 return "\(span): no days with data."
             }
             return averages

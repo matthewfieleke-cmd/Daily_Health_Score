@@ -188,6 +188,40 @@ final class PaceNudgeLogicTests: XCTestCase {
         XCTAssertTrue(body.contains("8"))
     }
 
+    func test_foodGroupNudgeUsesTheScoreAndDoesNotSayGrams() {
+        let unlogged = PaceNudgeLogic.decision(
+            for: .afternoon,
+            fiberGrams: 0,
+            fiberGoal: 4,
+            exerciseMinutes: 30,
+            exerciseGoal: 30,
+            fiberUnit: "pts",
+            now: date(hour: 14),
+            calendar: calendar,
+            skipIfAlreadyPassed: false
+        )
+        XCTAssertEqual(unlogged?.kind, .fiber)
+        XCTAssertEqual(unlogged?.title, "Food groups")
+        XCTAssertTrue(unlogged?.body.contains("not logged") ?? false)
+        XCTAssertFalse(unlogged?.body.contains(" g") ?? true)
+        XCTAssertFalse(unlogged?.body.lowercased().contains("gram") ?? true)
+
+        let partial = PaceNudgeLogic.decision(
+            for: .evening,
+            fiberGrams: 1,
+            fiberGoal: 4,
+            exerciseMinutes: 30,
+            exerciseGoal: 30,
+            fiberUnit: "pts",
+            now: date(hour: 19),
+            calendar: calendar,
+            skipIfAlreadyPassed: false
+        )
+        XCTAssertEqual(partial?.kind, .fiber)
+        XCTAssertTrue(partial?.body.contains("1.0 of 4") ?? false)
+        XCTAssertFalse(partial?.body.lowercased().contains("gram") ?? true)
+    }
+
     func test_quietHoursAfterEveningBound() {
         XCTAssertTrue(PaceNudgeLogic.isInQuietHours(now: date(hour: 20, minute: 30), calendar: calendar))
         XCTAssertFalse(PaceNudgeLogic.isInQuietHours(now: date(hour: 19, minute: 30), calendar: calendar))
@@ -243,6 +277,46 @@ final class WatchSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.sleep.compactFaceValue, "5.4h")
         XCTAssertEqual(snapshot.fiber.compactFaceValue, "12g")
         XCTAssertEqual(snapshot.exercise.compactFaceValue, "8m")
+    }
+
+    func test_foodGroupFaceDoesNotLookLikeGrams() {
+        let snapshot = WatchSnapshot(
+            dateKey: "2026-08-15",
+            totalScore: 5,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 7, goal: 7.5, unit: "hr", points: 3.7, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Food groups", value: 1.7, goal: 4, unit: "pts", points: 1.7, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Steps", value: 4000, goal: 8000, unit: "steps", points: 1, maxPoints: 2),
+            goals: [],
+            updatedAt: Date(),
+            paceNudgesEnabled: true
+        )
+        XCTAssertEqual(snapshot.fiber.compactFaceValue, "1.7")
+        XCTAssertEqual(snapshot.rectangularPillarLineSleepFiber, "S 7h  Food 1.7")
+        XCTAssertTrue(snapshot.rectangularAccessibilityLine.contains("food groups 1.7"))
+        XCTAssertFalse(snapshot.rectangularPillarLine.contains("F 1.7"))
+
+        let rebuilt = WatchSnapshot.fromCompactFaceRecord(snapshot.compactFaceRecord)
+        XCTAssertEqual(rebuilt?.fiber.unit, "pts")
+        XCTAssertEqual(rebuilt?.fiber.name, "Food groups")
+        XCTAssertEqual(rebuilt?.fiber.goal, 4)
+    }
+
+    func test_foodGroupModeBlocksTheHealthFiberFallback() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let snapshot = WatchSnapshot(
+            dateKey: "2026-08-15",
+            totalScore: 1,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 0, goal: 7.5, unit: "hr", points: 0, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Food groups", value: 0, goal: 4, unit: "pts", points: 0, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Exercise Minutes", value: 0, goal: 30, unit: "min", points: 0, maxPoints: 2),
+            goals: [],
+            updatedAt: Date(),
+            paceNudgesEnabled: true
+        )
+        XCTAssertTrue(WatchSnapshotStore.save(snapshot, defaults: nil, containerURL: dir))
+        XCTAssertFalse(WatchNutritionModeStore.allowsHealthFiberFallback(defaults: nil, containerURL: dir))
     }
 
     func test_fillNextEmptyAdvancesTheLowestOpenCircle() {

@@ -176,11 +176,10 @@ struct CoachSnapshot: Equatable, Sendable {
         let movement = exercise.unit == "steps"
             ? "\(exercise.name) goal \(movementGoal)/day"
             : "\(exercise.name) goal \(movementGoal) min/day"
-        return String(
-            format: "Sleep goal %.1f h/night · Fiber goal %.0f g/day · ",
-            sleep.goal,
-            fiber.goal
-        ) + movement
+        let nutrition = fiber.unit == "pts"
+            ? "Food groups goal 4 points/day"
+            : String(format: "Fiber goal %.0f g/day", fiber.goal)
+        return String(format: "Sleep goal %.1f h/night · ", sleep.goal) + nutrition + " · " + movement
     }
 
     /// Date and goals only. Used when the question is not about today's numbers,
@@ -206,7 +205,8 @@ struct CoachSnapshot: Equatable, Sendable {
         for metric in metrics {
             lines.append("- \(metric.sentence)")
         }
-        lines.append("WEAKEST PILLAR RIGHT NOW: \(primaryFocus.rawValue)")
+        let weakest = primaryFocus == .fiber && fiber.unit == "pts" ? "food groups" : primaryFocus.rawValue
+        lines.append("WEAKEST PILLAR RIGHT NOW: \(weakest)")
 
         var weekly: [String] = ["COMPLETED DAYS: \(weekDaysWithData) finished days through yesterday. Today is excluded. Missing logs count as zero in these averages."]
         if let weekAvgScore {
@@ -216,13 +216,18 @@ struct CoachSnapshot: Equatable, Sendable {
             weekly.append(String(format: "avg sleep %.1f h", weekAvgSleep))
         }
         if let weekAvgFiber {
-            weekly.append(String(format: "avg fiber %.0f g", weekAvgFiber))
+            if fiber.unit == "pts" {
+                weekly.append(String(format: "avg food-group score %.1f of 4", weekAvgFiber))
+            } else {
+                weekly.append(String(format: "avg fiber %.0f g", weekAvgFiber))
+            }
         }
         if let weekAvgExercise {
             let noun = exercise.unit == "steps" ? "steps" : "exercise minutes"
             weekly.append(String(format: "avg \(noun) %.0f", weekAvgExercise))
         }
-        weekly.append("fiber logged on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days")
+        let loggedName = fiber.unit == "pts" ? "food groups logged" : "fiber logged"
+        weekly.append("\(loggedName) on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days")
         lines.append(weekly.joined(separator: "; "))
 
         if let hrvSummary {
@@ -262,14 +267,23 @@ struct CoachSnapshot: Equatable, Sendable {
             weekly.append(String(format: "average sleep %.1f h", weekAvgSleep))
         }
         if let weekAvgFiber {
-            weekly.append(String(format: "average fiber %.0f g", weekAvgFiber))
+            if fiber.unit == "pts" {
+                weekly.append(String(format: "average food-group score %.1f of 4", weekAvgFiber))
+            } else {
+                weekly.append(String(format: "average fiber %.0f g", weekAvgFiber))
+            }
         }
         if let weekAvgExercise {
             let noun = exercise.unit == "steps" ? "steps" : "exercise minutes"
             weekly.append(String(format: "average \(noun) %.0f", weekAvgExercise))
         }
         lines.append("This week: \(weekly.joined(separator: "; ")).")
-        lines.append("Fiber logged on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days.")
+        if fiber.unit == "pts" {
+            lines.append("Food groups logged on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days.")
+            lines.append("Apple Health fiber is separate from the food-group score. Mention those grams only when asked, and call them Apple Health fiber.")
+        } else {
+            lines.append("Fiber logged on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days.")
+        }
         if let hrvSummary {
             lines.append(Self.plainHRVFact(hrvSummary))
         }

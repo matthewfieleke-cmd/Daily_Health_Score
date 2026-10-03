@@ -92,7 +92,9 @@ struct UserSettings: Equatable {
     var sleepGoal: SleepGoalHours
     var fiberGoal: FiberGoalGrams
     var movementGoal: MovementGoal = .exerciseMinutes
+    var nutritionMode: NutritionMode = .fiber
 
+    static let fiberGoalGrams = 40.0
     static let `default` = UserSettings(sleepGoal: .sevenHalf, fiberGoal: .forty)
 }
 
@@ -111,6 +113,16 @@ struct DailyMetrics: Equatable {
     var fiberGrams: Double
     var exerciseMinutes: Double
     var stepCount: Double = 0
+    var foodGroups: FoodGroupServings = .empty
+
+    /// Health sync replaces sleep, grams, steps, and exercise minutes.
+    /// The food-group log on an existing day stays.
+    func keepingFoodGroups(from existing: DailyRecord?) -> DailyMetrics {
+        guard let existing else { return self }
+        var copy = self
+        copy.foodGroups = existing.foodGroups
+        return copy
+    }
 }
 
 struct DailyRecord: Identifiable, Equatable, Codable {
@@ -121,6 +133,8 @@ struct DailyRecord: Identifiable, Equatable, Codable {
     var exerciseMinutes: Double
     /// Apple Health step count for the calendar day. Scored only when the movement goal is Steps.
     var stepCount: Double = 0
+    /// Manual food-group log. Empty and unlogged until the person saves the sheet.
+    var foodGroups: FoodGroupServings = .empty
     /// Average SDNN (ms) from HRV readings during attributed sleep; not part of the score.
     var sleepHrvSDNNMs: Double? = nil
     var sleepGoal: SleepGoalHours

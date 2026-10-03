@@ -6,22 +6,38 @@ enum ScoreCalculator {
 
     static func calculate(metrics: DailyMetrics, settings: UserSettings) -> ScoreComputation {
         let sleepGoal = settings.sleepGoal.rawValue
-        let fiberGoal = Double(settings.fiberGoal.rawValue)
         let movementGoal = settings.movementGoal.goalValue
         let movementValue = settings.movementGoal.countsSteps ? metrics.stepCount : metrics.exerciseMinutes
         let sleepScore = min(metrics.sleepHours / sleepGoal, 1) * 4
-        let fiberScore = min(metrics.fiberGrams / fiberGoal, 1) * 4
+        let fiberScore = nutritionPoints(metrics: metrics, mode: settings.nutritionMode)
         let exerciseScore = movementPoints(value: movementValue, goal: movementGoal)
         let totalScore = sleepScore + fiberScore + exerciseScore
+        let fiberPercent: Double
+        switch settings.nutritionMode {
+        case .fiber:
+            fiberPercent = max(metrics.fiberGrams, 0) / UserSettings.fiberGoalGrams
+        case .foodGroups:
+            fiberPercent = fiberScore / 4
+        }
         return ScoreComputation(
             sleepScore: sleepScore,
             fiberScore: fiberScore,
             exerciseScore: exerciseScore,
             totalScore: totalScore,
             sleepPercent: metrics.sleepHours / sleepGoal,
-            fiberPercent: metrics.fiberGrams / fiberGoal,
+            fiberPercent: fiberPercent,
             exercisePercent: movementGoal > 0 ? movementValue / movementGoal : 0
         )
+    }
+
+    /// Fiber mode is always 40 g. Food-group mode uses the saved log.
+    static func nutritionPoints(metrics: DailyMetrics, mode: NutritionMode) -> Double {
+        switch mode {
+        case .fiber:
+            return min(max(metrics.fiberGrams, 0) / UserSettings.fiberGoalGrams, 1) * 4
+        case .foodGroups:
+            return FoodGroupScore.points(metrics.foodGroups)
+        }
     }
 
     /// 2 points at the goal, linear underneath, nothing above 2.

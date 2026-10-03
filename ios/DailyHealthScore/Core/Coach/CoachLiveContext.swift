@@ -12,6 +12,7 @@ final class CoachLiveContext {
     /// Every stored day, for questions about a past day or stretch of days.
     var records: [DailyRecord] = []
     var todayKey: String = DateHelpers.localDateKey()
+    var nutritionMode: NutritionMode = .fiber
     var goals: [SMARTGoal] = []
     var activitiesByGoal: [UUID: [SMARTGoalActivity]] = [:]
     var memoryItems: [CoachMemoryItem] = []
@@ -144,7 +145,12 @@ final class CoachLiveContext {
         ) else {
             return CoachDayRange.guidance(todayKey: todayKey)
         }
-        return CoachDayRange.payload(records: records, window: window, todayKey: todayKey)
+        return CoachDayRange.payload(
+            records: records,
+            window: window,
+            todayKey: todayKey,
+            nutritionMode: nutritionMode
+        )
     }
 
     var goalsPayload: String {
@@ -178,8 +184,9 @@ final class CoachLiveContext {
         }
         let settings = UserSettings(
             sleepGoal: latest.sleepGoal,
-            fiberGoal: latest.fiberGoal,
-            movementGoal: latest.movementGoal
+            fiberGoal: .forty,
+            movementGoal: latest.movementGoal,
+            nutritionMode: nutritionMode
         )
         guard let trend = CompletedTrendBuilder.build(
             metric: metric,

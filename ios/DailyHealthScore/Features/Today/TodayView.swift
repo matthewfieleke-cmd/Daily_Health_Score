@@ -10,6 +10,7 @@ struct TodayView: View {
 
     @State private var coachLaunch: CoachChatLaunch?
     @State private var trendMetric: TrendMetric?
+    @State private var showFoodLog = false
     @State private var chatAfterChart: CoachChatLaunch?
     @State private var showIntake = false
     @State private var showSMARTGoals = false
@@ -98,6 +99,10 @@ struct TodayView: View {
                         .environmentObject(appState.coach)
                 }
             }
+        }
+        .sheet(isPresented: $showFoodLog) {
+            FoodGroupLogSheet(dateKey: todayKey)
+                .environmentObject(appState)
         }
         .sheet(item: $trendMetric, onDismiss: openChatAfterChart) { metric in
             NavigationStack {
@@ -222,6 +227,10 @@ struct TodayView: View {
 
     // MARK: - Three compact metric cards in a single row
 
+    private var nutritionMode: NutritionMode {
+        appState.settingsStore.settings.nutritionMode
+    }
+
     private func metricRow(for record: DailyRecord) -> some View {
         HStack(alignment: .top, spacing: 8) {
             CompactMetricCard(
@@ -241,18 +250,24 @@ struct TodayView: View {
                 Button("Ask Coach about this") { askCoach(about: .sleep, record: record) }
             }
             CompactMetricCard(
-                title: "Fiber",
-                metricValue: record.fiberGrams,
-                unitSuffix: "g",
+                title: nutritionMode.cardTitle,
+                metricValue: nutritionMode == .foodGroups ? record.fiberScore : record.fiberGrams,
+                unitSuffix: nutritionMode == .foodGroups ? "" : "g",
                 usesIntegerDisplay: false,
                 scoreValue: record.fiberScore,
                 maxScore: 4,
-                goalValue: Double(record.fiberGoal.rawValue),
+                goalValue: nutritionMode == .foodGroups ? 4 : UserSettings.fiberGoalGrams,
                 animationProgress: dialUpProgress,
-                systemImage: "leaf.fill",
+                systemImage: nutritionMode == .foodGroups ? "fork.knife" : "leaf.fill",
                 tint: AppTheme.leaf
             )
-            .onTapGesture { askCoach(about: .fiber, record: record) }
+            .onTapGesture {
+                if nutritionMode == .foodGroups {
+                    showFoodLog = true
+                } else {
+                    askCoach(about: .fiber, record: record)
+                }
+            }
             .contextMenu {
                 Button("Ask Coach about this") { askCoach(about: .fiber, record: record) }
             }
@@ -284,7 +299,13 @@ struct TodayView: View {
 
     /// A metric tap starts a new chat that opens on that metric's numbers.
     private func askCoach(about feature: CoachFocusFeature, record: DailyRecord) {
-        coachLaunch = .focus(CoachFocusContextBuilder.metric(feature, record: record))
+        coachLaunch = .focus(
+            CoachFocusContextBuilder.metric(
+                feature,
+                record: record,
+                nutritionMode: nutritionMode
+            )
+        )
     }
 
     // MARK: - Banners
@@ -430,11 +451,13 @@ private struct CompactMetricCard: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
                     .contentTransition(.numericText(value: displayedMetric))
-                Text(unitSuffix)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+                if !unitSuffix.isEmpty {
+                    Text(unitSuffix)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -471,6 +494,8 @@ private struct CompactMetricCard: View {
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
         .cardShadow()
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title): \(metricDisplayText) \(unitSuffix), \(scoreDisplayText)")
+        .accessibilityLabel(unitSuffix.isEmpty
+            ? "\(title): \(metricDisplayText), \(scoreDisplayText)"
+            : "\(title): \(metricDisplayText) \(unitSuffix), \(scoreDisplayText)")
     }
 }

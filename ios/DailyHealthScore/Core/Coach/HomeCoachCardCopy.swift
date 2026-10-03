@@ -29,7 +29,7 @@ enum HomeCoachCardCopy {
         case .sleep:
             return "Today ran on a short night, and you carried it anyway."
         case .fiber:
-            return "Fiber was the pillar that ran light today."
+            return "Food was the pillar that ran light today."
         case .exercise:
             return "Movement was the pillar that ran light today."
         case .maintain:

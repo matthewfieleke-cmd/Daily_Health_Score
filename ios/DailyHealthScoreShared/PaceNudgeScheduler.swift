@@ -35,6 +35,7 @@ enum PaceNudgeScheduler {
             exerciseMinutes: snapshot.exercise.value,
             exerciseGoal: snapshot.exercise.goal,
             movementUnit: snapshot.exercise.unit,
+            fiberUnit: snapshot.fiber.unit,
             now: now,
             calendar: calendar
         )

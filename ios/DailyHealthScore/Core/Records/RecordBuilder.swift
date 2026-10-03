@@ -34,6 +34,7 @@ enum RecordBuilder {
             sleepGoal: settings.sleepGoal,
             fiberGoal: settings.fiberGoal,
             movementGoal: settings.movementGoal,
+            foodGroups: metrics.foodGroups,
             sleepScore: computed.sleepScore,
             fiberScore: computed.fiberScore,
             exerciseScore: computed.exerciseScore,

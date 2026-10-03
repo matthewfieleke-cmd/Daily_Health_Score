@@ -25,8 +25,10 @@ struct EditDayView: View {
                 Section("Metrics") {
                     TextField("Sleep hours", text: $sleepHours)
                         .keyboardType(.decimalPad)
-                    TextField("Fiber grams", text: $fiberGrams)
-                        .keyboardType(.decimalPad)
+                    if appState.settingsStore.settings.nutritionMode == .fiber {
+                        TextField("Fiber grams", text: $fiberGrams)
+                            .keyboardType(.decimalPad)
+                    }
                     TextField(movementGoal.metricName, text: $movementValue)
                         .keyboardType(movementGoal.countsSteps ? .numberPad : .decimalPad)
                 }
@@ -53,20 +55,30 @@ struct EditDayView: View {
             errorMessage = "Use date format yyyy-MM-dd."
             return
         }
+        let existing = appState.recordStore.records.first { $0.date == dateKey }
+        let foodGroupsMode = appState.settingsStore.settings.nutritionMode == .foodGroups
+        let fiber: Double
+        if foodGroupsMode {
+            fiber = existing?.fiberGrams ?? 0
+        } else if let parsed = Double(fiberGrams), parsed >= 0 {
+            fiber = parsed
+        } else {
+            errorMessage = "Enter valid non-negative numbers."
+            return
+        }
         guard let sleep = Double(sleepHours), sleep >= 0,
-              let fiber = Double(fiberGrams), fiber >= 0,
               let movement = Double(movementValue), movement >= 0 else {
             errorMessage = "Enter valid non-negative numbers."
             return
         }
-        let existing = appState.recordStore.records.first { $0.date == dateKey }
         appState.saveManualDay(
             date: dateKey,
             metrics: DailyMetrics(
                 sleepHours: sleep,
                 fiberGrams: fiber,
                 exerciseMinutes: movementGoal.countsSteps ? (existing?.exerciseMinutes ?? 0) : movement,
-                stepCount: movementGoal.countsSteps ? movement : (existing?.stepCount ?? 0)
+                stepCount: movementGoal.countsSteps ? movement : (existing?.stepCount ?? 0),
+                foodGroups: existing?.foodGroups ?? .empty
             )
         )
         dismiss()

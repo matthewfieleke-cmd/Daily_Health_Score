@@ -9,12 +9,14 @@ enum CoachSnapshotBuilder {
         phase: DayPhase = .current(),
         now: Date = Date(),
         calendar: Calendar = .current,
-        bodyTrend: BodyTrend? = nil
+        bodyTrend: BodyTrend? = nil,
+        nutritionMode: NutritionMode = .fiber
     ) -> CoachSnapshot {
         let settings = UserSettings(
             sleepGoal: today.sleepGoal,
-            fiberGoal: today.fiberGoal,
-            movementGoal: today.movementGoal
+            fiberGoal: .forty,
+            movementGoal: today.movementGoal,
+            nutritionMode: nutritionMode
         )
         let filledWeek = CompletedTrendBuilder.filledRecords(
             days: 7,
@@ -26,8 +28,16 @@ enum CoachSnapshotBuilder {
         let weekKeys = filledWeek.map(\.date)
         let weekStats = weekKeys.isEmpty
             ? nil
-            : RollingStatsCalculator.compute(records: filledWeek, windowKeys: weekKeys)
-        let fiberDays = records.filter { weekKeys.contains($0.date) && $0.fiberGrams > 0 }.count
+            : RollingStatsCalculator.compute(
+                records: filledWeek,
+                windowKeys: weekKeys,
+                nutritionMode: nutritionMode
+            )
+        let fiberDays = records.filter { record in
+            guard weekKeys.contains(record.date) else { return false }
+            if nutritionMode == .foodGroups { return record.foodGroups.isLogged }
+            return record.fiberGrams > 0
+        }.count
 
         // HRV only enters the prompt once some nights exist; otherwise the coach
         // would discuss a metric the person is not collecting.
@@ -56,15 +66,7 @@ enum CoachSnapshotBuilder {
                 points: today.sleepScore,
                 maxPoints: 4
             ),
-            fiber: status(
-                name: "Fiber",
-                value: today.fiberGrams,
-                goal: Double(today.fiberGoal.rawValue),
-                unit: "g",
-                decimals: 1,
-                points: today.fiberScore,
-                maxPoints: 4
-            ),
+            fiber: nutritionStatus(for: today, mode: nutritionMode),
             exercise: movementStatus(for: today),
             primaryFocus: today.primaryFocus,
             weekDaysWithData: weekStats?.daysWithData ?? 0,
@@ -83,6 +85,32 @@ enum CoachSnapshotBuilder {
             smartGoals: CoachGoalSummarizer.lines(for: goals),
             bodyLine: bodyTrend?.promptBlock
         )
+    }
+
+    static func nutritionStatus(for record: DailyRecord, mode: NutritionMode) -> CoachMetricStatus {
+        switch mode {
+        case .foodGroups:
+            return status(
+                name: "Food groups",
+                value: record.fiberScore,
+                goal: 4,
+                unit: "pts",
+                decimals: 1,
+                points: record.fiberScore,
+                maxPoints: 4,
+                treatZeroAsMissing: !record.foodGroups.isLogged
+            )
+        case .fiber:
+            return status(
+                name: "Fiber",
+                value: record.fiberGrams,
+                goal: UserSettings.fiberGoalGrams,
+                unit: "g",
+                decimals: 1,
+                points: record.fiberScore,
+                maxPoints: 4
+            )
+        }
     }
 
     static func movementStatus(for record: DailyRecord) -> CoachMetricStatus {
@@ -105,10 +133,11 @@ enum CoachSnapshotBuilder {
         unit: String,
         decimals: Int,
         points: Double,
-        maxPoints: Double
+        maxPoints: Double,
+        treatZeroAsMissing: Bool = true
     ) -> CoachMetricStatus {
         let level: CoachMetricLevel
-        if value <= 0 {
+        if treatZeroAsMissing && value <= 0 {
             level = .missing
         } else if value >= goal * 1.05 {
             level = .exceeded

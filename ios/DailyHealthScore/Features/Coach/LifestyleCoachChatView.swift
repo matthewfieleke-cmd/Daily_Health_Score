@@ -201,7 +201,8 @@ struct LifestyleCoachChatView: View {
                     records: appState.recordStore.records,
                     settings: appState.settingsStore.settings,
                     metric: chart.metric,
-                    showsTalk: false
+                    showsTalk: false,
+                    lockedReference: chart
                 )
             }
         }
@@ -425,7 +426,8 @@ struct LifestyleCoachChatView: View {
         let suggestions = planningGoal ? CoachGoalPlanning.starterQuestions(for: selectedGoal) : CoachPromptSuggestions.build(
             record: todayRecord,
             goals: appState.smartGoalStore.goals,
-            focus: focus
+            focus: focus,
+            nutritionMode: appState.settingsStore.settings.nutritionMode
         )
         if coach.availability == .available,
            !coach.isChatBusy,
@@ -479,7 +481,8 @@ struct LifestyleCoachChatView: View {
                 planningGoal: planningGoal,
                 focus: focus,
                 activities: appState.smartGoalStore.activities,
-                bodyTrend: appState.bodyTrend
+                bodyTrend: appState.bodyTrend,
+                nutritionMode: appState.settingsStore.settings.nutritionMode
             )
         }
     }

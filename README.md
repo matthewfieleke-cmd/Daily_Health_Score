@@ -2,7 +2,7 @@
 
 A native iOS app that scores each day on three pillars — **sleep**, **dietary fiber**, and **movement** — against adjustable goals (10 points max), with **Today** and **7 / 30 / 90-day** rolling views. Movement is either Exercise Minutes or Steps. The rolling views use finished days only. Today stays on the Today screen until the day is over. A day with nothing logged counts as zero in those averages.
 
-All metrics are read directly from **Apple Health**. Data stays on the device (SwiftData, roughly 125-day retention). No server, no account, no Apple Shortcut required.
+Sleep, fiber grams, exercise minutes, and steps are read from **Apple Health**. Food-group logs are entered in the app, stay on the device, and are not written to Apple Health. Data stays on the device (SwiftData, roughly 125-day retention). No server, no account, no Apple Shortcut required.
 
 **DHS Lifestyle Coach** (iOS 27 + Apple Intelligence) answers on Apple’s Private Cloud Compute model, with reasoning and live lookup tools, and falls back to the on-device model when the server model is unavailable or its daily allowance is spent. Chat memory stays on the device; clear it anytime in Settings.
 
@@ -13,7 +13,7 @@ See **[ios/README.md](ios/README.md)** for Xcode setup and run instructions.
 | Metric | Max points | Default goal |
 |--------|------------|--------------|
 | Sleep | 4 | 7.5 hours (7, 7.5, or 8 selectable) |
-| Fiber | 4 | 40 g (30, 40, or 50) |
+| Nutrition | 4 | 40 g of fiber from Apple Health, or food groups logged in the app |
 | Movement | 2 | 30 Exercise Minutes, or 8,000 or 10,000 Steps |
 
 Primary focus = the weakest metric (ties resolve sleep → fiber → exercise). When every goal is met, the day enters **maintain** mode with maintenance-oriented suggestions.

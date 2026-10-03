@@ -113,13 +113,21 @@ final class ScoreCalculatorTests: XCTestCase {
         XCTAssertEqual(ScoreCalculator.formatDisplayScore(computed.exerciseScore), "0.6")
     }
 
-    func test_alternativeSleepAndFiberGoals_changeScoring() {
+    func test_fiberGoalIsAlwaysFortyGrams() {
         let settings = UserSettings(sleepGoal: .eight, fiberGoal: .fifty)
-        let computed = ScoreCalculator.calculate(
+        let full = ScoreCalculator.calculate(
             metrics: DailyMetrics(sleepHours: 8, fiberGrams: 50, exerciseMinutes: 30),
             settings: settings
         )
-        XCTAssertEqual(computed.totalScore, 10, accuracy: 1e-9)
+        XCTAssertEqual(full.fiberScore, 4, accuracy: 1e-9)
+        XCTAssertEqual(full.totalScore, 10, accuracy: 1e-9)
+
+        let thirty = ScoreCalculator.calculate(
+            metrics: DailyMetrics(sleepHours: 8, fiberGrams: 30, exerciseMinutes: 30),
+            settings: settings
+        )
+        XCTAssertEqual(thirty.fiberScore, (30.0 / 40.0) * 4, accuracy: 1e-9)
+        XCTAssertEqual(thirty.fiberPercent, 30.0 / 40.0, accuracy: 1e-9)
     }
 
     // MARK: - determinePrimaryFocus
