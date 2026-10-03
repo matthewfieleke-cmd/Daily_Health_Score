@@ -9,6 +9,8 @@ struct TodayView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var coachLaunch: CoachChatLaunch?
+    @State private var trendMetric: TrendMetric?
+    @State private var chatAfterChart: CoachChatLaunch?
     @State private var showIntake = false
     @State private var showSMARTGoals = false
     @State private var showHRVAnalysis = false
@@ -97,6 +99,22 @@ struct TodayView: View {
                 }
             }
         }
+        .sheet(item: $trendMetric, onDismiss: openChatAfterChart) { metric in
+            NavigationStack {
+                TrendChartScreen(
+                    records: appState.recordStore.records,
+                    settings: appState.settingsStore.settings,
+                    metric: metric,
+                    showsTalk: true,
+                    onTalk: {
+                        chatAfterChart = appState.coach.memory.cachedCheckIn?.replyThreadID.map {
+                            CoachChatLaunch.thread($0)
+                        } ?? .replyToCheckIn
+                        trendMetric = nil
+                    }
+                )
+            }
+        }
     }
 
     // MARK: - Body content
@@ -118,7 +136,8 @@ struct TodayView: View {
                     record: record,
                     onReply: { coachLaunch = .replyToCheckIn },
                     onContinueReply: { coachLaunch = .thread($0) },
-                    onIntake: { showIntake = true }
+                    onIntake: { showIntake = true },
+                    onShowChart: { trendMetric = $0 }
                 )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     // Remaining height is the grouped screen, not empty card chrome.
@@ -254,6 +273,13 @@ struct TodayView: View {
                 Button("Ask Coach about this") { askCoach(about: .exercise, record: record) }
             }
         }
+    }
+
+    private func openChatAfterChart() {
+        guard let chatAfterChart else { return }
+        let launch = chatAfterChart
+        self.chatAfterChart = nil
+        coachLaunch = launch
     }
 
     /// A metric tap starts a new chat that opens on that metric's numbers.

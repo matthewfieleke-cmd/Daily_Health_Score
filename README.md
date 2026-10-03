@@ -1,6 +1,6 @@
 # Daily Health Score
 
-A native iOS app that scores each day on three pillars — **sleep**, **dietary fiber**, and **movement** — against adjustable goals (10 points max), with **Today** and **7 / 30 / 90-day** rolling views. Movement is either Exercise Minutes or Steps.
+A native iOS app that scores each day on three pillars — **sleep**, **dietary fiber**, and **movement** — against adjustable goals (10 points max), with **Today** and **7 / 30 / 90-day** rolling views. Movement is either Exercise Minutes or Steps. The rolling views use finished days only. Today stays on the Today screen until the day is over. A day with nothing logged counts as zero in those averages.
 
 All metrics are read directly from **Apple Health**. Data stays on the device (SwiftData, roughly 125-day retention). No server, no account, no Apple Shortcut required.
 

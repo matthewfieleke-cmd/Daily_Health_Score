@@ -29,6 +29,8 @@ final class CoachLiveContext {
     private(set) var pendingProposal: CoachGoalProposal?
     private(set) var pendingCheckIn: CoachGoalCheckInRequest?
     private(set) var proposalRejected = false
+    /// Chart the model asked the app to draw for this reply.
+    private(set) var pendingTrend: TrendChartReference?
     /// Tool calls the model made, with only the arguments that affected the
     /// operation and a small outcome. Ephemeral: shown by the eval, never filed.
     private(set) var toolLog: [String] = []
@@ -45,6 +47,7 @@ final class CoachLiveContext {
         pendingProposal = nil
         pendingCheckIn = nil
         proposalRejected = false
+        pendingTrend = nil
         toolLog = []
         requiresFreshSession = false
         evidenceSearches = []
@@ -163,6 +166,31 @@ final class CoachLiveContext {
         let conversations = relevantConversationLines(topic: topic)
         guard !conversations.isEmpty else { return notes }
         return notes + "\n\n" + conversations
+    }
+
+    /// Shows one finished-day chart. The return is a short summary for the model.
+    func showTrend(metric raw: String, now: Date = Date()) -> String {
+        guard let metric = TrendMetric.parse(raw) else {
+            return "Say sleep, fiber, or movement."
+        }
+        guard let latest = records.max(by: { $0.date < $1.date }) else {
+            return "No completed days to chart yet. Today is still in progress."
+        }
+        let settings = UserSettings(
+            sleepGoal: latest.sleepGoal,
+            fiberGoal: latest.fiberGoal,
+            movementGoal: latest.movementGoal
+        )
+        guard let trend = CompletedTrendBuilder.build(
+            metric: metric,
+            records: records,
+            settings: settings,
+            now: now
+        ) else {
+            return "No completed days to chart yet. Today is still in progress."
+        }
+        pendingTrend = trend.reference(settings: settings)
+        return "Chart shown. \(trend.coachSummary) Talk about the chart. Do not list every bar."
     }
 
     var bodyPayload: String {

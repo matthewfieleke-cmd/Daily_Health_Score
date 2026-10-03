@@ -20,6 +20,7 @@ struct LifestyleCoachChatView: View {
     @State private var goalEdit: SMARTGoalEdit?
     @State private var focus: CoachFocusContext?
     @State private var showMemory = false
+    @State private var enlargedChart: TrendChartReference?
     @State private var launch: CoachChatLaunch
     @State private var didOpen = false
     @FocusState private var isInputFocused: Bool
@@ -192,6 +193,16 @@ struct LifestyleCoachChatView: View {
             NavigationStack {
                 CoachMemoryListView()
                     .environmentObject(appState)
+            }
+        }
+        .sheet(item: $enlargedChart) { chart in
+            NavigationStack {
+                TrendChartScreen(
+                    records: appState.recordStore.records,
+                    settings: appState.settingsStore.settings,
+                    metric: chart.metric,
+                    showsTalk: false
+                )
             }
         }
         .onDisappear {
@@ -646,6 +657,23 @@ struct LifestyleCoachChatView: View {
                         .background(AppTheme.cardSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         .textSelection(.enabled)
+                    if let chart = turn.trendChart,
+                       let trend = CompletedTrendBuilder.build(
+                        reference: chart,
+                        records: appState.recordStore.records,
+                        settings: appState.settingsStore.settings
+                       ) {
+                        Button {
+                            enlargedChart = chart
+                        } label: {
+                            TrendChartCard(trend: trend, compact: true)
+                                .padding(12)
+                                .background(AppTheme.cardSurface)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Enlarges the chart. Close returns to this chat.")
+                    }
                     if turn.modelTier == .onDevice, CoachModelProvider.serverModelExists {
                         // Honest about the fallback, and specific about why.
                         Text("Answered on-device — \(turn.fallbackReason ?? "Private Cloud Compute was unavailable or at today’s limit.")")

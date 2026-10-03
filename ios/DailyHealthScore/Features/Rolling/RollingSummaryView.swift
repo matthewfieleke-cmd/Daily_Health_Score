@@ -7,11 +7,14 @@ struct RollingSummaryView: View {
     @State private var coachFocus: CoachFocusContext?
 
     private var stats: RollingStats? {
-        let keys = DateHelpers.rollingDateKeys(days: days)
-        return RollingStatsCalculator.compute(
+        let settings = appState.settingsStore.settings
+        let filled = CompletedTrendBuilder.filledRecords(
+            days: days,
             records: appState.recordStore.records,
-            windowKeys: keys
+            settings: settings
         )
+        guard !filled.isEmpty else { return nil }
+        return RollingStatsCalculator.compute(records: filled, windowKeys: filled.map(\.date))
     }
 
     var body: some View {
@@ -23,7 +26,7 @@ struct RollingSummaryView: View {
                         VStack(spacing: AppTheme.Layout.sectionSpacing) {
                             header(for: stats)
                             AskCoachButton {
-                                let keys = DateHelpers.rollingDateKeys(days: days)
+                                let keys = stats.recordsInWindow.map(\.date).sorted()
                                 coachFocus = CoachFocusContextBuilder.history(
                                     stats: stats,
                                     days: days,
@@ -84,9 +87,10 @@ struct RollingSummaryView: View {
                 }
                 .frame(width: 56, height: 56)
             }
-            Text("Based on \(stats.daysWithData) of the last \(stats.daysInWindow) days.")
+            Text(completedCaption(for: stats))
                 .font(.footnote)
                 .foregroundStyle(.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -210,6 +214,30 @@ struct RollingSummaryView: View {
         }
     }
 
+    private func completedCaption(for stats: RollingStats) -> String {
+        let oldest = stats.recordsInWindow.last?.date
+        let newest = stats.recordsInWindow.first?.date
+        let range: String
+        if let oldest, let newest, oldest != newest {
+            range = "\(shortDay(oldest))–\(shortDay(newest)). "
+        } else if let newest {
+            range = "\(shortDay(newest)). "
+        } else {
+            range = ""
+        }
+        let progress = "Today is still in progress and is not included. "
+        if stats.daysInWindow < days {
+            let noun = stats.daysInWindow == 1 ? "day" : "days"
+            return "\(range)\(stats.daysInWindow) completed \(noun) so far. \(progress)Days with nothing logged count as zero."
+        }
+        return "\(range)\(progress)Days with nothing logged count as zero."
+    }
+
+    private func shortDay(_ key: String) -> String {
+        guard let date = DateHelpers.date(from: key) else { return key }
+        return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
     private func movementGoal(in stats: RollingStats) -> MovementGoal {
         stats.recordsInWindow.first?.movementGoal ?? .exerciseMinutes
     }
@@ -240,9 +268,9 @@ struct RollingSummaryView: View {
 
     private var emptyState: some View {
         ContentUnavailableView(
-            "No records",
+            "No completed days yet",
             systemImage: "calendar",
-            description: Text("No records in the last \(days) days yet.")
+            description: Text("Today is still in progress. Finished days will show here tomorrow.")
         )
     }
 }

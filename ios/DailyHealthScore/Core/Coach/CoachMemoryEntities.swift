@@ -12,6 +12,8 @@ final class CoachChatMessageEntity {
     var modelTierRaw: String = ""
     /// Newline-separated JPEG file names. Empty on older rows and text-only turns.
     var photoFileNamesRaw: String = ""
+    /// "metric|yyyy-MM-dd|count" when this turn shows a finished-day chart.
+    var trendChartRaw: String = ""
 
     var photoFileNames: [String] {
         photoFileNamesRaw.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
@@ -25,6 +27,26 @@ final class CoachChatMessageEntity {
         threadId = turn.threadId
         modelTierRaw = turn.modelTier?.rawValue ?? ""
         photoFileNamesRaw = turn.photoFileNames.joined(separator: "\n")
+        trendChartRaw = Self.encode(turn.trendChart)
+    }
+
+    static func encode(_ chart: TrendChartReference?) -> String {
+        guard let chart else { return "" }
+        let movement = chart.movementGoalRaw
+        return "\(chart.metric.rawValue)|\(chart.endDateKey)|\(chart.dayCount)|\(movement)"
+    }
+
+    static func decodeChart(_ raw: String) -> TrendChartReference? {
+        let parts = raw.split(separator: "|").map(String.init)
+        guard parts.count >= 3,
+              let metric = TrendMetric(rawValue: parts[0]),
+              let count = Int(parts[2]), count > 0 else { return nil }
+        return TrendChartReference(
+            metric: metric,
+            endDateKey: parts[1],
+            dayCount: count,
+            movementGoalRaw: parts.count >= 4 ? parts[3] : ""
+        )
     }
 
     func toTurn() -> CoachChatTurn? {
@@ -36,7 +58,8 @@ final class CoachChatMessageEntity {
             createdAt: createdAt,
             threadId: threadId,
             modelTier: CoachModelTier(rawValue: modelTierRaw),
-            photoFileNames: photoFileNames
+            photoFileNames: photoFileNames,
+            trendChart: Self.decodeChart(trendChartRaw)
         )
     }
 }

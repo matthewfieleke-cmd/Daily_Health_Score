@@ -14,6 +14,8 @@ struct CoachThreadSeed: Equatable, Sendable {
     var coachOpeners: [String] = []
     /// True when the created thread should be linked to the current check-in.
     var linksCheckIn: Bool = false
+    /// Chart drawn with the opening coach message.
+    var openerChart: TrendChartReference? = nil
 }
 
 @MainActor
@@ -254,7 +256,8 @@ final class CoachMemoryStore: ObservableObject {
                     provisionalTitle: "Today · \(shortDate(checkIn.dateKey))",
                     contextNote: "Reply to today's Home card for \(DateHelpers.formatDisplayDate(checkIn.dateKey)). The card said: \(checkIn.spokenText)",
                     coachOpeners: [checkIn.spokenText],
-                    linksCheckIn: true
+                    linksCheckIn: true,
+                    openerChart: checkIn.chartReference
                 )
             } else {
                 openThreadID = nil
@@ -886,11 +889,13 @@ final class CoachMemoryStore: ObservableObject {
             goalId: seed.goalId
         )
         for (index, opener) in seed.coachOpeners.enumerated() {
+            let isLast = index == seed.coachOpeners.count - 1
             let turn = CoachChatTurn(
                 role: .coach,
                 text: opener,
                 createdAt: openerStart.addingTimeInterval(Double(index)),
-                threadId: thread.id
+                threadId: thread.id,
+                trendChart: isLast ? seed.openerChart : nil
             )
             modelContext.insert(CoachChatMessageEntity(turn: turn))
             thread.messageCount += 1

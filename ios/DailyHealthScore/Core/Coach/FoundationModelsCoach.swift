@@ -60,6 +60,7 @@ final class FoundationModelsCoach {
         trend: CoachTrendDigest?,
         paceFacts: String?,
         notes: String,
+        completedFacts: String = "",
         now: Date = Date()
     ) async throws -> CoachCheckIn {
         #if canImport(FoundationModels)
@@ -82,6 +83,8 @@ final class FoundationModelsCoach {
             \(pace)
 
             \(trend?.promptBlock ?? "TREND FACTS: none.")
+
+            \(completedFacts.isEmpty ? "COMPLETED DAY FACTS: none." : completedFacts)
 
             NOTES:
             \(notes)
@@ -126,7 +129,8 @@ final class FoundationModelsCoach {
             healthLine: first,
             thoughts: chosen,
             isFallback: false,
-            generatedAt: now
+            generatedAt: now,
+            chartMetricRaw: content.chart.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         )
         #else
         throw CoachError.unavailable(.unavailable)
@@ -569,6 +573,9 @@ final class FoundationModelsCoach {
 struct GenerableCoachCheckIn {
     @Guide(description: "Up to three thoughts, most useful first. Each is one or two plain sentences. Omit any that only repeats today's tiles. No headers or emoji.")
     var thoughts: [String]
+
+    @Guide(description: "sleep, fiber, movement, or none. none unless the finished-day chart would help.")
+    var chart: String
 }
 
 @Generable

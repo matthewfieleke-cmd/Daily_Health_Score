@@ -66,6 +66,8 @@ Sleep is attributed to the calendar day when asleep samples **end** (wake-day at
 
 Your **primary focus** highlights the weakest area for the day. When all goals are met, the app emphasizes **maintain** guidance.
 
+The **7-Day**, **30-Day**, and **90-Day** screens use finished days only. Today stays on the Today tab until the day is over. A finished day with nothing logged counts as zero in those averages.
+
 ### Where is my data stored?
 
 On your **iPhone only** (local storage). This version does not sync to a cloud account operated by the developer. The app retains roughly **125 days** of history locally.
