@@ -198,6 +198,28 @@ final class CoachMemoryFilesLogicTests: XCTestCase {
         XCTAssertEqual(CoachMemoryLogic.items(relevantTo: "this person", in: items), [])
     }
 
+    func test_aWorkMessageFindsTheJobAndAWifeMessageFindsHerName() {
+        let items = [
+            CoachMemoryItem(category: .aboutYou, content: "Work: Family Medicine.", provenance: .userStated),
+            CoachMemoryItem(category: .people, content: "At home: Wife Maureen 43, son Isaac 14, Caleb 13.", provenance: .userStated),
+            CoachMemoryItem(category: .likes, content: "Enjoys music and splitting wood.", provenance: .userStated)
+        ]
+        let work = CoachMemoryLogic.matchingNotes(
+            items: items,
+            relevantTo: "What should I do to get ready for work tomorrow?"
+        )
+        XCTAssertTrue(work.contains("Family Medicine"))
+        XCTAssertFalse(work.contains("Maureen"))
+        XCTAssertFalse(work.contains("splitting wood"))
+
+        let wife = CoachMemoryLogic.matchingNotes(
+            items: items,
+            relevantTo: "My wife made a healthy soup and encouraged me to eat it."
+        )
+        XCTAssertTrue(wife.contains("Maureen"))
+        XCTAssertFalse(wife.contains("Family Medicine"))
+    }
+
     /// A note comes from the person's words, never from the Coach's suggestion.
     func test_newNotesMustBeGroundedInThePersonsWords() {
         let spoken = "I've been doing better recently with not bringing work home. I'm using our AI scribe which is helping."

@@ -214,6 +214,17 @@ final class FoundationModelsCoach {
         if let settings = live.scoringSettings {
             framing.append(settings.coachModeLine)
         }
+        let earlierUserText = recentTurns
+            .filter { $0.role == .user }
+            .map(\.text)
+            .filter { $0 != userMessage }
+            .suffix(1)
+            .joined(separator: " ")
+        let notes = live.notesForThisMessage(userMessage, earlierUserText: earlierUserText)
+        if !notes.isEmpty {
+            framing.append(notes)
+            live.notePersonalContext()
+        }
 
         func pieces(seeding turns: [CoachChatTurn]?, budget: CoachContextBudget) -> [CoachPromptPiece] {
             CoachPrompt.pieces(
