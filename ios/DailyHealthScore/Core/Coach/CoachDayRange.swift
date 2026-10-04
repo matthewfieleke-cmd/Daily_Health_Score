@@ -37,7 +37,8 @@ enum CoachDayRange {
         records: [DailyRecord],
         window: Window,
         todayKey: String,
-        nutritionMode: NutritionMode = .fiber
+        nutritionMode: NutritionMode = .fiber,
+        movementGoal: MovementGoal? = nil
     ) -> String {
         let keys = dateKeys(in: window)
         let byDate = Dictionary(records.map { ($0.date, $0) }, uniquingKeysWith: { _, latest in latest })
@@ -48,20 +49,20 @@ enum CoachDayRange {
             guard let record = found.first else {
                 return "\(label(window.startKey)), \(year(window.startKey)): no record saved. Unlogged, not zero. \(today)"
             }
-            return "\(dayLine(record, nutritionMode: nutritionMode)) \(today)"
+            return "\(dayLine(record, nutritionMode: nutritionMode, movementGoal: movementGoal)) \(today)"
         }
 
         var lines = ["\(monthDay(window.startKey)) to \(monthDay(window.endKey)), \(year(window.endKey)) — \(keys.count) days, \(found.count) with data."]
-        if let averages = averageLine(found, label: "Average across days with data", nutritionMode: nutritionMode) {
+        if let averages = averageLine(found, label: "Average across days with data", nutritionMode: nutritionMode, movementGoal: movementGoal) {
             lines.append(averages)
         }
         if found.isEmpty {
             lines.append("No days in this window have a record. Unlogged, not zero.")
         } else if keys.count <= maxDetailDays {
-            lines.append(contentsOf: found.map { dayLine($0, nutritionMode: nutritionMode) })
+            lines.append(contentsOf: found.map { dayLine($0, nutritionMode: nutritionMode, movementGoal: movementGoal) })
             lines.append(contentsOf: missingNote(keys: keys, byDate: byDate))
         } else {
-            lines.append(contentsOf: weekLines(keys: keys, byDate: byDate, nutritionMode: nutritionMode))
+            lines.append(contentsOf: weekLines(keys: keys, byDate: byDate, nutritionMode: nutritionMode, movementGoal: movementGoal))
         }
         lines.append(today)
         return lines.joined(separator: "\n")
@@ -79,13 +80,15 @@ enum CoachDayRange {
 
     // MARK: - Lines
 
-    private static func movementFact(_ record: DailyRecord) -> String {
-        let value = number(record.movementValue, decimals: 0)
-        let goal = number(record.movementGoal.goalValue, decimals: 0)
-        if record.movementGoal.countsSteps {
-            return "steps \(value) of \(goal)"
+    private static func movementFact(_ record: DailyRecord, movementGoal: MovementGoal?) -> String {
+        let goal = movementGoal ?? record.movementGoal
+        let value = goal.countsSteps ? record.stepCount : record.exerciseMinutes
+        let shown = number(value, decimals: 0)
+        let goalText = number(goal.goalValue, decimals: 0)
+        if goal.countsSteps {
+            return "steps \(shown) of \(goalText)"
         }
-        return "exercise minutes \(value) of \(goal)"
+        return "exercise minutes \(shown) of \(goalText)"
     }
 
     private static func movementAverage(_ value: Double, goal: MovementGoal) -> String {
@@ -106,12 +109,12 @@ enum CoachDayRange {
         return "fiber \(number(record.fiberGrams, decimals: 1)) g of \(Int(UserSettings.fiberGoalGrams))"
     }
 
-    private static func dayLine(_ record: DailyRecord, nutritionMode: NutritionMode) -> String {
+    private static func dayLine(_ record: DailyRecord, nutritionMode: NutritionMode, movementGoal: MovementGoal?) -> String {
         var parts = [
             "\(label(record.date)): score \(ScoreCalculator.formatDisplayScore(record.totalScore)) of 10",
             "sleep \(number(record.sleepHours, decimals: 1)) h of \(number(record.sleepGoal.rawValue, decimals: 1))",
             nutritionFact(record, mode: nutritionMode),
-            movementFact(record)
+            movementFact(record, movementGoal: movementGoal)
         ]
         if let hrv = record.sleepHrvSDNNMs {
             parts.append("sleep HRV \(number(hrv, decimals: 0)) ms")
@@ -119,13 +122,19 @@ enum CoachDayRange {
         return parts.joined(separator: "; ") + "."
     }
 
-    private static func averageLine(_ records: [DailyRecord], label: String, nutritionMode: NutritionMode) -> String? {
+    private static func averageLine(
+        _ records: [DailyRecord],
+        label: String,
+        nutritionMode: NutritionMode,
+        movementGoal: MovementGoal?
+    ) -> String? {
         guard !records.isEmpty else { return nil }
         let count = Double(records.count)
         let score = records.map(\.totalScore).reduce(0, +) / count
         let sleep = records.map(\.sleepHours).reduce(0, +) / count
-        let movement = records.map(\.movementValue).reduce(0, +) / count
-        let movementText = movementAverage(movement, goal: records.first?.movementGoal ?? .exerciseMinutes)
+        let goal = movementGoal ?? records.first?.movementGoal ?? .exerciseMinutes
+        let movement = records.map { goal.countsSteps ? $0.stepCount : $0.exerciseMinutes }.reduce(0, +) / count
+        let movementText = movementAverage(movement, goal: goal)
         let nutrition: String
         if nutritionMode == .foodGroups {
             let points = records.map { FoodGroupScore.points($0.foodGroups) }.reduce(0, +) / count
@@ -145,13 +154,18 @@ enum CoachDayRange {
         return ["No record for \(named)\(rest). Unlogged, not zero."]
     }
 
-    private static func weekLines(keys: [String], byDate: [String: DailyRecord], nutritionMode: NutritionMode) -> [String] {
+    private static func weekLines(
+        keys: [String],
+        byDate: [String: DailyRecord],
+        nutritionMode: NutritionMode,
+        movementGoal: MovementGoal?
+    ) -> [String] {
         stride(from: 0, to: keys.count, by: 7).compactMap { offset in
             let chunk = Array(keys[offset ..< Swift.min(offset + 7, keys.count)])
             guard let first = chunk.first, let last = chunk.last else { return nil }
             let found = chunk.compactMap { byDate[$0] }
             let span = "\(monthDay(first)) to \(monthDay(last))"
-            guard let averages = averageLine(found, label: "\(span), \(found.count) of \(chunk.count) days with data", nutritionMode: nutritionMode) else {
+            guard let averages = averageLine(found, label: "\(span), \(found.count) of \(chunk.count) days with data", nutritionMode: nutritionMode, movementGoal: movementGoal) else {
                 return "\(span): no days with data."
             }
             return averages

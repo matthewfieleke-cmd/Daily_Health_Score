@@ -19,7 +19,8 @@ struct RollingSummaryView: View {
         return RollingStatsCalculator.compute(
             records: filled,
             windowKeys: filled.map(\.date),
-            nutritionMode: settings.nutritionMode
+            nutritionMode: settings.nutritionMode,
+            movementGoal: settings.movementGoal
         )
     }
 
@@ -121,10 +122,10 @@ struct RollingSummaryView: View {
                      icon: "moon.stars.fill", tint: AppTheme.primary),
             nutritionTile(stats),
             StatTile(
-                label: movementGoal(in: stats).metricName,
-                value: "\(MovementGoal.formatCount(stats.avgMovementValue)) \(movementGoal(in: stats).unit)",
+                label: selectedMovementGoal.metricName,
+                value: "\(MovementGoal.formatCount(stats.avgMovementValue)) \(selectedMovementGoal.unit)",
                 sub: "\(ScoreCalculator.formatDisplayScore(stats.avgExerciseScore)) / 2",
-                icon: movementGoal(in: stats).systemImage,
+                icon: selectedMovementGoal.systemImage,
                 tint: AppTheme.tint(for: PrimaryFocus.exercise)
             ),
         ]
@@ -245,8 +246,8 @@ struct RollingSummaryView: View {
         return date.formatted(.dateTime.month(.abbreviated).day())
     }
 
-    private func movementGoal(in stats: RollingStats) -> MovementGoal {
-        stats.recordsInWindow.first?.movementGoal ?? .exerciseMinutes
+    private var selectedMovementGoal: MovementGoal {
+        appState.settingsStore.settings.movementGoal
     }
 
     private var nutritionMode: NutritionMode {
@@ -291,7 +292,9 @@ struct RollingSummaryView: View {
 
     private func metricLine(for record: DailyRecord) -> String {
         let sleep = ScoreCalculator.formatDisplayScore(record.sleepHours)
-        let movement = "\(MovementGoal.formatCount(record.movementValue)) \(record.movementGoal.unit)"
+        let goal = appState.settingsStore.settings.movementGoal
+        let movementValue = goal.countsSteps ? record.stepCount : record.exerciseMinutes
+        let movement = "\(MovementGoal.formatCount(movementValue)) \(goal.unit)"
         let nutrition: String
         if nutritionMode == .foodGroups {
             let score = FoodGroupScore.points(record.foodGroups)
