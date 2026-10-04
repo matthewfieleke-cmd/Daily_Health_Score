@@ -170,12 +170,12 @@ struct CoachSnapshot: Equatable, Sendable {
     /// Which nutrition and movement the numbers were built with.
     var modeLine: String {
         let nutrition = fiber.unit == "pts"
-            ? "Nutrition is Food groups. Call it Food groups, not fiber."
-            : "Nutrition is Fiber from Apple Health. Call it Fiber."
+            ? "Nutrition is Food groups, goal 4 points."
+            : "Nutrition is Fiber from Apple Health, goal \(Int(fiber.goal.rounded())) g."
         let movement = exercise.unit == "steps"
-            ? "Movement is Steps. Call it Steps, not exercise minutes."
-            : "Movement is Exercise Minutes. Call it Exercise Minutes, not steps."
-        return "SELECTED SETTINGS (use these names; do not announce them unless asked): \(nutrition) \(movement)"
+            ? "Movement is Steps, goal \(MovementGoal.formatCount(exercise.goal))."
+            : "Movement is Exercise Minutes, goal \(Int(exercise.goal.rounded()))."
+        return "\(nutrition) \(movement)"
     }
 
     /// "Tuesday, August 11, 2026" — the raw key reads like a serial number aloud.

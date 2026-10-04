@@ -200,22 +200,7 @@ final class CoachLiveContext {
             return "No completed days to chart yet. Today is still in progress."
         }
         pendingTrend = trend.reference(settings: settings)
-        return "Chart shown. \(chartName(metric, settings: settings)) \(trend.coachSummary) Use the chart title \(trend.title). Do not list every bar."
-    }
-
-    private func chartName(_ metric: TrendMetric, settings: UserSettings) -> String {
-        switch metric {
-        case .sleep:
-            return "This chart is Sleep."
-        case .fiber:
-            return settings.nutritionMode == .foodGroups
-                ? "This chart is Food groups, not fiber grams."
-                : "This chart is Fiber from Apple Health, in grams."
-        case .movement:
-            return settings.movementGoal.countsSteps
-                ? "This chart is Steps, not exercise minutes."
-                : "This chart is Exercise Minutes, not steps."
-        }
+        return "Chart shown. \(trend.coachSummary) Talk about the chart. Do not list every bar."
     }
 
     var bodyPayload: String {
