@@ -13,6 +13,8 @@ final class CoachLiveContext {
     var records: [DailyRecord] = []
     var todayKey: String = DateHelpers.localDateKey()
     var nutritionMode: NutritionMode = .fiber
+    /// The nutrition and movement goals selected now. Nil in tests that have not set it.
+    var scoringSettings: UserSettings?
     var goals: [SMARTGoal] = []
     var activitiesByGoal: [UUID: [SMARTGoalActivity]] = [:]
     var memoryItems: [CoachMemoryItem] = []
@@ -149,7 +151,8 @@ final class CoachLiveContext {
             records: records,
             window: window,
             todayKey: todayKey,
-            nutritionMode: nutritionMode
+            nutritionMode: scoringSettings?.nutritionMode ?? nutritionMode,
+            movementGoal: scoringSettings?.movementGoal
         )
     }
 
@@ -182,7 +185,7 @@ final class CoachLiveContext {
         guard let latest = records.max(by: { $0.date < $1.date }) else {
             return "No completed days to chart yet. Today is still in progress."
         }
-        let settings = UserSettings(
+        let settings = scoringSettings ?? UserSettings(
             sleepGoal: latest.sleepGoal,
             fiberGoal: .forty,
             movementGoal: latest.movementGoal,
@@ -197,7 +200,22 @@ final class CoachLiveContext {
             return "No completed days to chart yet. Today is still in progress."
         }
         pendingTrend = trend.reference(settings: settings)
-        return "Chart shown. \(trend.coachSummary) Talk about the chart. Do not list every bar."
+        return "Chart shown. \(chartName(metric, settings: settings)) \(trend.coachSummary) Use the chart title \(trend.title). Do not list every bar."
+    }
+
+    private func chartName(_ metric: TrendMetric, settings: UserSettings) -> String {
+        switch metric {
+        case .sleep:
+            return "This chart is Sleep."
+        case .fiber:
+            return settings.nutritionMode == .foodGroups
+                ? "This chart is Food groups, not fiber grams."
+                : "This chart is Fiber from Apple Health, in grams."
+        case .movement:
+            return settings.movementGoal.countsSteps
+                ? "This chart is Steps, not exercise minutes."
+                : "This chart is Exercise Minutes, not steps."
+        }
     }
 
     var bodyPayload: String {

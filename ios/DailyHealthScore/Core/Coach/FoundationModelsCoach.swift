@@ -211,6 +211,9 @@ final class FoundationModelsCoach {
                 framing.append(focus.openingFact.limitedToCoachBudget(CoachContextBudget.maxHistoryCharacters))
             }
         }
+        if let settings = live.scoringSettings {
+            framing.append(settings.coachModeLine)
+        }
 
         func pieces(seeding turns: [CoachChatTurn]?, budget: CoachContextBudget) -> [CoachPromptPiece] {
             CoachPrompt.pieces(

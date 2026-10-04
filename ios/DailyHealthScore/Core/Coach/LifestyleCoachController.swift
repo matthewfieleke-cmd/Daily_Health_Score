@@ -96,6 +96,7 @@ final class LifestyleCoachController: ObservableObject {
         hrvSensitivity: HRVSensitivity = .balanced,
         bodyTrend: BodyTrend? = nil,
         nutritionMode: NutritionMode = .fiber,
+        scoringSettings: UserSettings? = nil,
         force: Bool = false,
         now: Date = Date(),
         calendar: Calendar = .current
@@ -146,6 +147,12 @@ final class LifestyleCoachController: ObservableObject {
         defer { if checkInGenerationID == generationID { isGeneratingCheckIn = false } }
 
         do {
+            let settings = scoringSettings ?? UserSettings(
+                sleepGoal: record.sleepGoal,
+                fiberGoal: .forty,
+                movementGoal: record.movementGoal,
+                nutritionMode: nutritionMode
+            )
             let snapshot = CoachSnapshotBuilder.build(
                 today: record,
                 records: records,
@@ -155,21 +162,15 @@ final class LifestyleCoachController: ObservableObject {
                 now: now,
                 calendar: calendar,
                 bodyTrend: bodyTrend,
-                nutritionMode: nutritionMode
+                scoringSettings: settings
             )
             let trend = CoachTrendDigest.build(
                 records: records,
                 goals: goals,
                 activities: activities,
-                nutritionMode: nutritionMode,
+                nutritionMode: settings.nutritionMode,
                 now: now,
                 calendar: calendar
-            )
-            let settings = UserSettings(
-                sleepGoal: record.sleepGoal,
-                fiberGoal: .forty,
-                movementGoal: record.movementGoal,
-                nutritionMode: nutritionMode
             )
             let generated = try await model.generateCheckIn(
                 kind: kind,
@@ -249,7 +250,8 @@ final class LifestyleCoachController: ObservableObject {
         focus: CoachFocusContext? = nil,
         activities: [SMARTGoalActivity] = [],
         bodyTrend: BodyTrend? = nil,
-        nutritionMode: NutritionMode = .fiber
+        nutritionMode: NutritionMode = .fiber,
+        scoringSettings: UserSettings? = nil
     ) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !photoFileNames.isEmpty else { return }
@@ -307,12 +309,24 @@ final class LifestyleCoachController: ObservableObject {
                     goals: goals,
                     hrvSensitivity: hrvSensitivity,
                     bodyTrend: bodyTrend,
-                    nutritionMode: nutritionMode
+                    scoringSettings: scoringSettings ?? UserSettings(
+                        sleepGoal: todayRecord?.sleepGoal ?? .sevenHalf,
+                        fiberGoal: .forty,
+                        movementGoal: scoringSettings?.movementGoal ?? todayRecord?.movementGoal ?? .exerciseMinutes,
+                        nutritionMode: scoringSettings?.nutritionMode ?? nutritionMode
+                    )
                 )
             }
+            let activeSettings = scoringSettings ?? UserSettings(
+                sleepGoal: todayRecord?.sleepGoal ?? .sevenHalf,
+                fiberGoal: .forty,
+                movementGoal: todayRecord?.movementGoal ?? .exerciseMinutes,
+                nutritionMode: nutritionMode
+            )
             live.records = records
             live.todayKey = todayKey
-            live.nutritionMode = nutritionMode
+            live.nutritionMode = activeSettings.nutritionMode
+            live.scoringSettings = activeSettings
             live.goals = goals
             live.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
             live.memoryItems = memory.effectiveMemories
@@ -500,7 +514,8 @@ final class LifestyleCoachController: ObservableObject {
         activities: [SMARTGoalActivity],
         hrvSensitivity: HRVSensitivity,
         bodyTrend: BodyTrend?,
-        nutritionMode: NutritionMode = .fiber
+        nutritionMode: NutritionMode = .fiber,
+        scoringSettings: UserSettings? = nil
     ) async -> CoachEvalResult {
         refreshAvailability()
         let started = Date()
@@ -541,6 +556,12 @@ final class LifestyleCoachController: ObservableObject {
 
             for (index, message) in sequence.enumerated() {
                 // A throwaway turn: tools see real app state, nothing is saved.
+                let activeSettings = scoringSettings ?? UserSettings(
+                    sleepGoal: todayRecord?.sleepGoal ?? .sevenHalf,
+                    fiberGoal: .forty,
+                    movementGoal: todayRecord?.movementGoal ?? .exerciseMinutes,
+                    nutritionMode: nutritionMode
+                )
                 evalLive.snapshot = todayRecord.map {
                     CoachSnapshotBuilder.build(
                         today: $0,
@@ -548,12 +569,13 @@ final class LifestyleCoachController: ObservableObject {
                         goals: goals,
                         hrvSensitivity: hrvSensitivity,
                         bodyTrend: bodyTrend,
-                        nutritionMode: nutritionMode
+                        scoringSettings: activeSettings
                     )
                 }
                 evalLive.records = records
                 evalLive.todayKey = todayRecord?.date ?? DateHelpers.localDateKey()
-                evalLive.nutritionMode = nutritionMode
+                evalLive.nutritionMode = activeSettings.nutritionMode
+                evalLive.scoringSettings = activeSettings
                 evalLive.goals = goals
                 evalLive.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
                 evalLive.memoryItems = memory.effectiveMemories

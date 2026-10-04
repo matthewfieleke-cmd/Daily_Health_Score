@@ -191,4 +191,29 @@ final class CompletedTrendTests: XCTestCase {
         XCTAssertEqual(again.title, "Food groups")
         XCTAssertEqual(again.bars.first?.value ?? -1, 2, accuracy: 1e-9)
     }
+
+    @MainActor
+    func test_showTrendUsesTheSelectedNutritionAndMovement() {
+        let live = CoachLiveContext()
+        var day = record("2026-10-02", fiber: 40, minutes: 30, steps: 4_000)
+        day.movementGoal = .exerciseMinutes
+        day.foodGroups = FoodGroupServings(vegetables: 3, isLogged: true)
+        live.records = [day]
+        live.scoringSettings = UserSettings(
+            sleepGoal: .sevenHalf,
+            fiberGoal: .forty,
+            movementGoal: .steps10000,
+            nutritionMode: .foodGroups
+        )
+        let nutrition = live.showTrend(metric: "fiber", now: now())
+        XCTAssertTrue(nutrition.contains("Food groups"))
+        XCTAssertTrue(nutrition.contains("not fiber grams"))
+        XCTAssertEqual(live.pendingTrend?.nutritionModeRaw, NutritionMode.foodGroups.rawValue)
+
+        let movement = live.showTrend(metric: "movement", now: now())
+        XCTAssertTrue(movement.contains("Steps"))
+        XCTAssertTrue(movement.contains("not exercise minutes"))
+        XCTAssertEqual(live.pendingTrend?.movementGoalRaw, MovementGoal.steps10000.rawValue)
+        XCTAssertFalse(movement.contains("30 min"))
+    }
 }

@@ -482,7 +482,7 @@ struct LifestyleCoachChatView: View {
                 focus: focus,
                 activities: appState.smartGoalStore.activities,
                 bodyTrend: appState.bodyTrend,
-                nutritionMode: appState.settingsStore.settings.nutritionMode
+                scoringSettings: appState.settingsStore.settings
             )
         }
     }

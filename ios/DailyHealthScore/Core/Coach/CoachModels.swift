@@ -167,6 +167,17 @@ struct CoachSnapshot: Equatable, Sendable {
 
     var metrics: [CoachMetricStatus] { [sleep, fiber, exercise] }
 
+    /// Which nutrition and movement the numbers were built with.
+    var modeLine: String {
+        let nutrition = fiber.unit == "pts"
+            ? "Nutrition is Food groups. Call it Food groups, not fiber."
+            : "Nutrition is Fiber from Apple Health. Call it Fiber."
+        let movement = exercise.unit == "steps"
+            ? "Movement is Steps. Call it Steps, not exercise minutes."
+            : "Movement is Exercise Minutes. Call it Exercise Minutes, not steps."
+        return "SELECTED SETTINGS (use these names; do not announce them unless asked): \(nutrition) \(movement)"
+    }
+
     /// "Tuesday, August 11, 2026" — the raw key reads like a serial number aloud.
     var todayDisplay: String { DateHelpers.formatDisplayDate(todayKey) }
 
@@ -197,6 +208,7 @@ struct CoachSnapshot: Equatable, Sendable {
     var promptBlock: String {
         var lines: [String] = []
         lines.append("USER'S GOALS: \(goalsBlock)")
+        lines.append(modeLine)
         lines.append("DATE: \(todayDisplay)")
         lines.append("LOCAL CLOCK: \(clockLabel)")
         lines.append("TIME RULES: \(timeOfDay.promptRules)")
@@ -254,6 +266,7 @@ struct CoachSnapshot: Equatable, Sendable {
     /// have their own tools.
     var toolFacts: String {
         var lines: [String] = []
+        lines.append(modeLine)
         lines.append("Today, \(todayDisplay).")
         lines.append(String(format: "Score: %.1f of 10.", totalScore))
         for metric in metrics {

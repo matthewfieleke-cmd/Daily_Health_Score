@@ -10,9 +10,10 @@ enum CoachSnapshotBuilder {
         now: Date = Date(),
         calendar: Calendar = .current,
         bodyTrend: BodyTrend? = nil,
-        nutritionMode: NutritionMode = .fiber
+        nutritionMode: NutritionMode = .fiber,
+        scoringSettings: UserSettings? = nil
     ) -> CoachSnapshot {
-        let settings = UserSettings(
+        let settings = scoringSettings ?? UserSettings(
             sleepGoal: today.sleepGoal,
             fiberGoal: .forty,
             movementGoal: today.movementGoal,
@@ -31,11 +32,12 @@ enum CoachSnapshotBuilder {
             : RollingStatsCalculator.compute(
                 records: filledWeek,
                 windowKeys: weekKeys,
-                nutritionMode: nutritionMode
+                nutritionMode: settings.nutritionMode,
+                movementGoal: settings.movementGoal
             )
         let fiberDays = records.filter { record in
             guard weekKeys.contains(record.date) else { return false }
-            if nutritionMode == .foodGroups { return record.foodGroups.isLogged }
+            if settings.nutritionMode == .foodGroups { return record.foodGroups.isLogged }
             return record.fiberGrams > 0
         }.count
 
@@ -66,8 +68,8 @@ enum CoachSnapshotBuilder {
                 points: today.sleepScore,
                 maxPoints: 4
             ),
-            fiber: nutritionStatus(for: today, mode: nutritionMode),
-            exercise: movementStatus(for: today),
+            fiber: nutritionStatus(for: today, mode: settings.nutritionMode),
+            exercise: movementStatus(for: today, goal: settings.movementGoal),
             primaryFocus: today.primaryFocus,
             weekDaysWithData: weekStats?.daysWithData ?? 0,
             weekAvgScore: weekStats?.avgTotalScore,
@@ -90,13 +92,14 @@ enum CoachSnapshotBuilder {
     static func nutritionStatus(for record: DailyRecord, mode: NutritionMode) -> CoachMetricStatus {
         switch mode {
         case .foodGroups:
+            let points = FoodGroupScore.points(record.foodGroups)
             return status(
                 name: "Food groups",
-                value: record.fiberScore,
+                value: points,
                 goal: 4,
                 unit: "pts",
                 decimals: 1,
-                points: record.fiberScore,
+                points: points,
                 maxPoints: 4,
                 treatZeroAsMissing: !record.foodGroups.isLogged
             )
@@ -113,14 +116,19 @@ enum CoachSnapshotBuilder {
         }
     }
 
-    static func movementStatus(for record: DailyRecord) -> CoachMetricStatus {
-        status(
-            name: record.movementGoal.metricName,
-            value: record.movementValue,
-            goal: record.movementGoal.goalValue,
-            unit: record.movementGoal.unit,
+    static func movementStatus(for record: DailyRecord, goal selected: MovementGoal? = nil) -> CoachMetricStatus {
+        let goal = selected ?? record.movementGoal
+        let value = goal.countsSteps ? record.stepCount : record.exerciseMinutes
+        let points = goal == record.movementGoal
+            ? record.exerciseScore
+            : ScoreCalculator.movementPoints(value: value, goal: goal.goalValue)
+        return status(
+            name: goal.metricName,
+            value: value,
+            goal: goal.goalValue,
+            unit: goal.unit,
             decimals: 0,
-            points: record.exerciseScore,
+            points: points,
             maxPoints: 2
         )
     }

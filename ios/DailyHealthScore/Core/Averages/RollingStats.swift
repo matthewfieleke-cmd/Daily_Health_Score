@@ -19,7 +19,8 @@ enum RollingStatsCalculator {
     static func compute(
         records: [DailyRecord],
         windowKeys: [String],
-        nutritionMode: NutritionMode = .fiber
+        nutritionMode: NutritionMode = .fiber,
+        movementGoal: MovementGoal? = nil
     ) -> RollingStats? {
         let keySet = Set(windowKeys)
         let inWindow = records.filter { keySet.contains($0.date) }.sorted { $0.date > $1.date }
@@ -37,10 +38,14 @@ enum RollingStatsCalculator {
                 settings: UserSettings(
                     sleepGoal: record.sleepGoal,
                     fiberGoal: .forty,
-                    movementGoal: record.movementGoal,
+                    movementGoal: movementGoal ?? record.movementGoal,
                     nutritionMode: nutritionMode
                 )
             )
+        }
+        let movementValues = inWindow.map { record -> Double in
+            let goal = movementGoal ?? record.movementGoal
+            return goal.countsSteps ? record.stepCount : record.exerciseMinutes
         }
 
         func mean(_ values: [Double]) -> Double {
@@ -55,7 +60,7 @@ enum RollingStatsCalculator {
             avgSleepHours: mean(inWindow.map(\.sleepHours)),
             avgFiberGrams: mean(inWindow.map(\.fiberGrams)),
             avgExerciseMinutes: mean(inWindow.map(\.exerciseMinutes)),
-            avgMovementValue: mean(inWindow.map(\.movementValue)),
+            avgMovementValue: mean(movementValues),
             avgSleepScore: mean(recalculated.map(\.sleepScore)),
             avgFiberScore: mean(recalculated.map(\.fiberScore)),
             avgExerciseScore: mean(recalculated.map(\.exerciseScore)),
