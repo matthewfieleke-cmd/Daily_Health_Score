@@ -172,7 +172,7 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertFalse(charter.contains(CoachCharter.philosophy), "A literal slogan becomes copy")
         XCTAssertTrue(charter.contains("Meet the person with acceptance"))
         XCTAssertTrue(charter.contains("Never name the board unless someone asks"))
-        XCTAssertTrue(charter.contains("can take several paragraphs"))
+        XCTAssertTrue(charter.contains("Answer the question they asked"))
         XCTAssertTrue(charter.contains("stay with what they mean"))
         XCTAssertTrue(charter.contains("Offer a plan when they ask for one or are ready for one"))
         XCTAssertTrue(charter.contains("a reply can end without one"))
