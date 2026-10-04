@@ -5,8 +5,9 @@ import FoundationModels
 #endif
 
 /// DHS Lifestyle Coach on Apple Foundation Models. Private Cloud Compute
-/// thinks and answers; the on-device model does the filing (titles, summaries,
-/// pillar tags, the compiled profile, housekeeping) so it costs no quota.
+/// thinks, answers, chooses which notes belong in an answer, and tidies the
+/// memory files. The on-device model files chats and stands in when Private
+/// Cloud Compute cannot.
 @MainActor
 final class FoundationModelsCoach {
     enum CoachError: LocalizedError {
@@ -137,6 +138,84 @@ final class FoundationModelsCoach {
         #endif
     }
 
+    /// Notes for the Home card. Empty files stay empty. A failed or empty
+    /// choice does not pretend the file is gone, and does not fall back to
+    /// the newest notes.
+    func homeCardNotes(items: [CoachMemoryItem], clockLabel: String, weakestPillar: String?) async -> String {
+        guard !items.isEmpty else { return CoachNoteSelection.noSavedNotes }
+        switch await selectNotes(
+            request: CoachNoteSelection.homeCardRequest(clockLabel: clockLabel, weakestPillar: weakestPillar),
+            items: items,
+            limit: CoachNoteSelection.cardLimit
+        ) {
+        case .notes(let block):
+            return block
+        case .none, .unread:
+            return CoachNoteSelection.noneForCard
+        }
+    }
+
+    /// Ids from Private Cloud Compute, then the full text of only those notes.
+    /// Unread when that model cannot be asked or the call fails.
+    func selectNotes(
+        request: String,
+        items: [CoachMemoryItem],
+        conversations: String = "",
+        limit: Int = CoachNoteSelection.replyLimit
+    ) async -> CoachNoteSelection.Read {
+        #if canImport(FoundationModels)
+        let index = CoachNoteSelection.index(items: items, conversations: conversations)
+        guard index != CoachNoteSelection.emptyIndex else { return .none }
+        // Near the daily limit the reply itself stays on Private Cloud Compute.
+        // Choosing notes waits, so that last allowance is spent on the answer.
+        guard CoachModelProvider.isServerModelAvailable,
+              !CoachModelProvider.isServerQuotaExhausted,
+              !CoachModelProvider.isServerQuotaApproaching else { return .unread }
+        do {
+            let content = try await CoachModelProvider.respond(
+                CoachModelProvider.makeSession(
+                    tier: .privateCloud,
+                    instructions: CoachCharter.noteSelectionInstructions
+                ),
+                to: CoachNoteSelection.prompt(request: request, index: index),
+                generating: GenerableNoteSelection.self,
+                tier: .privateCloud,
+                depth: .light
+            )
+            let block = CoachNoteSelection.writerBlock(
+                chosenIDs: content.noteIDs,
+                items: items,
+                conversations: conversations,
+                limit: limit
+            )
+            return block.isEmpty ? .none : .notes(block)
+        } catch {
+            return .unread
+        }
+        #else
+        _ = (request, items, conversations, limit)
+        return .unread
+        #endif
+    }
+
+    /// What lookupWhatWeRemember tells the model. A failed read is not reported
+    /// as an empty file.
+    func noteToolPayload(topic: String, items: [CoachMemoryItem], conversations: String) async -> String {
+        switch await selectNotes(
+            request: topic,
+            items: items,
+            conversations: conversations,
+            limit: CoachNoteSelection.replyLimit
+        ) {
+        case .notes(let block):
+            return block
+        case .none:
+            return CoachNoteSelection.noMatchMessage
+        case .unread:
+            return CoachNoteSelection.unreadMessage
+        }
+    }
+
     // MARK: - Chat
 
     /// One conversation per chat, held by the framework the way any assistant
@@ -220,10 +299,25 @@ final class FoundationModelsCoach {
             .filter { $0 != userMessage }
             .suffix(1)
             .joined(separator: " ")
-        let notes = live.notesForThisMessage(userMessage, earlierUserText: earlierUserText)
-        if !notes.isEmpty {
-            framing.append(notes)
-            live.notePersonalContext()
+        let situation = framing
+            .filter { $0 != live.scoringSettings?.coachModeLine }
+            .joined(separator: "\n\n")
+        var request = CoachNoteSelection.replyRequest(
+            message: userMessage,
+            earlier: earlierUserText,
+            situation: situation
+        )
+        if request.isEmpty, !photoFileNames.isEmpty {
+            request = "The person sent a photo."
+        }
+        // Chosen notes are for this answer only. If Private Cloud Compute
+        // cannot choose, or the reply then falls back on-device, nothing is
+        // attached. Word overlap is not a substitute.
+        if tier == .privateCloud, !request.isEmpty, !live.memoryItems.isEmpty {
+            if case .notes(let notes) = await selectNotes(request: request, items: live.memoryItems) {
+                framing.append(notes)
+                live.notePersonalContext()
+            }
         }
 
         func pieces(seeding turns: [CoachChatTurn]?, budget: CoachContextBudget) -> [CoachPromptPiece] {
@@ -245,6 +339,14 @@ final class FoundationModelsCoach {
                 totalTokens: await CoachModelProvider.contextTokens(for: .privateCloud),
                 instructionCharacters: instructions.count
             )
+            live.selectNotes = { @MainActor [weak self, weak live] topic in
+                guard let self, let live else { return CoachNoteSelection.unreadMessage }
+                return await self.noteToolPayload(
+                    topic: topic,
+                    items: live.memoryItems,
+                    conversations: live.recentConversations
+                )
+            }
             let threadID = context.thread?.id
             var seed: [CoachChatTurn]? = nil
             var liveSession: LiveSession
@@ -295,6 +397,10 @@ final class FoundationModelsCoach {
                 return finish(text, tier: .privateCloud, shape: shape, live: live, fallbackReason: nil)
             } catch {
                 if let threadID { sessions[threadID] = nil }
+                framing.removeAll {
+                    $0.hasPrefix(CoachNoteSelection.savedNotesHeader)
+                        || $0.hasPrefix(CoachNoteSelection.otherChatsHeader)
+                }
                 return try await onDeviceReply(
                     userMessage: userMessage,
                     photoFileNames: photoFileNames,
@@ -508,10 +614,11 @@ final class FoundationModelsCoach {
         #endif
     }
 
-    /// Housekeeping proposals for the files, on-device. Never new opinions.
+    /// Housekeeping proposals. Private Cloud Compute when it can be asked;
+    /// the on-device model stands in. The app still checks each proposal
+    /// before anything is saved.
     func reviewFiles(entryList: String) async throws -> [CoachFileReviewOperation] {
         #if canImport(FoundationModels)
-        try ensureAvailable()
         guard entryList != "None." else { return [] }
         let prompt = """
         ENTRIES (id | file | date | stated/inferred | note). Files: aboutYou, people, patterns, coaching, goals, likes, routines, body, recent.
@@ -519,13 +626,32 @@ final class FoundationModelsCoach {
 
         Propose housekeeping operations, or none.
         """
+        func operations(from content: GenerableFileReview) -> [CoachFileReviewOperation] {
+            content.operations.prefix(6).compactMap {
+                CoachFileReviewOperation(kind: $0.kind, id: $0.id, section: $0.section, text: $0.text, basis: $0.basis)
+            }
+        }
+        let server = CoachModelProvider.isServerModelAvailable && !CoachModelProvider.isServerQuotaApproaching
+        if server {
+            do {
+                let content = try await CoachModelProvider.respond(
+                    CoachModelProvider.makeSession(tier: .privateCloud, instructions: CoachCharter.reviewInstructions),
+                    to: prompt,
+                    generating: GenerableFileReview.self,
+                    tier: .privateCloud,
+                    depth: .moderate
+                )
+                return operations(from: content)
+            } catch {
+                // The on-device model can still tidy. The files stay either way.
+            }
+        }
+        try ensureAvailable()
         let content = try await CoachModelProvider
             .makeSession(tier: .onDevice, instructions: CoachCharter.reviewInstructions)
             .respond(to: prompt, generating: GenerableFileReview.self)
             .content
-        return content.operations.prefix(6).compactMap {
-            CoachFileReviewOperation(kind: $0.kind, id: $0.id, section: $0.section, text: $0.text, basis: $0.basis)
-        }
+        return operations(from: content)
         #else
         throw CoachError.unavailable(.unavailable)
         #endif
@@ -583,6 +709,12 @@ final class FoundationModelsCoach {
 }
 
 #if canImport(FoundationModels)
+@Generable
+struct GenerableNoteSelection {
+    @Guide(description: "Ids from the list, most useful first. Empty when none of the notes would change the answer.")
+    var noteIDs: [String]
+}
+
 @Generable
 struct GenerableCoachCheckIn {
     @Guide(description: "Up to three thoughts, most useful first. Each is one or two plain sentences. Omit any that only repeats today's tiles. No headers or emoji.")

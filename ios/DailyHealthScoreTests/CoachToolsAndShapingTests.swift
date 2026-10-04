@@ -642,45 +642,15 @@ final class CoachLiveContextTests: XCTestCase {
         )
     }
 
-    func test_personLookupScopesNotesAndRecentChatsToItsTopic() async {
+    func test_memoryLookupWithoutTheModelDoesNotGuess() async {
         let live = CoachLiveContext()
         live.memoryItems = [
-            CoachMemoryItem(category: .routines, content: "Uses an AI scribe to finish patient notes at work.", provenance: .coachRecorded),
-            CoachMemoryItem(category: .likes, content: "Likes Wildberry Protein Oats.", provenance: .coachRecorded)
+            CoachMemoryItem(category: .routines, content: "Uses an AI scribe to finish patient notes at work.", provenance: .coachRecorded)
         ]
-        live.recentConversations = """
-        - Today: "Patient confidence" — Felt more confident while seeing patients.
-        - Yesterday: "Breakfast" — Compared two oat products.
-        """
-        let payload = live.personPayload(topic: "patients at work")
-        XCTAssertTrue(payload.contains("AI scribe"))
-        XCTAssertTrue(payload.contains("Patient confidence"))
-        XCTAssertFalse(payload.contains("Wildberry"))
-        XCTAssertFalse(payload.contains("\"Breakfast\""))
-    }
-
-    func test_personLookupHasARelevanceBudgetNotABiography() async {
-        let live = CoachLiveContext()
-        live.memoryItems = (0 ..< 8).map {
-            CoachMemoryItem(
-                category: .routines,
-                content: "Work routine detail \($0) helps patient flow.",
-                provenance: .coachRecorded,
-                createdAt: Date(timeIntervalSince1970: TimeInterval($0))
-            )
-        }
-        live.recentConversations = """
-        - Today: "Work one" — Talked about patient flow.
-        - Yesterday: "Work two" — Talked about work routines.
-        - 2 days ago: "Work three" — Talked about office flow.
-        """
-        let payload = live.personPayload(topic: "work patient flow")
-        let noteLines = payload.split(separator: "\n").filter { $0.contains("Work routine detail") }
-        XCTAssertEqual(noteLines.count, 6)
-        XCTAssertFalse(payload.contains("ROUTINES"))
-        XCTAssertTrue(payload.contains("Work one"))
-        XCTAssertTrue(payload.contains("Work two"))
-        XCTAssertFalse(payload.contains("Work three"))
+        live.selectNotes = { @MainActor _ in "Saved notes:\nA chosen note." }
+        XCTAssertNotNil(live.selectNotes)
+        live.beginTurn()
+        XCTAssertNil(live.selectNotes, "A new turn does not keep the previous lookup")
     }
 }
 

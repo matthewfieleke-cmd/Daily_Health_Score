@@ -25,6 +25,11 @@ final class LifestyleCoachController: ObservableObject {
     /// One on-device background compile at a time. A second caller waits,
     /// then compiles again only if the notes moved while the first one ran.
     private var profileCompileFlight: ProfileCompileFlight?
+    /// Daily file tidy. Chat and the Home card wait for one already running
+    /// so a note is not read while it is being refiled.
+    private var fileReviewFlight: Task<Void, Never>?
+    /// Filing, the memory summary, and the daily tidy after a reply is on screen.
+    private var postReplyFlight: Task<Void, Never>?
 
     private struct ProfileCompileFlight {
         var id: UUID
@@ -116,6 +121,7 @@ final class LifestyleCoachController: ObservableObject {
            cached.dateKey == record.date {
             checkIn = cached
             checkInError = nil
+            kickFileReview()
             return
         }
 
@@ -133,6 +139,7 @@ final class LifestyleCoachController: ObservableObject {
             memory.saveCheckIn(fallback, key: key + "#fallback")
             checkIn = fallback
             checkInError = nil
+            if availability == .available { kickFileReview() }
             return
         }
 
@@ -147,6 +154,8 @@ final class LifestyleCoachController: ObservableObject {
         defer { if checkInGenerationID == generationID { isGeneratingCheckIn = false } }
 
         do {
+            await waitForBackgroundMemoryWork()
+            guard checkInGenerationID == generationID else { return }
             let settings = scoringSettings ?? UserSettings(
                 sleepGoal: record.sleepGoal,
                 fiberGoal: .forty,
@@ -178,10 +187,10 @@ final class LifestyleCoachController: ObservableObject {
                 goalRows: rows,
                 trend: trend,
                 paceFacts: SMARTGoalPace.paceFacts(goals: goals, now: now, calendar: calendar),
-                notes: CoachMemoryLogic.cardNotes(
+                notes: await model.homeCardNotes(
                     items: memory.effectiveMemories,
-                    at: now,
-                    calendar: calendar
+                    clockLabel: snapshot.clockLabel,
+                    weakestPillar: weakestPillar(in: snapshot)
                 ),
                 completedFacts: CompletedTrendBuilder.promptFacts(
                     records: records,
@@ -224,6 +233,22 @@ final class LifestyleCoachController: ObservableObject {
             memory.saveCheckIn(fallback, key: key + "#fallback")
             checkIn = fallback
             checkInError = error.localizedDescription
+        }
+        kickFileReview()
+    }
+
+    /// Sleep, nutrition, or movement, named the way the card names them.
+    /// Nil when none of the three is the one with room.
+    private func weakestPillar(in snapshot: CoachSnapshot) -> String? {
+        switch snapshot.primaryFocus {
+        case .maintain:
+            return nil
+        case .sleep:
+            return snapshot.sleep.name
+        case .fiber:
+            return snapshot.fiber.name
+        case .exercise:
+            return snapshot.exercise.name
         }
     }
 
@@ -284,6 +309,8 @@ final class LifestyleCoachController: ObservableObject {
             return
         }
 
+        await waitForBackgroundMemoryWork()
+        guard chatGenerationID == generationID else { return }
         memory.keepTheMoreSpecificNotes()
         let memoryRevisionAtStart = memory.memoryRevision
         chatError = nil
@@ -374,15 +401,22 @@ final class LifestyleCoachController: ObservableObject {
                     memory.ingestUserStatedFacts(from: trimmed)
                 }
             }
-            // The reply is on screen and the files are current. Filing and the
-            // summary continue behind the composer.
-            isChatBusy = false
-            // Filing happens after the reply is on screen and costs no quota.
+            // The reply is on screen. Filing costs no quota. The daily tidy uses
+            // Private Cloud Compute when it is due. The flight is stored before
+            // the composer reopens, so the next message waits for both.
             let filingText = trimmed.isEmpty
                 ? (photoFileNames.count > 1 ? "The person sent photos." : "The person sent a photo.")
                 : trimmed
-            await fileChat(threadID: thread.id, userMessage: filingText, reply: result.message)
-            await compileProfileIfNeeded()
+            let filedThreadID = thread.id
+            let filedReply = result.message
+            postReplyFlight = Task { @MainActor in
+                defer { self.postReplyFlight = nil }
+                await self.fileChat(threadID: filedThreadID, userMessage: filingText, reply: filedReply)
+                await self.compileProfileIfNeeded()
+                self.kickFileReview(fromPostReply: true)
+                await self.waitForFileReview()
+            }
+            isChatBusy = false
         } catch {
             guard chatGenerationID == generationID else { return }
             if memory.memoryRevision == memoryRevisionAtStart {
@@ -420,7 +454,58 @@ final class LifestyleCoachController: ObservableObject {
         chatGenerationID = UUID()
     }
 
-    // MARK: - On-device filing and housekeeping
+    // MARK: - Filing and housekeeping
+
+    /// Starts the daily file tidy without waiting. A later chat or card waits
+    /// if this is still running.
+    private func kickFileReview(fromPostReply: Bool = false) {
+        guard fileReviewFlight == nil else { return }
+        // The reply's own follow-up is the one that starts the tidy. Another
+        // caller waits for that follow-up instead of starting a second pass.
+        if !fromPostReply, postReplyFlight != nil { return }
+        guard availability == .available, memory.shouldReviewFiles() else { return }
+        fileReviewFlight = Task { @MainActor in
+            defer { self.fileReviewFlight = nil }
+            await self.performFileReview()
+        }
+    }
+
+    private func waitForFileReview() async {
+        await fileReviewFlight?.value
+    }
+
+    /// Filing or a tidy still running after the previous reply.
+    private func waitForBackgroundMemoryWork() async {
+        await postReplyFlight?.value
+        await waitForFileReview()
+    }
+
+    /// Runs the tidy and waits, including one already in flight. The memory
+    /// screen uses this so the files on screen include the result.
+    func reviewFilesIfNeeded() async {
+        await waitForBackgroundMemoryWork()
+        kickFileReview()
+        await waitForFileReview()
+    }
+
+    private func performFileReview() async {
+        guard memory.shouldReviewFiles() else { return }
+        let list = memory.compilerEntryList
+        guard list != "None." else {
+            memory.markFilesReviewed()
+            return
+        }
+        do {
+            let operations = try await model.reviewFiles(entryList: list)
+            memory.markFilesReviewed()
+            if !operations.isEmpty {
+                memory.applyReview(operations)
+            }
+        } catch {
+            // A failed pass is not a tidy file. The next visit can try.
+        }
+    }
+
 
     private func fileChat(threadID: UUID, userMessage: String, reply: String) async {
         guard let thread = memory.threads.first(where: { $0.id == threadID }) else { return }

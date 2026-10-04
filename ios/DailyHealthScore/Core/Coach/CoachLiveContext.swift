@@ -53,6 +53,7 @@ final class CoachLiveContext {
         pendingTrend = nil
         toolLog = []
         requiresFreshSession = false
+        selectNotes = nil
         evidenceSearches = []
     }
 
@@ -91,6 +92,11 @@ final class CoachLiveContext {
             requiresFreshSession = true
         }
     }
+
+    /// Private Cloud Compute chooses notes for lookupWhatWeRemember during a
+    /// reply. Nil when that model is not being asked, so the tool does not
+    /// guess by word overlap.
+    var selectNotes: (@MainActor (String) async -> String)?
 
     /// Personal or changing app payloads that must not survive as hidden model
     /// transcript after the answer that requested them.
@@ -166,36 +172,8 @@ final class CoachLiveContext {
         return text.isEmpty ? "No SMART goals saved." : text
     }
 
-    /// Notes whose words overlap this message. Empty when none overlap.
-    /// The previous user message is included so "who is that?" can still find the person just mentioned.
-    func notesForThisMessage(_ message: String, earlierUserText: String = "") -> String {
-        let topic = [message, earlierUserText]
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        guard !topic.isEmpty else { return "" }
-        let notes = CoachMemoryLogic.matchingNotes(
-            items: memoryItems,
-            relevantTo: topic,
-            limit: 8
-        )
-        guard !notes.hasPrefix("No saved notes") else { return "" }
-        return "Saved notes:\n\(notes)"
-    }
-
     func notePersonalContext() {
         requiresFreshSession = true
-    }
-
-    func personPayload(topic: String) -> String {
-        let notes = CoachMemoryLogic.matchingNotes(
-            items: memoryItems,
-            relevantTo: topic,
-            limit: 6
-        )
-        let conversations = relevantConversationLines(topic: topic)
-        guard !conversations.isEmpty else { return notes }
-        return notes + "\n\n" + conversations
     }
 
     /// Shows one finished-day chart. The return is a short summary for the model.
@@ -226,21 +204,6 @@ final class CoachLiveContext {
 
     var bodyPayload: String {
         bodyTrend?.promptBlock ?? "No weight, height, age, or sex has been shared from Apple Health."
-    }
-
-    private func relevantConversationLines(topic: String) -> String {
-        let words = CoachMemoryLogic.substanceWords(in: topic)
-        guard !words.isEmpty else { return "" }
-        let normalized = topic.lowercased()
-        let broad = ["everything", "whole profile", "full profile", "all notes", "background"]
-            .contains { normalized.contains($0) }
-        let lines = recentConversations
-            .split(separator: "\n")
-            .map(String.init)
-        let relevant = broad ? lines : lines.filter {
-            !CoachMemoryLogic.substanceWords(in: $0).intersection(words).isEmpty
-        }
-        return relevant.prefix(2).joined(separator: "\n")
     }
 
     // MARK: - Actions

@@ -163,14 +163,24 @@ struct CoachLookupPersonTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
-        let payload = await context.personPayload(topic: arguments.topic)
+        let payload: String
+        if let selectNotes = await context.selectNotes {
+            payload = await selectNotes(arguments.topic)
+        } else {
+            payload = CoachNoteSelection.unreadMessage
+        }
+        let outcome: String
+        if payload == CoachNoteSelection.unreadMessage {
+            outcome = "unread"
+        } else if payload == CoachNoteSelection.noMatchMessage || payload.hasPrefix("No saved notes") {
+            outcome = "no match"
+        } else {
+            outcome = "success"
+        }
         await context.log(
             "lookupWhatWeRemember",
             detail: arguments.topic,
-            outcome: payload.hasPrefix("No saved notes match this topic.")
-                && !payload.contains("\n- ")
-                ? "no match"
-                : "success"
+            outcome: outcome
         )
         return payload
     }
