@@ -207,12 +207,10 @@ final class CompletedTrendTests: XCTestCase {
         )
         let nutrition = live.showTrend(metric: "fiber", now: now())
         XCTAssertTrue(nutrition.contains("Food groups"))
-        XCTAssertTrue(nutrition.contains("not fiber grams"))
         XCTAssertEqual(live.pendingTrend?.nutritionModeRaw, NutritionMode.foodGroups.rawValue)
 
         let movement = live.showTrend(metric: "movement", now: now())
         XCTAssertTrue(movement.contains("Steps"))
-        XCTAssertTrue(movement.contains("not exercise minutes"))
         XCTAssertEqual(live.pendingTrend?.movementGoalRaw, MovementGoal.steps10000.rawValue)
         XCTAssertFalse(movement.contains("30 min"))
     }

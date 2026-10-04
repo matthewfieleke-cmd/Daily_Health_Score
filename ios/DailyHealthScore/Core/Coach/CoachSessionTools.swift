@@ -21,7 +21,7 @@ enum CoachToolCopy {
     static let rememberAboutPerson = "Stores, updates, merges, refiles, or retires one note under 240 characters in aboutYou, people, patterns, coaching, goals, likes, routines, body, or recent. The note is what they said, third person. stated means they said it; inferred means it is a read. Only what they said, not a metric, the score, or advice. update and retire name the existing note. merge names both notes and keeps every specific. refile moves a note without rewriting it. A note that would drop a specific already on file is refused."
     static let proposeSMARTGoal = "Hands the person a SMART goal draft to review — a new goal, or an update to a saved one by exact goalID — once the action is clear. Details the person did not supply may be useful suggestions, but identify them as suggestions in your reply and invite changes. Only one draft can be on screen at a time; a second call replaces the first. Nothing is saved until they save it."
     static let logGoalCheckIn = "Asks them to confirm a check-in on a saved SMART goal for today or yesterday, after they said they completed that action. The goalID is the one on the saved goals. It is not logged until they confirm."
-    static let showTrend = "Draws one chart for the last 7 completed days, with the 30- and 90-day averages and the goal. Today is not included. Call at most once. metric is sleep, fiber, or movement. The chart uses the settings selected now. The result names it: Fiber or Food groups, and Exercise Minutes or Steps. Use that name. Do not call Food groups fiber, or Steps exercise minutes."
+    static let showTrend = "Draws a chart of sleep, fiber, or movement for the last 7 completed days, with the 30- and 90-day averages and the goal. Today is not included. Use when seeing the pattern would help more than words. Call at most once. metric is sleep, fiber, or movement. The chart follows the nutrition and movement settings selected now, and the result names that chart."
     static let readTextInPhoto = "Read the text in an attached photo, such as a nutrition label, menu, or note. Use when exact words or numbers in the photo matter."
     static let readBarcodeInPhoto = "Read a barcode or QR code in an attached photo. Use when a package code would identify the product."
 }
@@ -320,7 +320,7 @@ struct CoachShowTrendTool: Tool {
 
     @Generable
     struct Arguments {
-        @Guide(description: "sleep, fiber, or movement. fiber is the nutrition chart and movement is the movement chart. The result names which setting is selected.")
+        @Guide(description: "sleep, fiber, or movement.")
         var metric: String
     }
 
