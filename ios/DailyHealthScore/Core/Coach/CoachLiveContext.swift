@@ -166,6 +166,27 @@ final class CoachLiveContext {
         return text.isEmpty ? "No SMART goals saved." : text
     }
 
+    /// Notes whose words overlap this message. Empty when none overlap.
+    /// The previous user message is included so "who is that?" can still find the person just mentioned.
+    func notesForThisMessage(_ message: String, earlierUserText: String = "") -> String {
+        let topic = [message, earlierUserText]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard !topic.isEmpty else { return "" }
+        let notes = CoachMemoryLogic.matchingNotes(
+            items: memoryItems,
+            relevantTo: topic,
+            limit: 8
+        )
+        guard !notes.hasPrefix("No saved notes") else { return "" }
+        return "Saved notes:\n\(notes)"
+    }
+
+    func notePersonalContext() {
+        requiresFreshSession = true
+    }
+
     func personPayload(topic: String) -> String {
         let notes = CoachMemoryLogic.matchingNotes(
             items: memoryItems,
