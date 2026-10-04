@@ -144,25 +144,12 @@ final class HealthKitService {
         let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart)!
 
         async let sleepBundle = resilientSleepBundle(dayStart: dayStart, calendar: calendar)
-        async let fiberGrams = resilient { try await self.fetchFiberGrams(dayStart: dayStart, dayEnd: dayEnd) }
-        async let exerciseMinutes = resilient {
-            try await self.fetchExerciseMinutes(dayStart: dayStart, dayEnd: dayEnd)
-        }
-        async let stepCount = resilient {
-            try await self.fetchStepCount(dayStart: dayStart, dayEnd: dayEnd)
-        }
+        async let fiberGrams = fiberGramsOrZero(dayStart: dayStart, dayEnd: dayEnd)
+        async let exerciseMinutes = exerciseMinutesOrZero(dayStart: dayStart, dayEnd: dayEnd)
+        async let stepCount = stepCountOrZero(dayStart: dayStart, dayEnd: dayEnd)
 
         let bundle = await sleepBundle
-        let sleepHrvSDNNMs = await resilientOptional {
-            guard let bundle else { return nil }
-            return try await self.fetchSleepHRVSDNNMs(
-                asleepIntervals: bundle.asleepIntervals,
-                dayStart: dayStart,
-                windowStart: bundle.windowStart,
-                windowEnd: bundle.windowEnd,
-                calendar: calendar
-            )
-        }
+        let sleepHrvSDNNMs = await sleepHRVOrNil(bundle: bundle, dayStart: dayStart, calendar: calendar)
 
         return await HealthDayMetrics(
             sleepHours: bundle?.hours ?? 0,
@@ -174,13 +161,31 @@ final class HealthKitService {
         )
     }
 
-    /// Runs a single metric query, returning 0 instead of throwing so a partial
-    /// Health read (e.g. no fiber logged yet today) still yields a scored day.
-    private func resilient(_ operation: () async throws -> Double) async -> Double {
+    /// A failed query is 0, so one missing metric still yields a scored day.
+    private func fiberGramsOrZero(dayStart: Date, dayEnd: Date) async -> Double {
+        do { return try await fetchFiberGrams(dayStart: dayStart, dayEnd: dayEnd) } catch { return 0 }
+    }
+
+    private func exerciseMinutesOrZero(dayStart: Date, dayEnd: Date) async -> Double {
+        do { return try await fetchExerciseMinutes(dayStart: dayStart, dayEnd: dayEnd) } catch { return 0 }
+    }
+
+    private func stepCountOrZero(dayStart: Date, dayEnd: Date) async -> Double {
+        do { return try await fetchStepCount(dayStart: dayStart, dayEnd: dayEnd) } catch { return 0 }
+    }
+
+    private func sleepHRVOrNil(bundle: SleepFetchBundle?, dayStart: Date, calendar: Calendar) async -> Double? {
+        guard let bundle else { return nil }
         do {
-            return try await operation()
+            return try await fetchSleepHRVSDNNMs(
+                asleepIntervals: bundle.asleepIntervals,
+                dayStart: dayStart,
+                windowStart: bundle.windowStart,
+                windowEnd: bundle.windowEnd,
+                calendar: calendar
+            )
         } catch {
-            return 0
+            return nil
         }
     }
 

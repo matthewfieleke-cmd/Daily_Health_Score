@@ -14,14 +14,6 @@ extension HealthKitService {
         try? await fetchSleepBundle(dayStart: dayStart, calendar: calendar)
     }
 
-    func resilientOptional(_ operation: () async throws -> Double?) async -> Double? {
-        do {
-            return try await operation()
-        } catch {
-            return nil
-        }
-    }
-
     func fetchSleepBundle(dayStart: Date, calendar: Calendar) async throws -> SleepFetchBundle {
         guard let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
             throw HealthKitError.unavailable
