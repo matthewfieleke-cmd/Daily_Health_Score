@@ -598,9 +598,8 @@ enum CoachMemoryLogic {
         return noteWords.count <= 4 ? overlap >= 1 : overlap >= 2
     }
 
-    /// Notes relevant to the subject the Coach asked about. A tool query should
-    /// narrow what comes back; returning the whole biography would make the
-    /// query another dummy argument and invite unrelated callbacks.
+    /// Word overlap. Replies, the Home card, and memory lookup do not use this.
+    /// Private Cloud Compute chooses those notes by id.
     static func items(
         relevantTo topic: String,
         in items: [CoachMemoryItem],
@@ -667,8 +666,27 @@ enum CoachMemoryLogic {
         )
     }
 
-    /// Matching notes for a tool result. Sentences only: file headings turn
-    /// the list into an assignment.
+    /// "Sep 20: … (stated)". No file heading.
+    static func datedNoteLine(
+        for item: CoachMemoryItem,
+        at date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> String {
+        var line = "\(entryDate(item.createdAt, now: date, calendar: calendar)): \(item.displayContent)"
+        if item.provenance.isStated {
+            line += " (stated)"
+        } else if item.provenance == .coachNoted || item.provenance.yieldsToConfirmed {
+            line += " (inferred)"
+        }
+        if item.section.isStateFile,
+           let days = calendar.dateComponents([.day], from: item.createdAt, to: date).day,
+           days > recentWindowDays {
+            line += " (older)"
+        }
+        return line
+    }
+
+    /// Word-overlap notes, as sentences. Replies and lookup do not use this.
     static func matchingNotes(
         items: [CoachMemoryItem],
         relevantTo topic: String,
@@ -680,25 +698,11 @@ enum CoachMemoryLogic {
         guard !relevant.isEmpty else {
             return "No saved notes match this topic."
         }
-        return relevant.map { item in
-            var line = "\(entryDate(item.createdAt, now: date, calendar: calendar)): \(item.displayContent)"
-            if item.provenance.isStated {
-                line += " (stated)"
-            } else if item.provenance == .coachNoted || item.provenance.yieldsToConfirmed {
-                line += " (inferred)"
-            }
-            if item.section.isStateFile,
-               let days = calendar.dateComponents([.day], from: item.createdAt, to: date).day,
-               days > recentWindowDays {
-                line += " (older)"
-            }
-            return line
-        }.joined(separator: "\n")
+        return relevant.map { datedNoteLine(for: $0, at: date, calendar: calendar) }.joined(separator: "\n")
     }
 
-    /// A handful of dated notes for the Home card. Newest first, no file
-    /// headings: the card uses a note only when it changes a thought, and a
-    /// heading would turn the list into an assignment.
+    /// Newest dated lines, with no file headings. The Home card does not use
+    /// this list. Private Cloud Compute chooses the notes that card may see.
     static func cardNotes(
         items: [CoachMemoryItem],
         at date: Date = Date(),
@@ -708,20 +712,7 @@ enum CoachMemoryLogic {
         let live = itemsByOverridingContradictions(items, at: date)
             .sorted { $0.createdAt > $1.createdAt }
         guard !live.isEmpty else { return "No saved notes." }
-        return live.prefix(limit).map { item in
-            var line = "\(entryDate(item.createdAt, now: date, calendar: calendar)): \(item.displayContent)"
-            if item.provenance.isStated {
-                line += " (stated)"
-            } else if item.provenance == .coachNoted || item.provenance.yieldsToConfirmed {
-                line += " (inferred)"
-            }
-            if item.section.isStateFile,
-               let days = calendar.dateComponents([.day], from: item.createdAt, to: date).day,
-               days > recentWindowDays {
-                line += " (older)"
-            }
-            return line
-        }.joined(separator: "\n")
+        return live.prefix(limit).map { datedNoteLine(for: $0, at: date, calendar: calendar) }.joined(separator: "\n")
     }
 
     /// The durable files with nothing in them yet, in the order the intake

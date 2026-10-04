@@ -643,9 +643,35 @@ final class CoachMemoryFilesStoreTests: XCTestCase {
         XCTAssertEqual(dated.count, 1)
         XCTAssertEqual(store.effectiveMemories[0].content, "Isaac is a freshman (as of Aug 2026).")
         XCTAssertTrue(store.effectiveMemories[0].provenance.isStated)
+        let current = String(store.effectiveMemories[0].id.uuidString.prefix(8))
         XCTAssertTrue(store.applyReview([
-            CoachFileReviewOperation(kind: "retire", id: String(store.effectiveMemories[0].id.uuidString.prefix(8)), section: "", text: "", basis: "")!
+            CoachFileReviewOperation(kind: "retire", id: current, section: "", text: "", basis: "")!
         ]).isEmpty, "A stated note outside Recent is never retired by housekeeping")
+        let invented = store.applyReview([
+            CoachFileReviewOperation(kind: "update", id: current, section: "", text: "Isaac is a freshman who keeps a parrot named Mango.", basis: "")!
+        ])
+        XCTAssertTrue(invented.isEmpty, "Housekeeping cannot add a fact the files do not already say")
+        XCTAssertEqual(store.effectiveMemories[0].content, "Isaac is a freshman (as of Aug 2026).")
+    }
+
+    func test_reviewCanAddAPatternOnlyFromNotesAlreadyOnFile() {
+        let store = makeStore()
+        store.addNote(section: .patterns, content: "Binge-eats after arguments with his wife.")
+        store.addNote(section: .routines, content: "Clinic runs late on Thursdays.")
+        let grounded = store.applyReview([
+            CoachFileReviewOperation(
+                kind: "add",
+                id: "",
+                section: "patterns",
+                text: "Binge-eats after arguments when clinic runs late.",
+                basis: "inferred"
+            )!
+        ])
+        XCTAssertEqual(grounded.count, 1)
+        let invented = store.applyReview([
+            CoachFileReviewOperation(kind: "add", id: "", section: "likes", text: "Keeps a parrot named Mango.", basis: "inferred")!
+        ])
+        XCTAssertTrue(invented.isEmpty)
     }
 
     func test_compiledProfileIsInvalidatedWhenEntriesChange() {

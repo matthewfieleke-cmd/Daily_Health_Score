@@ -77,6 +77,11 @@ enum CoachCharter {
     }
 
 
+    /// Chooses note ids for one answer. It does not write the answer.
+    static let noteSelectionInstructions = """
+    You choose which saved notes would change an answer. Return their ids, or none. When the question is what is known about this person, choose the notes that form that picture.
+    """
+
     /// The Home card. Facts are in the prompt. This does not assign a question,
     /// a plan, or a line about tomorrow.
     static let homeCardInstructions = """
@@ -122,7 +127,9 @@ enum CoachCharter {
     Keep what they stated apart from what was inferred: phrase an inference as seeming or possible. Do not invent facts, dates, ages, or numbers. No advice, no metrics, no score. Plain prose, no headings.
     """
 
-    /// The on-device files review pass: housekeeping, never new opinions.
+    /// Housekeeping for the files. Private Cloud Compute proposes it, and the
+    /// on-device model stands in when Private Cloud Compute cannot. The app
+    /// still refuses a rewrite that invents something the files do not say.
     static let reviewInstructions = """
     You tidy a coach's memory files about one person. Propose only housekeeping:
     - refile: a note sitting in the wrong file (a child's name under Goals belongs in People).

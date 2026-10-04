@@ -658,6 +658,14 @@ final class CoachMemoryStore: ObservableObject {
                 guard before != after else { continue }
                 // A stated note may only gain a date or a merged detail, never shrink.
                 if item.provenance.isStated, operation.text.count < item.content.count { continue }
+                let corpus = live.map(\.displayContent)
+                guard let proposed = CoachMemoryUpdate(
+                    operation: "update",
+                    section: (operation.section ?? item.section).modelKey,
+                    text: operation.text,
+                    replaces: item.content,
+                    basis: "stated"
+                ), CoachMemoryLogic.isGrounded(proposed, inPersonsWords: "", retaining: corpus) else { continue }
                 var replacement = CoachMemoryItem(
                     category: item.category,
                     content: operation.text,
@@ -695,8 +703,15 @@ final class CoachMemoryStore: ObservableObject {
                     createdAt: now
                 )))
             case .add:
-                guard let section = operation.section,
-                      !CoachMemoryLogic.hasEquivalent(operation.text, in: memories, at: now),
+                guard let section = operation.section else { continue }
+                let corpus = live.map(\.displayContent).joined(separator: " ")
+                guard let proposed = CoachMemoryUpdate(
+                    operation: "add",
+                    section: section.modelKey,
+                    text: operation.text,
+                    basis: "inferred"
+                ), CoachMemoryLogic.isGrounded(proposed, inPersonsWords: corpus) else { continue }
+                guard !CoachMemoryLogic.hasEquivalent(operation.text, in: memories, at: now),
                       !CoachMemoryLogic.isTombstoned(content: operation.text, tombstones: tombstones) else { continue }
                 let item = CoachMemoryItem(
                     category: CoachMemoryCategory(section: section),

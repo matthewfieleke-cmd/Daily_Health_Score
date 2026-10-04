@@ -94,6 +94,7 @@ struct CoachMemoryListView: View {
             background = appState.coach.memory.compiledProfile
             appState.coach.refreshAvailability()
             await appState.coach.compileProfileIfNeeded()
+            await appState.coach.reviewFilesIfNeeded()
             background = appState.coach.memory.compiledProfile
         }
         .navigationTitle("What your coach remembers")
