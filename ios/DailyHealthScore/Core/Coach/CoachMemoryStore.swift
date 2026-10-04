@@ -20,7 +20,7 @@ struct CoachThreadSeed: Equatable, Sendable {
 
 @MainActor
 final class CoachMemoryStore: ObservableObject {
-    static let recentTurnLimit = 10
+    nonisolated static let recentTurnLimit = 10
 
     private let modelContext: ModelContext
 
@@ -659,13 +659,14 @@ final class CoachMemoryStore: ObservableObject {
                 // A stated note may only gain a date or a merged detail, never shrink.
                 if item.provenance.isStated, operation.text.count < item.content.count { continue }
                 let corpus = live.map(\.displayContent)
-                guard let proposed = CoachMemoryUpdate(
-                    operation: "update",
-                    section: (operation.section ?? item.section).modelKey,
+                let proposed = CoachMemoryUpdate(
+                    operation: .update,
+                    section: operation.section ?? item.section,
                     text: operation.text,
                     replaces: item.content,
-                    basis: "stated"
-                ), CoachMemoryLogic.isGrounded(proposed, inPersonsWords: "", retaining: corpus) else { continue }
+                    basis: .stated
+                )
+                guard CoachMemoryLogic.isGrounded(proposed, inPersonsWords: "", retaining: corpus) else { continue }
                 var replacement = CoachMemoryItem(
                     category: item.category,
                     content: operation.text,
@@ -705,12 +706,13 @@ final class CoachMemoryStore: ObservableObject {
             case .add:
                 guard let section = operation.section else { continue }
                 let corpus = live.map(\.displayContent).joined(separator: " ")
-                guard let proposed = CoachMemoryUpdate(
-                    operation: "add",
-                    section: section.modelKey,
+                let proposed = CoachMemoryUpdate(
+                    operation: .add,
+                    section: section,
                     text: operation.text,
-                    basis: "inferred"
-                ), CoachMemoryLogic.isGrounded(proposed, inPersonsWords: corpus) else { continue }
+                    basis: .inferred
+                )
+                guard CoachMemoryLogic.isGrounded(proposed, inPersonsWords: corpus) else { continue }
                 guard !CoachMemoryLogic.hasEquivalent(operation.text, in: memories, at: now),
                       !CoachMemoryLogic.isTombstoned(content: operation.text, tombstones: tombstones) else { continue }
                 let item = CoachMemoryItem(

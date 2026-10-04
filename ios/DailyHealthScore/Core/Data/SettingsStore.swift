@@ -49,9 +49,7 @@ final class SettingsStore: ObservableObject {
 
     init() {
         let sleepRaw = UserDefaults.standard.double(forKey: Keys.sleepGoal)
-        let fiberRaw = UserDefaults.standard.integer(forKey: Keys.fiberGoal)
         let sleep = SleepGoalHours(rawValue: sleepRaw == 0 ? 7.5 : sleepRaw) ?? .sevenHalf
-        let fiber = FiberGoalGrams(rawValue: fiberRaw == 0 ? 40 : fiberRaw) ?? .forty
         let movement = UserDefaults.standard.string(forKey: Keys.movementGoal)
             .flatMap(MovementGoal.init(rawValue:)) ?? .exerciseMinutes
         let nutrition = UserDefaults.standard.string(forKey: Keys.nutritionMode)
