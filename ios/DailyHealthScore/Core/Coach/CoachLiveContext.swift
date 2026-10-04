@@ -200,7 +200,7 @@ final class CoachLiveContext {
             return "No completed days to chart yet. Today is still in progress."
         }
         pendingTrend = trend.reference(settings: settings)
-        return "Chart shown. \(trend.coachSummary) Talk about the chart. Do not list every bar."
+        return "Chart shown. \(trend.coachSummary) The bars are on screen."
     }
 
     var bodyPayload: String {

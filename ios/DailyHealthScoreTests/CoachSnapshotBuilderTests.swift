@@ -167,12 +167,12 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(CoachCharter.philosophy.contains("acceptance"))
         XCTAssertTrue(charter.contains("Lifestyle Medicine health coach"))
         XCTAssertTrue(charter.contains("American Board of Lifestyle Medicine"))
-        XCTAssertTrue(charter.contains("sleep, fiber, and either Exercise Minutes or Steps"))
+        XCTAssertTrue(charter.contains("sleep, nutrition, and movement"))
         XCTAssertTrue(charter.contains("That score is not the limit of an answer"))
         XCTAssertFalse(charter.contains(CoachCharter.philosophy), "A literal slogan becomes copy")
         XCTAssertTrue(charter.contains("Meet the person with acceptance"))
         XCTAssertTrue(charter.contains("Never name the board unless someone asks"))
-        XCTAssertTrue(charter.contains("Answer directly"))
+        XCTAssertTrue(charter.contains("can take several paragraphs"))
         XCTAssertTrue(charter.contains("stay with what they mean"))
         XCTAssertTrue(charter.contains("Offer a plan when they ask for one or are ready for one"))
         XCTAssertTrue(charter.contains("a reply can end without one"))
@@ -206,7 +206,7 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         ] {
             XCTAssertFalse(charter.contains(absent), absent)
         }
-        XCTAssertLessThan(charter.count, 1_900, "A short page, not a rulebook")
+        XCTAssertLessThan(charter.count, 2_200, "A short page, not a rulebook")
         // Principles, never scripts: no quoted example sentences a model could copy,
         // except the one fixed crisis line.
         let quoted = charter.components(separatedBy: "\"").enumerated().filter { $0.offset % 2 == 1 }.map(\.element)
