@@ -10,8 +10,8 @@ import Vision
 /// What each tool returns. A description names the result. Whether this
 /// message needs the tool is the model's judgment.
 enum CoachToolCopy {
-    static let lookupTodayHealth = "Today's Daily Health Score: sleep, fiber, exercise, this week's averages, and sleep HRV when nights have been recorded."
-    static let lookupDays = "Sleep, fiber, exercise, the score, and sleep HRV for a past day or a stretch of days, with the averages across the window and the days that have no record. Give dates as yyyy-MM-dd, or count back from today with startDaysAgo and endDaysAgo."
+    static let lookupTodayHealth = "Today's sleep, nutrition, and movement, named for the settings selected now, plus the score, this week's averages, and sleep HRV when nights have been recorded."
+    static let lookupDays = "Sleep, nutrition, movement, the score, and sleep HRV for a past day or a stretch of days, with the averages and the days that have no record. Nutrition and movement follow the settings selected now. Give dates as yyyy-MM-dd, or count back from today with startDaysAgo and endDaysAgo."
     static let lookupSMARTGoals = "Saved SMART goals with exact goalIDs, progress, pace, deadlines, and cues, including a draft saved earlier in the chat. A goal this chat was opened on is marked SELECTED."
     static let lookupWhatWeRemember = "Dated notes about this person that match a topic, and summaries of other chats that match it. The topic chooses which notes come back."
     static let lookupWeightTrend = "Weight trend, BMI, age, and sex shared from Apple Health, and a kilograms figure for formulas. Age is included only when Health shared it."
@@ -21,7 +21,7 @@ enum CoachToolCopy {
     static let rememberAboutPerson = "Stores, updates, merges, refiles, or retires one note under 240 characters in aboutYou, people, patterns, coaching, goals, likes, routines, body, or recent. The note is what they said, third person. stated means they said it; inferred means it is a read. Only what they said, not a metric, the score, or advice. update and retire name the existing note. merge names both notes and keeps every specific. refile moves a note without rewriting it. A note that would drop a specific already on file is refused."
     static let proposeSMARTGoal = "Hands the person a SMART goal draft to review — a new goal, or an update to a saved one by exact goalID — once the action is clear. Details the person did not supply may be useful suggestions, but identify them as suggestions in your reply and invite changes. Only one draft can be on screen at a time; a second call replaces the first. Nothing is saved until they save it."
     static let logGoalCheckIn = "Asks them to confirm a check-in on a saved SMART goal for today or yesterday, after they said they completed that action. The goalID is the one on the saved goals. It is not logged until they confirm."
-    static let showTrend = "Draws a chart of sleep, fiber, or movement for the last 7 completed days, with the 30- and 90-day averages and the goal. Today is not included. Use when seeing the pattern would help more than words. Call at most once. metric is sleep, fiber, or movement. The chart follows the nutrition and movement settings selected now, and the result names that chart."
+    static let showTrend = "Draws one chart of sleep, nutrition, or movement for the last 7 completed days, with the 30- and 90-day averages and the goal. Today is not included. One chart is attached to the reply, and the person can switch metrics on it. metric is sleep, fiber, or movement. The chart follows the settings selected now, and the result names it."
     static let readTextInPhoto = "Read the text in an attached photo, such as a nutrition label, menu, or note. Use when exact words or numbers in the photo matter."
     static let readBarcodeInPhoto = "Read a barcode or QR code in an attached photo. Use when a package code would identify the product."
 }
