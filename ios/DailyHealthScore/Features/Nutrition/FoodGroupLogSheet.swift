@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// One day's food-group log. Closing without Save leaves the day unchanged.
+/// One day's food-group log. Each serving change is stored immediately.
+/// Close leaves the log as it is. Remove log is the explicit clear.
 struct FoodGroupLogSheet: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
@@ -24,8 +25,8 @@ struct FoodGroupLogSheet: View {
         appState.recordStore.records.first { $0.date == dateKey }?.foodGroups ?? .empty
     }
 
-    private var previewScore: Double {
-        FoodGroupScore.previewPoints(servings)
+    private var shownScore: Double {
+        FoodGroupScore.points(servings)
     }
 
     private var oneColumn: Bool { dynamicTypeSize.isAccessibilitySize }
@@ -63,20 +64,6 @@ struct FoodGroupLogSheet: View {
                     }
 
                     limitRow
-
-                    Button {
-                        appState.saveFoodGroupLog(date: dateKey, servings: servings)
-                        dismiss()
-                    } label: {
-                        Text("Save")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(AppTheme.leaf)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
 
                     if savedServings.isLogged {
                         Button("Remove log", role: .destructive) {
@@ -124,11 +111,11 @@ struct FoodGroupLogSheet: View {
 
     private var scoreHeader: some View {
         HStack(spacing: 16) {
-            NutritionScoreRing(score: previewScore)
+            NutritionScoreRing(score: shownScore)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Food groups")
                     .font(.headline)
-                Text("\(ScoreCalculator.formatDisplayScore(previewScore)) / 4")
+                Text("\(ScoreCalculator.formatDisplayScore(shownScore)) / 4")
                     .font(.title3.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
@@ -168,7 +155,12 @@ struct FoodGroupLogSheet: View {
     private func binding(for group: FoodGroup) -> Binding<Int> {
         Binding(
             get: { servings[group] },
-            set: { servings[group] = $0 }
+            set: { newValue in
+                guard servings[group] != newValue else { return }
+                servings[group] = newValue
+                servings.isLogged = true
+                appState.saveFoodGroupLog(date: dateKey, servings: servings)
+            }
         )
     }
 

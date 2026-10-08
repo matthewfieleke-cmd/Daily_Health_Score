@@ -154,7 +154,7 @@ struct DailyRecord: Identifiable, Equatable, Codable {
     var exerciseMinutes: Double
     /// Apple Health step count for the calendar day. Scored only when the movement goal is Steps.
     var stepCount: Double = 0
-    /// Manual food-group log. Empty and unlogged until the person saves the sheet.
+    /// Manual food-group log. Empty and unlogged until a serving changes.
     var foodGroups: FoodGroupServings = .empty
     /// Average SDNN (ms) from HRV readings during attributed sleep; not part of the score.
     var sleepHrvSDNNMs: Double? = nil
