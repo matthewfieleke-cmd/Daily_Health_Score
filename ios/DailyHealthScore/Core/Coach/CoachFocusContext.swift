@@ -230,7 +230,12 @@ enum CoachFocusContextBuilder {
 
     private static func nutritionSummary(_ stats: RollingStats, mode: NutritionMode) -> String {
         if mode == .foodGroups {
-            return "food groups \(ScoreCalculator.formatDisplayScore(stats.avgFiberScore)) of 4"
+            let tile = FoodGroupScore.rollingTile(
+                averagePoints: stats.avgFiberScore,
+                loggedDays: FoodGroupScore.loggedDayCount(stats.recordsInWindow),
+                days: stats.recordsInWindow.count
+            )
+            return "food groups \(tile.value), \(tile.detail)"
         }
         return "fiber \(String(format: "%.0f", stats.avgFiberGrams)) g"
     }

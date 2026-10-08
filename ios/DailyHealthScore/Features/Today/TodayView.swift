@@ -232,7 +232,8 @@ struct TodayView: View {
     }
 
     private func metricRow(for record: DailyRecord) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        let foodGlance = nutritionMode == .foodGroups ? FoodGroupScore.glance(record.foodGroups) : nil
+        return HStack(alignment: .top, spacing: 8) {
             CompactMetricCard(
                 title: "Sleep",
                 metricValue: record.sleepHours,
@@ -243,31 +244,39 @@ struct TodayView: View {
                 goalValue: record.sleepGoal.rawValue,
                 animationProgress: dialUpProgress,
                 systemImage: "moon.stars.fill",
-                tint: AppTheme.primary
+                tint: AppTheme.primary,
+                accessibilityHint: "Asks the coach about today's sleep",
+                onTap: { askCoach(about: .sleep, record: record) }
             )
-            .onTapGesture { askCoach(about: .sleep, record: record) }
             .contextMenu {
                 Button("Ask Coach about this") { askCoach(about: .sleep, record: record) }
             }
             CompactMetricCard(
                 title: nutritionMode.cardTitle,
                 metricValue: nutritionMode == .foodGroups ? record.fiberScore : record.fiberGrams,
-                unitSuffix: nutritionMode == .foodGroups ? "" : "g",
+                unitSuffix: nutritionMode == .foodGroups ? "pts" : "g",
                 usesIntegerDisplay: false,
                 scoreValue: record.fiberScore,
                 maxScore: 4,
                 goalValue: nutritionMode == .foodGroups ? 4 : UserSettings.fiberGoalGrams,
                 animationProgress: dialUpProgress,
-                systemImage: nutritionMode == .foodGroups ? "fork.knife" : "leaf.fill",
-                tint: AppTheme.leaf
-            )
-            .onTapGesture {
-                if nutritionMode == .foodGroups {
-                    showFoodLog = true
-                } else {
-                    askCoach(about: .fiber, record: record)
+                systemImage: foodGroupsSymbol(isLogged: foodGlance?.isLogged),
+                tint: AppTheme.leaf,
+                valueText: foodGlance?.isLogged == false ? foodGlance?.headline : nil,
+                detailText: foodGlance?.detail,
+                emphasizeValue: foodGlance?.isLogged == false,
+                accessibilitySummary: foodGlance?.spoken,
+                accessibilityHint: nutritionMode == .foodGroups
+                    ? "Opens today's food log"
+                    : "Asks the coach about today's fiber",
+                onTap: {
+                    if nutritionMode == .foodGroups {
+                        showFoodLog = true
+                    } else {
+                        askCoach(about: .fiber, record: record)
+                    }
                 }
-            }
+            )
             .contextMenu {
                 Button("Ask Coach about this") { askCoach(about: .fiber, record: record) }
             }
@@ -281,13 +290,19 @@ struct TodayView: View {
                 goalValue: record.movementGoal.goalValue,
                 animationProgress: dialUpProgress,
                 systemImage: record.movementGoal.systemImage,
-                tint: AppTheme.tint(for: PrimaryFocus.exercise)
+                tint: AppTheme.tint(for: PrimaryFocus.exercise),
+                accessibilityHint: "Asks the coach about today's \(record.movementGoal.metricName.lowercased())",
+                onTap: { askCoach(about: .exercise, record: record) }
             )
-            .onTapGesture { askCoach(about: .exercise, record: record) }
             .contextMenu {
                 Button("Ask Coach about this") { askCoach(about: .exercise, record: record) }
             }
         }
+    }
+
+    private func foodGroupsSymbol(isLogged: Bool?) -> String {
+        guard nutritionMode == .foodGroups else { return "leaf.fill" }
+        return isLogged == true ? "fork.knife" : "plus.circle.fill"
     }
 
     private func openChatAfterChart() {
@@ -390,6 +405,14 @@ private struct CompactMetricCard: View {
     let animationProgress: Double
     let systemImage: String
     let tint: Color
+    /// Replaces the dialing number. Used when the day has no food-group log.
+    var valueText: String? = nil
+    /// Replaces the "points / max" line. Food groups name the open group instead.
+    var detailText: String? = nil
+    var emphasizeValue: Bool = false
+    var accessibilitySummary: String? = nil
+    var accessibilityHint: String? = nil
+    var onTap: (() -> Void)? = nil
 
     private var progress: Double { max(0, min(animationProgress, 1)) }
 
@@ -445,13 +468,21 @@ private struct CompactMetricCard: View {
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(metricDisplayText)
-                    .font(.headline.weight(.bold))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .contentTransition(.numericText(value: displayedMetric))
-                if !unitSuffix.isEmpty {
+                if let valueText {
+                    Text(valueText)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(emphasizeValue ? tint : Color.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                } else {
+                    Text(metricDisplayText)
+                        .font(.headline.weight(.bold))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .contentTransition(.numericText(value: displayedMetric))
+                }
+                if valueText == nil, !unitSuffix.isEmpty {
                     Text(unitSuffix)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -471,13 +502,13 @@ private struct CompactMetricCard: View {
             .frame(height: 4)
 
             HStack(alignment: .center, spacing: 4) {
-                Text(scoreDisplayText)
+                Text(detailText ?? scoreDisplayText)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                    .contentTransition(.numericText(value: displayedScore))
+                    .contentTransition(detailText == nil ? .numericText(value: displayedScore) : .identity)
                 Spacer(minLength: 0)
                 if atOrOverGoal, progress >= 1 {
                     Image(systemName: "checkmark.circle.fill")
@@ -493,9 +524,26 @@ private struct CompactMetricCard: View {
         .background(AppTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
         .cardShadow()
+        .onTapGesture { onTap?() }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(unitSuffix.isEmpty
-            ? "\(title): \(metricDisplayText), \(scoreDisplayText)"
-            : "\(title): \(metricDisplayText) \(unitSuffix), \(scoreDisplayText)")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(accessibilityLabelText)
+        .accessibilityHint(accessibilityHint ?? "")
+        .accessibilityAction(.default) { onTap?() }
+    }
+
+    private var accessibilityLabelText: String {
+        let base: String
+        if let accessibilitySummary {
+            base = "\(title): \(accessibilitySummary)"
+        } else if unitSuffix.isEmpty {
+            base = "\(title): \(metricDisplayText), \(scoreDisplayText)"
+        } else {
+            base = "\(title): \(metricDisplayText) \(unitSuffix), \(scoreDisplayText)"
+        }
+        if atOrOverGoal, progress >= 1 {
+            return "\(base), goal met"
+        }
+        return base
     }
 }

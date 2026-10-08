@@ -116,6 +116,44 @@ final class CoachDayRangeTests: XCTestCase {
         XCTAssertEqual(text.components(separatedBy: "score 7").count - 1, 7, "six day lines plus the average")
     }
 
+    func test_foodGroupDayNamesTheOpenGroup() {
+        var day = record("2026-09-04", fiber: 12)
+        day.foodGroups = FoodGroupServings(vegetables: 1, isLogged: true)
+        let text = CoachDayRange.payload(
+            records: [day],
+            window: CoachDayRange.Window(startKey: "2026-09-04", endKey: "2026-09-04"),
+            todayKey: today,
+            nutritionMode: .foodGroups
+        )
+        XCTAssertTrue(text.contains("food groups 1.3 of 4 (logged, vegetables 1/3)"))
+        XCTAssertTrue(text.contains("Apple Health fiber 12.0 g"))
+    }
+
+    func test_unloggedFoodGroupsStayNotLogged() {
+        let text = CoachDayRange.payload(
+            records: [record("2026-09-04", fiber: 40)],
+            window: CoachDayRange.Window(startKey: "2026-09-04", endKey: "2026-09-04"),
+            todayKey: today,
+            nutritionMode: .foodGroups
+        )
+        XCTAssertTrue(text.contains("food groups 0.0 of 4 (not logged)"))
+        XCTAssertTrue(text.contains("Apple Health fiber 40.0 g"))
+        XCTAssertFalse(text.contains("fiber 40.0 g of 40"))
+    }
+
+    func test_foodGroupAverageCountsLoggedDays() {
+        var loggedDay = record("2026-09-01")
+        loggedDay.foodGroups = FoodGroupServings(vegetables: 3, fruit: 2, wholeGrains: 3, legumesNuts: 2, fish: 1, isLogged: true)
+        let text = CoachDayRange.payload(
+            records: [loggedDay, record("2026-09-02")],
+            window: CoachDayRange.Window(startKey: "2026-09-01", endKey: "2026-09-02"),
+            todayKey: today,
+            nutritionMode: .foodGroups
+        )
+        XCTAssertTrue(text.contains("1 of 2 days logged"))
+        XCTAssertTrue(text.contains("not logged"))
+    }
+
     func test_stepGoalRendersStepsAndIgnoresExerciseMinutes() {
         let window = CoachDayRange.Window(startKey: "2026-09-04", endKey: "2026-09-04")
         let text = CoachDayRange.payload(

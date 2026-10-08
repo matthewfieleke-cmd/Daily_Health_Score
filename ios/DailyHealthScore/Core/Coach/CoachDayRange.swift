@@ -101,10 +101,10 @@ enum CoachDayRange {
 
     private static func nutritionFact(_ record: DailyRecord, mode: NutritionMode) -> String {
         if mode == .foodGroups {
-            let score = ScoreCalculator.formatDisplayScore(FoodGroupScore.points(record.foodGroups))
-            let state = record.foodGroups.isLogged ? "logged" : "not logged"
+            let glance = FoodGroupScore.glance(record.foodGroups)
+            let shown = glance.isLogged ? glance.headline : "0.0"
             let grams = number(record.fiberGrams, decimals: 1)
-            return "food groups \(score) of 4 (\(state)); Apple Health fiber \(grams) g"
+            return "food groups \(shown) of 4 (\(glance.coachClause)); Apple Health fiber \(grams) g"
         }
         return "fiber \(number(record.fiberGrams, decimals: 1)) g of \(Int(UserSettings.fiberGoalGrams))"
     }
@@ -138,7 +138,9 @@ enum CoachDayRange {
         let nutrition: String
         if nutritionMode == .foodGroups {
             let points = records.map { FoodGroupScore.points($0.foodGroups) }.reduce(0, +) / count
-            nutrition = "food groups \(ScoreCalculator.formatDisplayScore(points)) of 4"
+            let logged = FoodGroupScore.loggedDayCount(records)
+            let noun = records.count == 1 ? "day" : "days"
+            nutrition = "food groups \(ScoreCalculator.formatDisplayScore(points)) of 4, \(logged) of \(records.count) \(noun) logged"
         } else {
             let fiber = records.map(\.fiberGrams).reduce(0, +) / count
             nutrition = "fiber \(number(fiber, decimals: 1)) g"
