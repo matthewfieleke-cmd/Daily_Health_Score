@@ -254,6 +254,42 @@ enum FoodGroupScore {
         return points(logged)
     }
 
+    /// What Today, the day list, and the Coach can say about one food-group day.
+    /// The card names the highest-point group that is still short. Foods to limit
+    /// come after every eat-more group is full.
+    static func glance(_ servings: FoodGroupServings) -> FoodGroupGlance {
+        guard servings.isLogged else {
+            return FoodGroupGlance(
+                headline: "Log",
+                detail: "Not logged",
+                prose: "Not logged",
+                isLogged: false
+            )
+        }
+        let shown = ScoreCalculator.formatDisplayScore(points(servings))
+        if let gap = openGap(servings) {
+            return FoodGroupGlance(
+                headline: shown,
+                detail: gap.detail,
+                prose: gap.prose,
+                isLogged: true
+            )
+        }
+        return FoodGroupGlance(headline: shown, detail: "All full", prose: "All full", isLogged: true)
+    }
+
+    /// Rolling food-group tile: the average points, then how many days were actually logged.
+    static func rollingTile(averagePoints: Double, loggedDays: Int, days: Int) -> FoodGroupRollingTile {
+        FoodGroupRollingTile(
+            value: "\(ScoreCalculator.formatDisplayScore(averagePoints)) / 4",
+            detail: "\(loggedDays) of \(days) logged"
+        )
+    }
+
+    static func loggedDayCount(_ records: [DailyRecord]) -> Int {
+        records.reduce(0) { $0 + ($1.foodGroups.isLogged ? 1 : 0) }
+    }
+
     /// Tile text. Vegetables and grains use thirds. Nothing on a tile is a decimal.
     static func tileLabel(count: Int, group: FoodGroup) -> String {
         switch group {
@@ -282,4 +318,75 @@ enum FoodGroupScore {
         guard target > 0 else { return 0 }
         return min(max(Double(count), 0) / Double(target), 1)
     }
+
+    /// Vegetables are worth the most, then fruit, grains, legumes, and protein.
+    private static func openGap(_ servings: FoodGroupServings) -> (detail: String, prose: String)? {
+        let ranked: [FoodGroup] = [.vegetables, .fruit, .wholeGrains, .legumesNuts, .fish]
+        for group in ranked where servings[group] < group.target {
+            let tile = tileLabel(count: servings[group], group: group)
+            return ("\(cardName(group)) \(tile)", "\(proseName(group)) \(tile)")
+        }
+        if servings.limited > 0 {
+            let count = servings.limited
+            if count == 1 {
+                return ("1 limited", "1 food to limit")
+            }
+            return ("\(count) limited", "\(count) foods to limit")
+        }
+        return nil
+    }
+
+    private static func cardName(_ group: FoodGroup) -> String {
+        switch group {
+        case .vegetables: return "Veg"
+        case .fruit: return "Fruit"
+        case .wholeGrains: return "Grains"
+        case .legumesNuts: return "Legumes"
+        case .fish: return "Protein"
+        case .limited: return "Limit"
+        }
+    }
+
+    private static func proseName(_ group: FoodGroup) -> String {
+        switch group {
+        case .vegetables: return "Vegetables"
+        case .fruit: return "Fruit"
+        case .wholeGrains: return "Whole grains"
+        case .legumesNuts: return "Legumes and nuts"
+        case .fish: return "Healthy protein"
+        case .limited: return "Foods to limit"
+        }
+    }
+}
+
+/// Glance copy for one food-group day. `detail` fits the Today card.
+/// `prose` is the same fact in words the Coach and VoiceOver can say.
+struct FoodGroupGlance: Equatable, Sendable {
+    var headline: String
+    var detail: String
+    var prose: String
+    var isLogged: Bool
+
+    /// Day-list clause. Unlogged days stay words, so a zero score is not implied.
+    var historyLine: String {
+        guard isLogged else { return "not logged" }
+        return "\(headline), \(detail)"
+    }
+
+    var spoken: String {
+        guard isLogged else { return "Not logged" }
+        return "\(headline) of 4, \(prose)"
+    }
+
+    /// Parenthetical the Coach reads after the point total.
+    var coachClause: String {
+        guard isLogged else { return "not logged" }
+        let words = prose.prefix(1).lowercased() + prose.dropFirst()
+        return "logged, \(words)"
+    }
+}
+
+struct FoodGroupRollingTile: Equatable, Sendable {
+    var value: String
+    var detail: String
 }

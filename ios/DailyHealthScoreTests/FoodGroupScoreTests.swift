@@ -87,6 +87,102 @@ final class FoodGroupScoreTests: XCTestCase {
         XCTAssertEqual(saved.totalScore, 4 + 1 + 2, accuracy: 1e-12)
     }
 
+    func test_glanceNamesTheOpenGroupAndAMissingLog() {
+        let unlogged = FoodGroupScore.glance(.empty)
+        XCTAssertEqual(unlogged.headline, "Log")
+        XCTAssertEqual(unlogged.detail, "Not logged")
+        XCTAssertEqual(unlogged.historyLine, "not logged")
+        XCTAssertEqual(unlogged.spoken, "Not logged")
+        XCTAssertEqual(unlogged.coachClause, "not logged")
+
+        let one = FoodGroupScore.glance(logged(vegetables: 1))
+        XCTAssertEqual(one.headline, "1.3")
+        XCTAssertEqual(one.detail, "Veg 1/3")
+        XCTAssertEqual(one.prose, "Vegetables 1/3")
+        XCTAssertEqual(one.historyLine, "1.3, Veg 1/3")
+        XCTAssertEqual(one.spoken, "1.3 of 4, Vegetables 1/3")
+        XCTAssertEqual(one.coachClause, "logged, vegetables 1/3")
+
+        let savedZeros = FoodGroupScore.glance(logged())
+        XCTAssertEqual(savedZeros.headline, "1.0")
+        XCTAssertEqual(savedZeros.detail, "Veg 0")
+        XCTAssertTrue(savedZeros.isLogged)
+
+        let fruitNext = FoodGroupScore.glance(logged(vegetables: 3))
+        XCTAssertEqual(fruitNext.headline, "2.0")
+        XCTAssertEqual(fruitNext.detail, "Fruit 0")
+
+        let grains = FoodGroupScore.glance(logged(vegetables: 3, fruit: 2, wholeGrains: 1))
+        XCTAssertEqual(grains.detail, "Grains 1/3")
+        XCTAssertEqual(grains.prose, "Whole grains 1/3")
+
+        let legumes = FoodGroupScore.glance(logged(vegetables: 3, fruit: 2, wholeGrains: 3, legumesNuts: 1))
+        XCTAssertEqual(legumes.detail, "Legumes 1 of 2")
+        XCTAssertEqual(legumes.prose, "Legumes and nuts 1 of 2")
+
+        let protein = FoodGroupScore.glance(logged(vegetables: 3, fruit: 2, wholeGrains: 3, legumesNuts: 2))
+        XCTAssertEqual(protein.detail, "Protein 0")
+        XCTAssertEqual(protein.prose, "Healthy protein 0")
+
+        let full = FoodGroupScore.glance(
+            logged(vegetables: 3, fruit: 2, wholeGrains: 3, legumesNuts: 2, fish: 1)
+        )
+        XCTAssertEqual(full.headline, "4.0")
+        XCTAssertEqual(full.detail, "All full")
+        XCTAssertEqual(full.coachClause, "logged, all full")
+
+        let oneLimited = FoodGroupScore.glance(
+            logged(vegetables: 3, fruit: 2, wholeGrains: 3, legumesNuts: 2, fish: 1, limited: 1)
+        )
+        XCTAssertEqual(oneLimited.headline, "3.7")
+        XCTAssertEqual(oneLimited.detail, "1 limited")
+        XCTAssertEqual(oneLimited.prose, "1 food to limit")
+        XCTAssertEqual(oneLimited.coachClause, "logged, 1 food to limit")
+
+        let threeLimited = FoodGroupScore.glance(
+            logged(vegetables: 3, fruit: 2, wholeGrains: 3, legumesNuts: 2, fish: 1, limited: 3)
+        )
+        XCTAssertEqual(threeLimited.headline, "3.0")
+        XCTAssertEqual(threeLimited.detail, "3 limited")
+        XCTAssertEqual(threeLimited.prose, "3 foods to limit")
+    }
+
+    func test_rollingTileShowsPointsAndHowManyDaysWereLogged() {
+        let tile = FoodGroupScore.rollingTile(averagePoints: 1.5, loggedDays: 2, days: 7)
+        XCTAssertEqual(tile.value, "1.5 / 4")
+        XCTAssertEqual(tile.detail, "2 of 7 logged")
+        XCTAssertEqual(
+            FoodGroupScore.loggedDayCount([
+                day(foodGroups: logged(vegetables: 1)),
+                day(foodGroups: .empty)
+            ]),
+            1
+        )
+    }
+
+    private func day(foodGroups: FoodGroupServings) -> DailyRecord {
+        DailyRecord(
+            date: "2026-10-02",
+            sleepHours: 0,
+            fiberGrams: 0,
+            exerciseMinutes: 0,
+            foodGroups: foodGroups,
+            sleepGoal: .sevenHalf,
+            fiberGoal: .forty,
+            sleepScore: 0,
+            fiberScore: 0,
+            exerciseScore: 0,
+            totalScore: 0,
+            sleepPercent: 0,
+            fiberPercent: 0,
+            exercisePercent: 0,
+            primaryFocus: .fiber,
+            suggestion: "",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 0)
+        )
+    }
+
     func test_healthMetricsDoNotEraseASavedLog() {
         var existing = DailyRecord(
             date: "2026-10-02",

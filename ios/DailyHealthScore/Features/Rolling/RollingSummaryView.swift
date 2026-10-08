@@ -166,6 +166,7 @@ struct RollingSummaryView: View {
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
                 .dhsCard()
             }
@@ -260,10 +261,15 @@ struct RollingSummaryView: View {
 
     private func nutritionTile(_ stats: RollingStats) -> StatTile {
         if nutritionMode == .foodGroups {
+            let tile = FoodGroupScore.rollingTile(
+                averagePoints: stats.avgFiberScore,
+                loggedDays: FoodGroupScore.loggedDayCount(stats.recordsInWindow),
+                days: stats.recordsInWindow.count
+            )
             return StatTile(
                 label: "Food groups",
-                value: ScoreCalculator.formatDisplayScore(stats.avgFiberScore),
-                sub: "\(ScoreCalculator.formatDisplayScore(stats.avgFiberScore)) / 4",
+                value: tile.value,
+                sub: tile.detail,
                 icon: "fork.knife",
                 tint: AppTheme.leaf
             )
@@ -297,8 +303,7 @@ struct RollingSummaryView: View {
         let movement = "\(MovementGoal.formatCount(movementValue)) \(goal.unit)"
         let nutrition: String
         if nutritionMode == .foodGroups {
-            let score = FoodGroupScore.points(record.foodGroups)
-            nutrition = "Food groups \(ScoreCalculator.formatDisplayScore(score))"
+            nutrition = "Food groups \(FoodGroupScore.glance(record.foodGroups).historyLine)"
         } else {
             nutrition = "Fiber \(ScoreCalculator.formatDisplayScore(record.fiberGrams))g"
         }

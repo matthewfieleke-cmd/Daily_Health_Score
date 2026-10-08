@@ -92,8 +92,9 @@ enum CoachSnapshotBuilder {
     static func nutritionStatus(for record: DailyRecord, mode: NutritionMode) -> CoachMetricStatus {
         switch mode {
         case .foodGroups:
+            let glance = FoodGroupScore.glance(record.foodGroups)
             let points = FoodGroupScore.points(record.foodGroups)
-            return status(
+            var metric = status(
                 name: "Food groups",
                 value: points,
                 goal: 4,
@@ -101,8 +102,12 @@ enum CoachSnapshotBuilder {
                 decimals: 1,
                 points: points,
                 maxPoints: 4,
-                treatZeroAsMissing: !record.foodGroups.isLogged
+                treatZeroAsMissing: !glance.isLogged
             )
+            if glance.isLogged {
+                metric.sentence += " \(glance.prose)."
+            }
+            return metric
         case .fiber:
             return status(
                 name: "Fiber",
