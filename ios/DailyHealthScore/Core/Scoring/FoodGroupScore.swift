@@ -247,13 +247,6 @@ enum FoodGroupScore {
         return fill(count, target: group.target)
     }
 
-    /// What the ring would show if this draft were saved. Editing does not save.
-    static func previewPoints(_ servings: FoodGroupServings) -> Double {
-        var logged = servings
-        logged.isLogged = true
-        return points(logged)
-    }
-
     /// What Today, the day list, and the Coach can say about one food-group day.
     /// The card names the highest-point group that is still short. Foods to limit
     /// come after every eat-more group is full.

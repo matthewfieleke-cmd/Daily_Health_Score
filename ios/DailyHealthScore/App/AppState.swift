@@ -268,7 +268,7 @@ final class AppState: ObservableObject {
         )
     }
 
-    /// Close without saving leaves the day alone. Remove log is the explicit clear.
+    /// Removes the food-group log. Sleep, fiber grams, and movement on that day stay.
     func clearFoodGroupLog(date: String) {
         let existing = recordStore.records.first { $0.date == date }
         saveManualDay(
