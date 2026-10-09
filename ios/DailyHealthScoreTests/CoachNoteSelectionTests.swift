@@ -45,7 +45,7 @@ final class CoachNoteSelectionTests: XCTestCase {
         let room = CoachNoteSelection.homeCardRequest(clockLabel: "Sunday evening")
         XCTAssertTrue(room.contains("Sunday evening"))
         XCTAssertFalse(room.contains("Sleep"))
-        XCTAssertTrue(room.contains("already on screen"))
+        XCTAssertFalse(room.contains("already on screen"))
         XCTAssertFalse(room.contains("6.1"))
         XCTAssertFalse(room.contains("most room"))
     }
