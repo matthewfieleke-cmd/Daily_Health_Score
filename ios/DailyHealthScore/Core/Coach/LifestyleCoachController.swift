@@ -125,8 +125,6 @@ final class LifestyleCoachController: ObservableObject {
             return
         }
 
-        let rows = CoachCheckInLogic.goalRows(goals: goals, activities: activities, todayKey: record.date)
-
         // Nothing has synced for today: a written card would describe an empty
         // day as a bad one. Show the waiting note under a key that never
         // matches, so the first real numbers trigger the write.
@@ -173,30 +171,23 @@ final class LifestyleCoachController: ObservableObject {
                 bodyTrend: bodyTrend,
                 scoringSettings: settings
             )
-            let trend = CoachTrendDigest.build(
-                records: records,
-                goals: goals,
-                activities: activities,
-                nutritionMode: settings.nutritionMode,
-                now: now,
-                calendar: calendar
-            )
+            let cardLive = CoachLiveContext()
+            cardLive.snapshot = snapshot
+            cardLive.records = records
+            cardLive.todayKey = record.date
+            cardLive.nutritionMode = settings.nutritionMode
+            cardLive.scoringSettings = settings
+            cardLive.goals = goals
+            cardLive.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
+            cardLive.memoryItems = memory.effectiveMemories
+            cardLive.recentConversations = memory.recentConversationsBlock()
+            cardLive.bodyTrend = bodyTrend
             let generated = try await model.generateCheckIn(
                 kind: kind,
                 snapshot: snapshot,
-                goalRows: rows,
-                trend: trend,
-                notes: await model.homeCardNotes(
-                    items: memory.effectiveMemories,
-                    clockLabel: snapshot.clockLabel
-                ),
-                completedFacts: CompletedTrendBuilder.promptFacts(
-                    records: records,
-                    settings: settings,
-                    now: now,
-                    calendar: calendar
-                ),
-                now: now
+                live: cardLive,
+                now: now,
+                calendar: calendar
             )
             guard checkInGenerationID == generationID else { return }
             var fresh = carryingReplyLink(generated)

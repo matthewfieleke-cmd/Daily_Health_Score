@@ -22,11 +22,6 @@ enum CoachSafetyGate {
         case escalate(message: String)
     }
 
-    /// What a true emergency is, for the model. Ordinary health talk stays with him.
-    static let emergencyGuidance = """
-    A true emergency is the exception. For a medical emergency, tell them to call 911 or go to an emergency department. For suicide or self-harm, tell them to call or text 988. For harm to others or abuse that is happening, tell them to call 911. If it is not a true emergency, stay and advise.
-    """
-
     static let medicalEmergencySentence = "Call 911 or go to an emergency department now."
     static let selfHarmSentence = "Call or text 988 now. If you might act on these thoughts, call 911."
     static let harmSentence = "Call 911 now."
