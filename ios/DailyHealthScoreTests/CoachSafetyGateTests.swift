@@ -12,24 +12,24 @@ final class CoachSafetyGateTests: XCTestCase {
         guard case .escalate(let message) = CoachSafetyGate.evaluate("I want to kill myself") else {
             return XCTFail("Expected escalation")
         }
-        XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
         XCTAssertTrue(message.contains("988"))
+        XCTAssertTrue(message.contains("911"))
     }
 
     func test_harmToOthersEscalatesDeterministically() {
         guard case .escalate(let message) = CoachSafetyGate.evaluate("I want to hurt someone") else {
             return XCTFail("Expected escalation")
         }
-        XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
-        XCTAssertTrue(message.lowercased().contains("emergency"))
+        XCTAssertTrue(message.contains("911"))
+        XCTAssertFalse(message.contains("988"))
     }
 
     func test_chestPainEscalates() {
         guard case .escalate(let message) = CoachSafetyGate.evaluate("I have chest pain when walking") else {
             return XCTFail("Expected escalation")
         }
-        XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
-        XCTAssertTrue(message.lowercased().contains("emergency"))
+        XCTAssertTrue(message.contains("911"))
+        XCTAssertTrue(message.lowercased().contains("emergency department"))
         XCTAssertFalse(message.contains("988"))
     }
 
@@ -37,8 +37,8 @@ final class CoachSafetyGateTests: XCTestCase {
         guard case .escalate(let message) = CoachSafetyGate.evaluate("I make myself throw up after eating") else {
             return XCTFail("Expected escalation")
         }
-        XCTAssertTrue(message.contains(CoachSafetyGate.immediateHelpSentence))
         XCTAssertTrue(message.contains("1-866-662-1235"))
+        XCTAssertFalse(message.contains("Please seek immediate"))
     }
 
     func test_laxativeForConstipationReachesTheModel() {
@@ -70,21 +70,14 @@ final class CoachSafetyGateTests: XCTestCase {
 
     func test_declinedReplyIsHonestAndStillTakesCare() {
         let eating = CoachSafetyGate.declinedReply(concern: .eating)
-        XCTAssertTrue(eating.contains("wouldn't process this message"))
-        XCTAssertTrue(eating.contains("clinician or a therapist"))
-        XCTAssertTrue(eating.contains("regular meals"), "Real help, not only a referral")
-        XCTAssertTrue(eating.contains("ten minutes between the feeling and the food"))
-        XCTAssertTrue(CoachSafetyGate.declinedReply(concern: .substance).contains("drink-free days"))
-        XCTAssertTrue(CoachSafetyGate.declinedReply(concern: .strain).contains("hard stop on the workday"))
-        XCTAssertTrue(eating.contains("?"), "Ends with a way back in")
+        XCTAssertTrue(eating.contains("declined the message"))
+        XCTAssertFalse(eating.contains("clinician"))
+        XCTAssertFalse(eating.contains("regular meals"))
         XCTAssertFalse(eating.lowercased().contains("rephras"))
-        let mood = CoachSafetyGate.declinedReply(concern: .mood)
-        XCTAssertTrue(mood.contains("988"))
-        XCTAssertTrue(mood.contains("right this minute?"))
+        XCTAssertFalse(CoachSafetyGate.declinedReply(concern: .mood).contains("988"))
         let plain = CoachSafetyGate.declinedReply(concern: nil)
-        XCTAssertFalse(plain.contains("988"))
-        XCTAssertFalse(plain.contains("honesty"), "No disclosure was made; the wording must not imply one")
-        XCTAssertTrue(plain.contains("declined the message"))
+        XCTAssertEqual(plain, eating)
+        XCTAssertFalse(plain.contains("honesty"))
     }
 
     func test_escalationNeverHedgesAboutNotBeingAProfessional() {
@@ -103,7 +96,7 @@ final class CoachSafetyGateTests: XCTestCase {
             XCTAssertFalse(lowered.contains("not an app"), crisis)
             XCTAssertFalse(lowered.contains("wellness coach"), crisis)
             XCTAssertFalse(lowered.contains("not a doctor"), crisis)
-            XCTAssertTrue(message.hasPrefix(CoachSafetyGate.immediateHelpSentence), crisis)
+            XCTAssertFalse(message.contains("Please seek immediate"), crisis)
         }
     }
 }

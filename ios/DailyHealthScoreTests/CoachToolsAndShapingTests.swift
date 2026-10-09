@@ -442,9 +442,9 @@ final class CoachReplyShapingTests: XCTestCase {
         }
         XCTAssertFalse(CoachToolCopy.lookupWhatWeRemember.contains("stranger"))
         XCTAssertFalse(CoachToolCopy.lookupTodayHealth.contains("SMART"))
-        XCTAssertTrue(CoachToolCopy.lookupFood.contains("only being recommended"))
+        XCTAssertFalse(CoachToolCopy.lookupFood.contains("only being recommended"))
         XCTAssertFalse(CoachToolCopy.lookupFood.contains("Ask for a photo"))
-        XCTAssertTrue(CoachToolCopy.searchEvidence.contains("Ordinary explanations should use your own expertise"))
+        XCTAssertFalse(CoachToolCopy.searchEvidence.contains("Ordinary explanations"))
         XCTAssertTrue(CoachToolCopy.calculate.contains("instead of computing in prose"))
         XCTAssertFalse(CoachToolCopy.logGoalCheckIn.contains("lookupSMARTGoals"))
         XCTAssertTrue(CoachToolCopy.proposeSMARTGoal.contains("Nothing is saved until they save it"))
