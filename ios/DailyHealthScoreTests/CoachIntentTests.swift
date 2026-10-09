@@ -23,7 +23,6 @@ final class CoachIntentTests: XCTestCase {
         ] {
             let intent = CoachIntentClassifier.classify(question)
             XCTAssertEqual(intent, .dataLookup, "\(question)")
-            XCTAssertTrue(intent.usesFullMetrics, "\(question)")
         }
     }
 
@@ -63,23 +62,6 @@ final class CoachIntentTests: XCTestCase {
         XCTAssertEqual(CoachIntentClassifier.classify("What should I have for breakfast?"), .education)
         XCTAssertEqual(CoachIntentClassifier.classify("What is better? Walking or running?"), .education)
         XCTAssertEqual(CoachIntentClassifier.classify("Which is better for sleep, tea or milk?"), .education)
-    }
-
-    func test_onlyPlanIntentsMayOfferANextStep() {
-        XCTAssertFalse(CoachIntent.smallTalk.allowsNextStep)
-        XCTAssertFalse(CoachIntent.education.allowsNextStep)
-        XCTAssertFalse(CoachIntent.dataLookup.allowsNextStep)
-        XCTAssertTrue(CoachIntent.planning.allowsNextStep)
-        XCTAssertTrue(CoachIntent.support.allowsNextStep)
-    }
-
-    func test_metricsAreWithheldUnlessTheUserAskedAboutDataOrAPlan() {
-        XCTAssertFalse(CoachIntent.education.usesFullMetrics)
-        XCTAssertFalse(CoachIntent.smallTalk.usesFullMetrics)
-        XCTAssertFalse(CoachIntent.support.usesFullMetrics)
-        XCTAssertFalse(CoachIntent.general.usesFullMetrics)
-        XCTAssertTrue(CoachIntent.dataLookup.usesFullMetrics)
-        XCTAssertTrue(CoachIntent.planning.usesFullMetrics)
     }
 
     func test_emotionalEatingDuringConflictIsSupport() {
@@ -148,17 +130,4 @@ final class CoachIntentTests: XCTestCase {
         XCTAssertEqual(CoachModelProvider.tier(for: .planning), expected)
     }
 
-    func test_contractsEncodeCriticalRules() {
-        XCTAssertTrue(CoachIntent.education.contract.contains("Do NOT recite the user's daily metrics"))
-        XCTAssertTrue(CoachIntent.dataLookup.contract.contains("including the goal value"))
-        XCTAssertTrue(CoachIntent.planning.contract.contains("Never write \"I will ...\" as yourself."))
-        XCTAssertTrue(CoachIntent.planning.contract.contains("permission"))
-        XCTAssertTrue(CoachIntent.support.contract.contains("Validate the feeling first"))
-        XCTAssertTrue(CoachIntent.support.contract.contains("urge surfing"))
-        XCTAssertTrue(CoachIntent.support.contract.contains("Do not mention"))
-        XCTAssertTrue(CoachIntent.planning.contract.contains("Never print BELOW GOAL"))
-        XCTAssertTrue(CoachIntent.smallTalk.contract.contains("No metrics"))
-        XCTAssertTrue(CoachIntent.education.contract.contains("Be concrete"))
-        XCTAssertTrue(CoachIntent.education.contract.contains("consult your doctor"))
-    }
 }

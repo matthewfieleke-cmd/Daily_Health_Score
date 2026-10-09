@@ -23,38 +23,6 @@ enum CoachTimeOfDay: String, Equatable, Sendable {
         }
     }
 
-    /// Model-facing rules. Prefer the soonest window that has not passed.
-    var promptRules: String {
-        switch self {
-        case .morning:
-            return """
-            It is morning. Prefer lunch or a late-morning walk. You may mention later today \
-            (afternoon, dinner, tonight) as a plan, but lead with the next window. Do not write \
-            as if it is already evening.
-            """
-        case .midday:
-            return """
-            It is midday. Lunch is the current window. Do not suggest breakfast. Afternoon, \
-            dinner, and tonight are still ahead.
-            """
-        case .afternoon:
-            return """
-            It is afternoon. Lunch has passed — do not suggest after lunch, a midday meal, \
-            or this morning. Dinner and tonight are still ahead.
-            """
-        case .evening:
-            return """
-            It is evening (about 5pm or later). Lunch and this afternoon have passed. Do not \
-            suggest after lunch, a midday walk, or anything that needed the afternoon. Invite \
-            dinner, tonight, or tomorrow morning only.
-            """
-        case .night:
-            return """
-            It is night. Do not suggest lunch, this afternoon, after work, or a daytime walk. \
-            Invite a wind-down for tonight or a small plan for tomorrow morning.
-            """
-        }
-    }
 }
 
 enum CoachClock {

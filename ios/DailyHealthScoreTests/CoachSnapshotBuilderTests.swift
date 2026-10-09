@@ -15,9 +15,8 @@ final class CoachSnapshotBuilderTests: XCTestCase {
 
         XCTAssertEqual(status.level, .below)
         XCTAssertFalse(status.isAtOrAboveGoal)
-        XCTAssertTrue(status.sentence.contains("BELOW GOAL by 3.2 g"))
-        XCTAssertTrue(status.sentence.contains("of a 40 g goal"))
-        XCTAssertTrue(status.sentence.contains("92% of goal"))
+        XCTAssertTrue(status.sentence.contains("Fiber: 36.8 g. Goal 40 g."))
+        XCTAssertFalse(status.sentence.contains("BELOW GOAL"))
         XCTAssertFalse(status.sentence.contains("EXCEEDED"))
     }
 
@@ -44,7 +43,8 @@ final class CoachSnapshotBuilderTests: XCTestCase {
             maxPoints: 2
         )
         XCTAssertEqual(exceeded.level, .exceeded)
-        XCTAssertTrue(exceeded.sentence.contains("GOAL EXCEEDED by 41 min"))
+        XCTAssertTrue(exceeded.sentence.contains("Exercise: 71 min. Goal 30 min."))
+        XCTAssertFalse(exceeded.sentence.contains("GOAL EXCEEDED"))
     }
 
     func test_missingMetricIsNotTreatedAsZeroBehavior() {
@@ -59,8 +59,8 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         )
 
         XCTAssertEqual(status.level, .missing)
-        XCTAssertTrue(status.sentence.contains("NO DATA"))
-        XCTAssertTrue(status.sentence.lowercased().contains("not necessarily zero"))
+        XCTAssertTrue(status.sentence.contains("unlogged"))
+        XCTAssertFalse(status.sentence.contains("NO DATA"))
     }
 
     func test_snapshotStatesGoalsExplicitly() {
@@ -70,8 +70,9 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(snapshot.goalsBlock.contains("Fiber goal 40 g/day"))
         XCTAssertTrue(snapshot.goalsBlock.contains("Sleep goal 7.5 h/night"))
         XCTAssertTrue(snapshot.goalsBlock.contains("Exercise Minutes goal 30 min/day"))
-        XCTAssertTrue(snapshot.promptBlock.contains("USER'S GOALS"))
-        XCTAssertTrue(snapshot.promptBlock.contains("BELOW GOAL by 3.2 g"))
+        XCTAssertTrue(snapshot.minimalBlock.contains("USER'S GOALS"))
+        XCTAssertTrue(snapshot.promptBlock.contains("Fiber: 36.8 g of a 40 g goal."))
+        XCTAssertFalse(snapshot.promptBlock.contains("BELOW GOAL"))
         let facts = snapshot.toolFacts
         XCTAssertTrue(facts.contains("Fiber: 36.8 g of a 40 g goal."))
         XCTAssertTrue(facts.contains("Sleep: 7.2 h of a 7.5 h goal."))
@@ -94,21 +95,16 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(snapshot.promptBlock.contains(snapshot.todayDisplay))
     }
 
-    func test_coachingDirective_protectsMetPillarsAndTargetsWeakest() {
-        let record = makeRecord(date: "2026-08-11", sleep: 7.2, fiber: 12, exercise: 71, focus: .fiber)
-        let snapshot = CoachSnapshotBuilder.build(today: record, records: [record], phase: .day)
-
-        let directive = snapshot.coachingDirective
-        XCTAssertTrue(directive.contains("Exercise is already at or above goal"))
-        XCTAssertTrue(directive.contains("do NOT ask for more exercise"))
-        XCTAssertTrue(directive.contains("focus on fiber"))
-    }
-
-    func test_allGoalsMet_shiftsToMaintenance() {
-        let record = makeRecord(date: "2026-08-11", sleep: 8.2, fiber: 45, exercise: 60, focus: .maintain)
-        let snapshot = CoachSnapshotBuilder.build(today: record, records: [record], phase: .day)
-
-        XCTAssertTrue(snapshot.coachingDirective.contains("All pillars met"))
+    func test_todayPartsCanReturnSleepWithoutNutrition() {
+        let record = makeRecord(date: "2026-08-11", sleep: 5.5, fiber: 15, exercise: 34, focus: .fiber)
+        let snapshot = CoachSnapshotBuilder.build(today: record, records: [record])
+        let sleep = snapshot.facts(for: [.sleep])
+        XCTAssertTrue(sleep.contains("Sleep:"))
+        XCTAssertFalse(sleep.contains("Fiber:"))
+        XCTAssertFalse(sleep.contains("BELOW GOAL"))
+        XCTAssertEqual(CoachTodayPart.parse("sleep, hrv"), Set([CoachTodayPart.sleep, .hrv]))
+        XCTAssertEqual(CoachTodayPart.parse("all"), Set(CoachTodayPart.allCases))
+        XCTAssertTrue(CoachTodayPart.parse("").isEmpty)
     }
 
     func test_profileMerge_keepsExistingWhenIncomingEmpty() {
@@ -165,21 +161,14 @@ final class CoachSnapshotBuilderTests: XCTestCase {
     func test_charter_isOnePageOfIdentityAndHardLines() {
         let charter = CoachCharter.instructions
         XCTAssertTrue(CoachCharter.philosophy.contains("acceptance"))
-        XCTAssertTrue(charter.contains("Lifestyle Medicine health coach"))
-        XCTAssertTrue(charter.contains("American Board of Lifestyle Medicine"))
+        XCTAssertTrue(charter.contains("DHS Lifestyle Coach"))
+        XCTAssertFalse(charter.contains("American Board of Lifestyle Medicine"))
         XCTAssertTrue(charter.contains("sleep, nutrition, and movement"))
         XCTAssertTrue(charter.contains("That score is not the limit of an answer"))
         XCTAssertFalse(charter.contains(CoachCharter.philosophy), "A literal slogan becomes copy")
-        XCTAssertTrue(charter.contains("Meet the person with acceptance"))
-        XCTAssertTrue(charter.contains("Never name the board unless someone asks"))
-        XCTAssertTrue(charter.contains("Answer the question they asked"))
-        XCTAssertTrue(charter.contains("stay with what they mean"))
-        XCTAssertTrue(charter.contains("Offer a plan when they ask for one or are ready for one"))
-        XCTAssertTrue(charter.contains("a reply can end without one"))
-        XCTAssertFalse(charter.contains("reflection alone is not enough"))
+        XCTAssertFalse(charter.contains("stay with what they mean"))
+        XCTAssertFalse(charter.contains("Offer a plan when they ask"))
         XCTAssertFalse(charter.contains("Motivational Interviewing"))
-        XCTAssertTrue(charter.contains("Use your own knowledge for general questions"))
-        XCTAssertTrue(charter.contains("when those facts would materially improve the answer"))
         XCTAssertFalse(charter.contains("Each tool's description says when it applies"))
         XCTAssertTrue(charter.contains("never claim something is saved"))
         XCTAssertTrue(charter.contains("You may explain health conditions, tests, medicines, and treatments"))
@@ -233,15 +222,13 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(CoachCharter.profileInstructions.contains("No advice"))
         XCTAssertFalse(CoachCharter.profileInstructions.contains("paragraph per file"))
         XCTAssertFalse(CoachCharter.profileInstructions.contains("Keep every specific"))
-        XCTAssertEqual(CoachCharter.profileCompilerGeneration, "2")
+        XCTAssertEqual(CoachCharter.profileCompilerGeneration, "3")
         XCTAssertFalse(charter.contains("family physician"))
         XCTAssertEqual(CoachCharter.instructions(for: .privateCloud), charter)
         XCTAssertEqual(CoachCharter.instructions(for: .onDevice), CoachCharter.onDeviceInstructions)
         XCTAssertNotEqual(CoachCharter.onDeviceInstructions, charter)
-        XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("from your own knowledge"))
-        XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("stay with what they mean"))
-        XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("a reply can end without one"))
-        XCTAssertFalse(CoachCharter.onDeviceInstructions.contains("reflection alone is not enough"))
+        XCTAssertFalse(CoachCharter.onDeviceInstructions.contains("stay with what they mean"))
+        XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("unavailable in this fallback"))
         XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("App data, saved goals, and memory files are unavailable"))
         XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("An ordinary unhealthy choice stays in the conversation"))
         XCTAssertTrue(CoachCharter.onDeviceInstructions.contains("For self-harm or suicide in the US, add the 988"))
@@ -255,10 +242,10 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertFalse(charter.contains("rememberAboutPerson"))
         let cardInstructions = CoachCharter.homeCardInstructions
         XCTAssertTrue(cardInstructions.contains("up to three"))
-        XCTAssertTrue(cardInstructions.contains("Do not restate today's score"))
-        XCTAssertTrue(cardInstructions.contains("TIME RULES"))
-        XCTAssertTrue(cardInstructions.contains("TREND FACTS"))
-        XCTAssertTrue(cardInstructions.contains("only when it changes the thought"))
+        XCTAssertTrue(cardInstructions.contains("already show today's score"))
+        XCTAssertFalse(cardInstructions.contains("TIME RULES"))
+        XCTAssertTrue(cardInstructions.contains("COMPLETED DAY FACTS"))
+        XCTAssertFalse(cardInstructions.contains("only when it changes the thought"))
         XCTAssertTrue(cardInstructions.contains("A commute is driving"))
         XCTAssertFalse(cardInstructions.contains("healthLine"))
         XCTAssertFalse(cardInstructions.contains("tomorrowLine"))
@@ -283,12 +270,11 @@ final class CoachSnapshotBuilderTests: XCTestCase {
 
         XCTAssertEqual(snapshot.timeOfDay, .evening)
         XCTAssertTrue(snapshot.clockLabel.contains("evening"))
-        XCTAssertTrue(snapshot.promptBlock.contains("LOCAL CLOCK"))
-        XCTAssertTrue(snapshot.promptBlock.contains("TIME RULES"))
-        XCTAssertTrue(snapshot.promptBlock.contains("Do not"))
-        XCTAssertTrue(snapshot.promptBlock.lowercased().contains("after lunch"))
+        XCTAssertTrue(snapshot.promptBlock.contains("Local time:"))
+        XCTAssertFalse(snapshot.promptBlock.contains("TIME RULES"))
+        XCTAssertFalse(snapshot.promptBlock.lowercased().contains("after lunch"))
         XCTAssertTrue(snapshot.minimalBlock.contains("LOCAL CLOCK"))
-        XCTAssertTrue(snapshot.minimalBlock.contains("TIME RULES"))
+        XCTAssertFalse(snapshot.minimalBlock.contains("TIME RULES"))
     }
 
     func test_checkIn_roundTripsThroughJSONAndSpeaksInOrder() throws {

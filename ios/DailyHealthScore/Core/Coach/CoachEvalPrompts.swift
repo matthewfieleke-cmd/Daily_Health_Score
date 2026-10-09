@@ -260,6 +260,36 @@ enum CoachEvalPrompts {
             ]
         ),
         CoachEvalPrompt(
+            id: "tired-now",
+            title: "Tired right now",
+            text: "I feel very tired right now.",
+            rubric: [
+                "Stays with the tiredness",
+                "A saved morning plan is not carried out unless they asked for one",
+                "A number appears only when it changes what the tiredness means"
+            ]
+        ),
+        CoachEvalPrompt(
+            id: "notes-between-patients",
+            title: "Notes between patients",
+            text: "I wanted to talk about staying on top of things this afternoon. I’m talking about getting my notes done between patients.",
+            rubric: [
+                "Talks about finishing the work during the day they described",
+                "Does not replace that with a sleep plan or a five-minute check-in unless they ask",
+                "A SMART goal comes in only when its own words are about this work"
+            ]
+        ),
+        CoachEvalPrompt(
+            id: "all-smart-goals",
+            title: "Every SMART goal",
+            text: "What SMART goals do I have?",
+            rubric: [
+                "Lists every saved goal by the words the person gave it",
+                "Does not invent a goal or a theme key in place of a title",
+                "Does not offer a check-in unless they said they completed an action"
+            ]
+        ),
+        CoachEvalPrompt(
             id: "on-device-general-medicine",
             title: "On-device fallback: general medicine",
             text: "What are GLP-1 receptor agonist medications?",

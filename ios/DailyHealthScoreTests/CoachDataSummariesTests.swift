@@ -54,22 +54,22 @@ final class CoachDataSummariesTests: XCTestCase {
     func test_completedGoalIsProtectedRatherThanExtended() {
         let line = CoachGoalSummarizer.line(for: goal(target: 3, filled: 3, endsInDays: 5))
 
-        XCTAssertTrue(line.contains("COMPLETE"))
-        XCTAssertTrue(line.contains("do not assign more"))
+        XCTAssertTrue(line.contains("Complete"))
+        XCTAssertFalse(line.contains("do not assign"))
     }
 
     func test_endedGoalIsFramedWithoutJudgement() {
         let line = CoachGoalSummarizer.line(for: goal(target: 5, filled: 2, endsInDays: -1))
 
-        XCTAssertTrue(line.contains("ENDED"))
-        XCTAssertTrue(line.contains("not a verdict"))
+        XCTAssertTrue(line.contains("Ended"))
+        XCTAssertFalse(line.contains("verdict"))
     }
 
     func test_pausedGoalDoesNotPromptForCheckIns() {
         let line = CoachGoalSummarizer.line(for: goal(target: 5, filled: 2, endsInDays: 4, status: .paused))
 
-        XCTAssertTrue(line.contains("PAUSED"))
-        XCTAssertTrue(line.contains("Do not prompt for check-ins"))
+        XCTAssertTrue(line.contains("Paused"))
+        XCTAssertFalse(line.contains("Do not prompt"))
     }
 
     func test_goalEndingTodayReadsAsToday() {
@@ -97,10 +97,9 @@ final class CoachDataSummariesTests: XCTestCase {
 
         let lines = CoachGoalSummarizer.lines(for: goals)
 
-        XCTAssertEqual(lines.count, CoachGoalSummarizer.maxGoalsInPrompt)
-        // Nearest active deadline first; the finished goal is crowded out.
+        XCTAssertEqual(lines.count, goals.count)
         XCTAssertTrue(lines[0].contains("active b"))
-        XCTAssertFalse(lines.contains { $0.contains("\"done\"") })
+        XCTAssertTrue(lines.contains { $0.contains("\"done\"") })
     }
 
     func test_longGoalTextCannotCrowdOutThePrompt() {
@@ -155,8 +154,7 @@ final class CoachDataSummariesTests: XCTestCase {
         let line = CoachHRVSummarizer.line(for: analysis)
 
         XCTAssertTrue(line.contains("usual range"))
-        XCTAssertTrue(line.contains("not diagnostic"))
-        XCTAssertTrue(line.contains("never diagnose"))
+        XCTAssertFalse(line.contains("never diagnose"))
     }
 
     func test_thinHistorySaysSoInsteadOfGuessing() {
@@ -169,7 +167,7 @@ final class CoachDataSummariesTests: XCTestCase {
 
         let line = CoachHRVSummarizer.line(for: analysis)
 
-        XCTAssertTrue(line.contains("building a personal baseline"))
+        XCTAssertTrue(line.contains("No range yet"))
         XCTAssertFalse(line.contains("usual range of"))
     }
 

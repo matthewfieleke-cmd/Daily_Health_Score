@@ -244,7 +244,7 @@ enum CoachCheckInLogic {
     static func goalsBlock(_ rows: [CoachCheckInGoalRow]) -> String {
         guard !rows.isEmpty else { return "No active SMART goals." }
         return rows.map { row in
-            "- \"\(row.title.limitedToCoachBudget(70))\": \(row.progressText) check-ins; \(row.loggedToday ? "logged today" : "not logged today (a missing check-in is not a missed action)")"
+            "- \"\(row.title.limitedToCoachBudget(70))\": \(row.progressText) check-ins; \(row.loggedToday ? "logged today" : "not logged today")"
         }.joined(separator: "\n")
     }
 }
@@ -286,10 +286,9 @@ struct CoachTrendDigest: Equatable, Sendable {
         let score = String(format: "%.1f", recent.avgTotalScore)
         if priorUsable, let prior {
             let delta = recent.avgTotalScore - prior.avgTotalScore
-            let direction = delta >= 0.3 ? "up from" : (delta <= -0.3 ? "down from" : "about even with")
             let priorScore = String(format: "%.1f", prior.avgTotalScore)
-            facts.append("Average score last week \(score) of 10 across \(recent.daysWithData) days, \(direction) \(priorScore) the week before.")
-            spoken.append("Last week averaged \(score) of 10, \(direction) \(priorScore).")
+            facts.append(String(format: "Average score last week \(score) of 10 across \(recent.daysWithData) days. The week before: \(priorScore). Difference %+.1f.", delta))
+            spoken.append("Last week averaged \(score) of 10. The week before was \(priorScore).")
         } else {
             facts.append("Average score last week \(score) of 10 across \(recent.daysWithData) days. No usable week before it for comparison.")
             spoken.append("Last week averaged \(score) of 10.")
@@ -304,13 +303,13 @@ struct CoachTrendDigest: Equatable, Sendable {
             fiberGoalDays = recent.recordsInWindow.filter {
                 $0.foodGroups.isLogged && FoodGroupScore.points($0.foodGroups) >= 3.95
             }.count
-            fiberFact = "Food-group goal reached on \(fiberGoalDays) of \(recent.daysWithData) logged days."
+            fiberFact = "Food groups at 4 points on \(fiberGoalDays) of \(recent.daysWithData) days."
         } else {
             fiberGoalDays = recent.recordsInWindow.filter { $0.fiberGrams >= UserSettings.fiberGoalGrams }.count
-            fiberFact = "Fiber goal reached on \(fiberGoalDays) of \(recent.daysWithData) logged days."
+            fiberFact = "Fiber at or above 40 g on \(fiberGoalDays) of \(recent.daysWithData) days."
         }
         facts.append(fiberFact)
-        spoken.append("Sleep averaged \(sleep) hours and fiber hit goal on \(fiberGoalDays) of \(recent.daysWithData) days.")
+        spoken.append("Sleep averaged \(sleep) hours. Fiber at the goal on \(fiberGoalDays) of \(recent.daysWithData) days.")
 
         let exercise = String(format: "%.0f", recent.avgExerciseMinutes)
         facts.append("Average exercise \(exercise) min per logged day.")
@@ -339,7 +338,7 @@ struct CoachTrendDigest: Equatable, Sendable {
     }
 
     var promptBlock: String {
-        "TREND FACTS (last week vs. the week before; already computed — phrase, never recompute):\n"
+        "Last week and the week before:\n"
             + facts.map { "- \($0)" }.joined(separator: "\n")
     }
 }
@@ -362,15 +361,9 @@ enum SMARTGoalPace {
         return max(expected - goal.filledCount, 0)
     }
 
-    /// Prompt lines for goals far enough behind that a smaller plan is worth offering.
+    /// Kept so older tests can read the same fact. Nothing in the live prompt uses it.
     static func directive(goals: [SMARTGoal], now: Date = Date(), calendar: Calendar = .current) -> String? {
-        let lines = goals.compactMap { goal -> String? in
-            let behind = behindCount(goal: goal, now: now, calendar: calendar)
-            guard behind >= shrinkOfferThreshold else { return nil }
-            return "- \"\(goal.specificText.limitedToCoachBudget(70))\" is \(behind) check-ins behind an even pace (\(goal.filledCount) of \(goal.targetCount)). If it comes up, offer once to shrink the plan — fewer check-ins or a smaller action — as a goalProposal update. A plan change is not a failure and not a completed action."
-        }
-        guard !lines.isEmpty else { return nil }
-        return "GOAL PACE:\n" + lines.joined(separator: "\n")
+        paceFacts(goals: goals, now: now, calendar: calendar)
     }
 
     /// The same lag, as a fact. The Home card does not tell the Coach to offer

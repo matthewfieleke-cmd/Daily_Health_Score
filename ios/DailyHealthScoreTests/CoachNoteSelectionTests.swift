@@ -2,9 +2,26 @@ import XCTest
 @testable import DailyHealthScore
 
 final class CoachNoteSelectionTests: XCTestCase {
+    func test_inferredAntidoteIsLabeledAsAnEarlierSummary() {
+        let note = CoachMemoryItem(
+            category: .patterns,
+            content: "Trigger: late notes. Antidote: rise with the alarm.",
+            provenance: .coachNoted
+        )
+        let line = CoachMemoryLogic.datedNoteLine(for: note)
+        XCTAssertTrue(line.contains("(inferred)"))
+        XCTAssertTrue(line.contains("(earlier inferred summary)"))
+        let stated = CoachMemoryItem(
+            category: .patterns,
+            content: "Antidote: rise with the alarm.",
+            provenance: .userConfirmed
+        )
+        XCTAssertFalse(CoachMemoryLogic.datedNoteLine(for: stated).contains("earlier inferred summary"))
+    }
+
     func test_selectorInstructionsAskForIdsOnly() {
         let instructions = CoachCharter.noteSelectionInstructions
-        XCTAssertTrue(instructions.contains("would change"))
+        XCTAssertTrue(instructions.contains("are about this"))
         XCTAssertTrue(instructions.contains("what is known"))
         XCTAssertFalse(instructions.lowercased().contains("do not"))
     }
@@ -25,14 +42,12 @@ final class CoachNoteSelectionTests: XCTestCase {
     }
 
     func test_homeCardRequestNamesTheMomentWithoutTodaysNumbers() {
-        let room = CoachNoteSelection.homeCardRequest(clockLabel: "Sunday evening", weakestPillar: "Sleep")
+        let room = CoachNoteSelection.homeCardRequest(clockLabel: "Sunday evening")
         XCTAssertTrue(room.contains("Sunday evening"))
-        XCTAssertTrue(room.contains("Sleep"))
+        XCTAssertFalse(room.contains("Sleep"))
         XCTAssertTrue(room.contains("already on screen"))
         XCTAssertFalse(room.contains("6.1"))
-        let open = CoachNoteSelection.homeCardRequest(clockLabel: "Monday morning", weakestPillar: nil)
-        XCTAssertTrue(open.contains("All three pillars have room"))
-        XCTAssertFalse(open.contains("most room right now is"))
+        XCTAssertFalse(room.contains("most room"))
     }
 
     func test_idsKeepOrderAndDropBlanks() {

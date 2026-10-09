@@ -191,7 +191,8 @@ final class CoachFocusContextTests: XCTestCase {
         )
         let focus = CoachFocusContextBuilder.metric(.sleep, record: record, nowKey: "2026-09-10")
         XCTAssertTrue(focus.missingData.localizedCaseInsensitiveContains("unlogged"))
-        XCTAssertTrue(focus.valueSummary.contains("NO DATA"))
+        XCTAssertTrue(focus.valueSummary.contains("unlogged"))
+        XCTAssertFalse(focus.valueSummary.contains("NO DATA"))
         XCTAssertFalse(focus.missingData.contains("zero sleep"))
     }
 }

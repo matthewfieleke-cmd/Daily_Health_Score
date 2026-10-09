@@ -1,7 +1,6 @@
 import Foundation
 
-/// What the user is actually asking for. Routing happens in Swift so each
-/// intent gets its own response contract instead of one generic prompt.
+/// A label for the eval screen. It does not steer a reply.
 enum CoachIntent: String, Equatable, Sendable {
     /// "What is my fiber goal?", "How did I do today?"
     case dataLookup
@@ -16,102 +15,9 @@ enum CoachIntent: String, Equatable, Sendable {
     /// Anything else conversational.
     case general
 
-    /// Whether a suggestion belongs in the reply at all. Questions that did not
-    /// ask for a plan should never collect one.
-    var allowsNextStep: Bool {
-        switch self {
-        case .planning, .support, .general: return true
-        case .dataLookup, .education, .smallTalk: return false
-        }
-    }
-
     /// Every chat turn prefers Private Cloud Compute. On-device is only the
     /// fallback when the server model is unavailable or the request fails.
     var prefersServerModel: Bool { true }
-
-    /// Whether today's metric lines belong in the prompt. Withholding them is the
-    /// only reliable way to stop the model from steering every answer back to them.
-    var usesFullMetrics: Bool {
-        switch self {
-        case .dataLookup, .planning: return true
-        case .education, .smallTalk, .support, .general: return false
-        }
-    }
-
-    /// Response shape appended to the chat prompt.
-    var contract: String {
-        switch self {
-        case .dataLookup:
-            return """
-            RESPONSE CONTRACT (data question):
-            1. First sentence answers the question with the exact numbers from the snapshot,
-               including the goal value when the question involves a goal.
-            2. State the correct comparison exactly as the status line says (below / met / exceeded).
-            3. At most one short follow-on sentence. No coaching lecture. No new plan unless asked.
-            """
-        case .education:
-            return """
-            RESPONSE CONTRACT (education or recommendation question):
-            1. Lead with a direct verdict in the first sentence. Take a position the evidence
-               supports rather than opening with "it depends", "while I'm not a doctor",
-               or "consult your doctor".
-            2. Then give the substance behind it, using the reference material provided:
-               what the evidence actually shows, the specific numbers, foods, or amounts, and
-               the trade-offs. Be concrete. Use as much of the reference material as genuinely
-               answers the question — a real question deserves a real explanation, not three sentences.
-            3. If a common counter-argument or worry exists in the reference material, name it
-               and say what the evidence says about it. That is often the most useful part.
-            4. Close with the practical takeaway — what this means for what someone actually
-               buys, cooks, or does. One or two sentences.
-            5. If the question compares two things, say what each one is better for and what
-               actually decides between them.
-            6. Do NOT recite the user's daily metrics, and do NOT append an unrelated next step.
-            7. Never pad. If the reference material is thin, a shorter honest answer is correct,
-               and saying what is genuinely uncertain is part of a good answer.
-            """
-        case .planning:
-            return """
-            RESPONSE CONTRACT (planning request):
-            1. Answer like a person in the room, not a dashboard. Never print BELOW GOAL,
-               GOAL MET, or similar tokens.
-            2. Ask permission or offer a choice before advising if they have not already asked
-               for a plan. Elicit what they already know, then offer options.
-            3. Offer one or two concrete options a person would actually do tonight, then let
-               them choose. Never issue commands. Never list five foods.
-            4. Phrase any implementation intention as THEIR plan and in second person, e.g.
-               "You could try: after dinner, walk 10 minutes." Never write "I will ..." as yourself.
-            5. Keep the plan smaller than feels necessary. If they sound unsure, shrink it
-               and ask how confident they feel, 0 to 10.
-            """
-        case .support:
-            return """
-            RESPONSE CONTRACT (emotional support):
-            1. Validate the feeling first, specifically and without rushing to fix it.
-            2. Stay with what they named — the fight, the overeating, the shame. Do not mention
-               today's fiber, sleep, exercise, or score unless they asked about those numbers.
-            3. Normalize ambivalence or setback; a lapse is information, never a character verdict.
-            4. If a skill would help, offer one in plain language (paced breathing, urge surfing,
-               opposite action, STOP) as an invitation, not an assignment. Otherwise ask what would help.
-            5. No metrics dump. No cheerleading clichés. No closing with a food goal.
-            """
-        case .smallTalk:
-            return """
-            RESPONSE CONTRACT (small talk or a simple factual question):
-            1. Answer plainly in one or two sentences. Nothing else is needed.
-            2. No metrics, no pillar education, no suggestion, no next step.
-            3. Warmth is welcome; a lecture is not.
-            """
-        case .general:
-            return """
-            RESPONSE CONTRACT (general):
-            1. Respond directly to what was actually said before adding anything else.
-            2. Do not mention today's fiber, sleep, exercise, or score unless they asked.
-            3. Offer a next step only if their message invites one, and never one you
-               have already suggested in this conversation.
-            """
-        }
-    }
-
 }
 
 /// Deterministic keyword routing. A phrase ending in a space requires a word
