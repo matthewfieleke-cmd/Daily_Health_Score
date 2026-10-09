@@ -78,10 +78,7 @@ struct CoachFocusContext: Identifiable, Equatable, Sendable {
     }
 
     var promptBlock: String {
-        var lines = [
-            "SELECTED COACHING CONTEXT (built by the app; do not replace it with today's data unless the user asks about today):",
-            "Screen: \(title)."
-        ]
+        var lines = ["They opened \(title)."]
         if let metricName {
             lines.append("Metric: \(metricName)\(unit.map { " (\($0))" } ?? "").")
         }
@@ -94,10 +91,6 @@ struct CoachFocusContext: Identifiable, Equatable, Sendable {
         if !baselineComparison.isEmpty { lines.append(baselineComparison) }
         if !freshness.isEmpty { lines.append(freshness) }
         if !missingData.isEmpty { lines.append(missingData) }
-        if isHistorical {
-            lines.append("This is a historical selection. Do not silently switch to today.")
-        }
-        lines.append("Missing Health data is unlogged, not zero activity and not invented behavior.")
         return lines.joined(separator: "\n")
     }
 
@@ -146,7 +139,7 @@ enum CoachFocusContextBuilder {
             )
         }
         let missing = status.level == .missing
-            ? "\(status.name) is unlogged for \(DateHelpers.formatDisplayDate(record.date)) — not zero behavior."
+            ? "\(status.name) is unlogged for \(DateHelpers.formatDisplayDate(record.date))."
             : ""
         return CoachFocusContext(
             feature: feature,
@@ -170,7 +163,7 @@ enum CoachFocusContextBuilder {
         let end = windowKeys.last ?? ""
         let missingDays = max(stats.daysInWindow - stats.daysWithData, 0)
         let missing = missingDays > 0
-            ? "\(missingDays) day(s) in this window have no saved record. That is missing data, not zero sleep, fiber, or movement."
+            ? "\(missingDays) day(s) in this window have no saved record."
             : ""
         let movement = stats.recordsInWindow.first?.movementGoal ?? .exerciseMinutes
         return CoachFocusContext(
@@ -202,8 +195,8 @@ enum CoachFocusContextBuilder {
                 startDateKey: dateKey,
                 endDateKey: dateKey,
                 valueSummary: "No saved record for \(DateHelpers.formatDisplayDate(dateKey)).",
-                freshness: "Today is \(DateHelpers.formatDisplayDate(todayKey)). Do not substitute it.",
-                missingData: "No Health-backed record is stored for this date. That is missing data, not zero activity."
+                freshness: "Today is \(DateHelpers.formatDisplayDate(todayKey)).",
+                missingData: "No record is stored for this date."
             )
         }
         let sleep = CoachSnapshotBuilder.status(
@@ -224,7 +217,7 @@ enum CoachFocusContextBuilder {
                 : "This is \(DateHelpers.formatDisplayDate(dateKey)), not today (\(DateHelpers.formatDisplayDate(todayKey))).",
             missingData: missingBits.isEmpty
                 ? ""
-                : "\(missingBits.joined(separator: ", ")) unlogged on this day — not zero behavior."
+                : "\(missingBits.joined(separator: ", ")) unlogged on this day."
         )
     }
 
@@ -248,7 +241,7 @@ enum CoachFocusContextBuilder {
             startDateKey: startDateKey,
             endDateKey: endDateKey,
             valueSummary: CoachHRVSummarizer.line(for: analysis),
-            baselineComparison: "HRV uses this person's SDNN sleep values. Do not use rMSSD terminology or treat this as diagnosis, psychological stress, or definitive exercise readiness.",
+            baselineComparison: "SDNN milliseconds from this person's sleep. Not a diagnosis.",
             freshness: "Selected HRV window \(DateHelpers.formatDisplayDate(startDateKey)) through \(DateHelpers.formatDisplayDate(endDateKey)). Today is \(DateHelpers.formatDisplayDate(todayKey)).",
             missingData: analysis.acuteNightsWithData == 0
                 ? "No SDNN nights are available in this window."
@@ -258,7 +251,7 @@ enum CoachFocusContextBuilder {
 
     static func sleepDiagnostic(dateKey: String, attributedHours: Double, sampleCount: Int) -> CoachFocusContext {
         let missing = sampleCount == 0
-            ? "No sleep samples were returned for this wake day. That is missing Health data, not a night of zero sleep."
+            ? "No sleep samples were returned for this wake day."
             : ""
         return CoachFocusContext(
             feature: .sleepDiagnostic,

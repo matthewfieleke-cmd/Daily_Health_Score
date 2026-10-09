@@ -93,7 +93,7 @@ final class CoachCheckInLogicTests: XCTestCase {
         let directive = SMARTGoalPace.directive(goals: [goal], now: CoachTestFixtures.now, calendar: calendar)
         XCTAssertNotNil(directive)
         XCTAssertTrue(directive?.contains("read ten pages") == true)
-        XCTAssertTrue(directive?.contains("not a failure") == true)
+        XCTAssertFalse(directive?.contains("offer") == true)
         let facts = SMARTGoalPace.paceFacts(goals: [goal], now: CoachTestFixtures.now, calendar: calendar)
         XCTAssertTrue(facts?.contains("3 check-ins behind an even pace") == true)
         XCTAssertFalse(facts?.contains("goalProposal") == true)
@@ -125,10 +125,10 @@ final class CoachCheckInLogicTests: XCTestCase {
         }
         let digest = CoachTrendDigest.build(records: records, goals: [], activities: [], now: now, calendar: calendar)
         XCTAssertNotNil(digest)
-        XCTAssertTrue(digest?.facts.first?.contains("up from") == true)
-        XCTAssertTrue(digest?.facts.contains { $0.contains("Fiber goal reached on 7 of 7") } == true)
+        XCTAssertTrue(digest?.facts.first?.contains("Difference +") == true)
+        XCTAssertTrue(digest?.facts.contains { $0.contains("Fiber at or above 40 g on 7 of 7") } == true)
         XCTAssertTrue(digest?.sentence.contains("of 10") == true)
-        XCTAssertTrue(digest?.promptBlock.hasPrefix("TREND FACTS") == true)
+        XCTAssertTrue(digest?.promptBlock.hasPrefix("Last week") == true)
         XCTAssertFalse(digest?.sentence.contains("**") == true)
     }
 

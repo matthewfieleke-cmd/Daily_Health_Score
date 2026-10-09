@@ -22,13 +22,6 @@ final class CoachHomeCardTests: XCTestCase {
         XCTAssertEqual(CoachTimeOfDay.current(from: date(hour: 3, minute: 0), calendar: calendar), .night)
     }
 
-    func test_eveningPromptRules_forbidAfterLunch() {
-        let rules = CoachTimeOfDay.evening.promptRules.lowercased()
-        XCTAssertTrue(rules.contains("after lunch"))
-        XCTAssertTrue(rules.contains("do not"))
-        XCTAssertTrue(rules.contains("dinner") || rules.contains("tonight"))
-    }
-
     func test_fiberAt6pm_doesNotSuggestLunch() {
         let record = makeRecord(sleep: 7.2, fiber: 12, exercise: 40, focus: .fiber)
         let move = HomeCoachCardCopy.nextMove(for: record, timeOfDay: .evening).lowercased()

@@ -186,11 +186,9 @@ final class LifestyleCoachController: ObservableObject {
                 snapshot: snapshot,
                 goalRows: rows,
                 trend: trend,
-                paceFacts: SMARTGoalPace.paceFacts(goals: goals, now: now, calendar: calendar),
                 notes: await model.homeCardNotes(
                     items: memory.effectiveMemories,
-                    clockLabel: snapshot.clockLabel,
-                    weakestPillar: weakestPillar(in: snapshot)
+                    clockLabel: snapshot.clockLabel
                 ),
                 completedFacts: CompletedTrendBuilder.promptFacts(
                     records: records,
@@ -235,21 +233,6 @@ final class LifestyleCoachController: ObservableObject {
             checkInError = error.localizedDescription
         }
         kickFileReview()
-    }
-
-    /// Sleep, nutrition, or movement, named the way the card names them.
-    /// Nil when none of the three is the one with room.
-    private func weakestPillar(in snapshot: CoachSnapshot) -> String? {
-        switch snapshot.primaryFocus {
-        case .maintain:
-            return nil
-        case .sleep:
-            return snapshot.sleep.name
-        case .fiber:
-            return snapshot.fiber.name
-        case .exercise:
-            return snapshot.exercise.name
-        }
     }
 
     /// A rewrite of the same card keeps the chat its Reply already opened.

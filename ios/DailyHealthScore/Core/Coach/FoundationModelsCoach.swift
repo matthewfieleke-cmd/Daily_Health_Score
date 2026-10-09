@@ -59,7 +59,6 @@ final class FoundationModelsCoach {
         snapshot: CoachSnapshot,
         goalRows: [CoachCheckInGoalRow],
         trend: CoachTrendDigest?,
-        paceFacts: String?,
         notes: String,
         completedFacts: String = "",
         now: Date = Date()
@@ -70,20 +69,16 @@ final class FoundationModelsCoach {
         let tier: CoachModelTier = CoachModelProvider.isServerQuotaApproaching ? .onDevice : CoachModelProvider.preferredTier()
         // Facts only. A pillar assignment or a "offer a goalProposal" line
         // would turn the card back into a script.
-        let pace = paceFacts.map { "GOAL PACE (already computed):\n\($0)" } ?? "GOAL PACE: none."
         func makePrompt() -> String {
             """
-            Choose what belongs on the Home card.
+            Write the Home card.
 
-            HEALTH SNAPSHOT (for judgment; the tiles already show today's numbers):
             \(snapshot.promptBlock)
 
-            OPEN SMART GOALS (already computed):
+            OPEN SMART GOALS:
             \(CoachCheckInLogic.goalsBlock(goalRows))
 
-            \(pace)
-
-            \(trend?.promptBlock ?? "TREND FACTS: none.")
+            \(trend?.promptBlock ?? "Last week and the week before: none.")
 
             \(completedFacts.isEmpty ? "COMPLETED DAY FACTS: none." : completedFacts)
 
@@ -141,10 +136,10 @@ final class FoundationModelsCoach {
     /// Notes for the Home card. Empty files stay empty. A failed or empty
     /// choice does not pretend the file is gone, and does not fall back to
     /// the newest notes.
-    func homeCardNotes(items: [CoachMemoryItem], clockLabel: String, weakestPillar: String?) async -> String {
+    func homeCardNotes(items: [CoachMemoryItem], clockLabel: String) async -> String {
         guard !items.isEmpty else { return CoachNoteSelection.noSavedNotes }
         switch await selectNotes(
-            request: CoachNoteSelection.homeCardRequest(clockLabel: clockLabel, weakestPillar: weakestPillar),
+            request: CoachNoteSelection.homeCardRequest(clockLabel: clockLabel),
             items: items,
             limit: CoachNoteSelection.cardLimit
         ) {

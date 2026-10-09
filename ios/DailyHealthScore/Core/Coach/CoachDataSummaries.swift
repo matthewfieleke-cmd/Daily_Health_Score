@@ -1,13 +1,8 @@
 import Foundation
 
-/// Turns the parts of DHS the coach could not previously see — SMART goals and
-/// HRV — into finished sentences.
-///
-/// Same rule as the daily metrics: every count and date difference is computed
-/// here so the model only has to phrase it. Counts do not imply a daily schedule.
+/// Turns SMART goals and HRV into facts. Counts and dates are computed here.
+/// A count is not a daily schedule, and the list is every saved goal.
 enum CoachGoalSummarizer {
-    /// Goals ride along in every prompt, so only the most relevant few appear.
-    static let maxGoalsInPrompt = 4
     /// Goal text is free-form and user-entered; one long entry must not crowd
     /// out the rest of the prompt.
     static let maxTitleLength = 80
@@ -24,7 +19,7 @@ enum CoachGoalSummarizer {
             if lhsActive != rhsActive { return lhsActive }
             return lhsActive ? lhs.endDate < rhs.endDate : lhs.endDate > rhs.endDate
         }
-        return ordered.prefix(maxGoalsInPrompt).map { line(for: $0, today: today, calendar: calendar) }
+        return ordered.map { line(for: $0, today: today, calendar: calendar) }
     }
 
     private static func isActive(_ goal: SMARTGoal, at date: Date) -> Bool {
@@ -42,13 +37,13 @@ enum CoachGoalSummarizer {
         let theme = goal.relevantTheme.label
 
         if goal.isComplete {
-            return "SMART goal \"\(name)\" (\(theme)): COMPLETE — \(progress). Celebrate it; do not assign more."
+            return "\"\(name)\" (\(theme)): \(progress). Complete."
         }
         if goal.isPaused {
-            return "SMART goal \"\(name)\" (\(theme)): PAUSED at \(progress). Do not prompt for check-ins until the user resumes."
+            return "\"\(name)\" (\(theme)): \(progress). Paused."
         }
         if goal.endDate <= today || goal.status == .ended {
-            return "SMART goal \"\(name)\" (\(theme)): ENDED at \(progress). A missed goal is information, not a verdict."
+            return "\"\(name)\" (\(theme)): \(progress). Ended."
         }
 
         let remaining = max(goal.targetCount - goal.filledCount, 0)
@@ -61,7 +56,7 @@ enum CoachGoalSummarizer {
         }
         // A count does not specify a daily schedule: several actions may fit in
         // one day. Report facts instead of inventing an on-track judgement.
-        return "SMART goal \"\(name)\" (\(theme)): \(progress), \(window) (\(remaining) to go)."
+        return "\"\(name)\" (\(theme)): \(progress), \(window) (\(remaining) to go)."
     }
 
     /// Whole days between today and the deadline, never negative.
@@ -82,30 +77,20 @@ enum CoachHRVSummarizer {
     static func line(for analysis: HRVAnalysis) -> String {
         switch analysis.state {
         case .buildingBaseline(let validNights):
-            return "HRV (not scored, not diagnostic): still building a personal baseline — "
-                + "\(validNights) usable nights so far, \(HRVBaselineAnalyzer.minBaselineNights) needed "
-                + "before a usual range means anything. Do not interpret single nights."
+            return "Sleep HRV: \(validNights) usable nights so far. A personal usual range uses "
+                + "\(HRVBaselineAnalyzer.minBaselineNights) nights. No range yet."
         case .ready(let result):
-            let status: String
-            switch result.status {
-            case .withinRange: status = "WITHIN their usual range"
-            case .belowRange: status = "BELOW their usual range"
-            case .aboveRange: status = "ABOVE their usual range"
-            }
             var sentence = String(
-                format: "HRV (not scored, not diagnostic): recent average %.0f ms from %d of %d nights, "
-                    + "against a personal usual range of %.0f–%.0f ms — %@.",
+                format: "Sleep HRV: recent average %.0f ms from %d of %d nights. Personal usual range %.0f–%.0f ms.",
                 result.trendMean,
                 analysis.acuteNightsWithData,
                 analysis.acuteWindowNights,
                 result.lowerBound,
-                result.upperBound,
-                status
+                result.upperBound
             )
             if result.isHighVariability {
-                sentence += " Recent nights are less consistent than this person's own baseline."
+                sentence += " Recent nights vary more than this person's own baseline."
             }
-            sentence += " Night-to-night swings of 10–20% are normal; never diagnose from this."
             return sentence
         }
     }

@@ -30,10 +30,8 @@ enum CoachNoteSelection {
     }
 
     /// The moment, without today's numbers. The card already shows those.
-    static func homeCardRequest(clockLabel: String, weakestPillar: String?) -> String {
-        let room = weakestPillar.map { "The pillar with the most room right now is \($0). " }
-            ?? "All three pillars have room. "
-        return "A short Home card, \(clockLabel). \(room)Today's numbers are already on screen above the card. Which notes would change what is worth saying?"
+    static func homeCardRequest(clockLabel: String) -> String {
+        "A short Home card, \(clockLabel). Today's numbers are already on screen above the card. Which notes are about this moment?"
     }
 
     static func prompt(request: String, index: String) -> String {

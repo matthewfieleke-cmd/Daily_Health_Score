@@ -137,8 +137,13 @@ final class CoachLiveContext {
 
     // MARK: - Payloads
 
-    var todayPayload: String {
-        snapshot?.toolFacts ?? "No live daily record is available right now."
+    func todayPayload(parts raw: String) -> String {
+        guard let snapshot else { return "No live daily record is available right now." }
+        let parts = CoachTodayPart.parse(raw)
+        guard !parts.isEmpty else {
+            return "Name one or more parts: score, sleep, nutrition, movement, week, hrv. Today is \(snapshot.todayDisplay)."
+        }
+        return snapshot.facts(for: parts)
     }
 
     /// Any past day or window. Unreadable arguments get the dates back rather

@@ -138,7 +138,7 @@ enum CoachSnapshotBuilder {
         )
     }
 
-    /// Computes the goal comparison in Swift so the model only has to phrase it.
+    /// The recorded value and the goal. What that means is left to the model.
     static func status(
         name: String,
         value: Double,
@@ -162,21 +162,13 @@ enum CoachSnapshotBuilder {
 
         let valueText = format(value, decimals: decimals)
         let goalText = format(goal, decimals: goal.truncatingRemainder(dividingBy: 1) == 0 ? 0 : 1)
-        let percent = goal > 0 ? Int((value / goal * 100).rounded()) : 0
         let pointsText = String(format: "%.1f of %.0f points", points, maxPoints)
 
         let sentence: String
-        switch level {
-        case .missing:
-            sentence = "\(name): no data logged today (goal \(goalText) \(unit)). Status: NO DATA — unlogged, not necessarily zero behavior. \(pointsText)."
-        case .below:
-            let gap = format(max(goal - value, 0), decimals: decimals)
-            sentence = "\(name): \(valueText) \(unit) of a \(goalText) \(unit) goal — BELOW GOAL by \(gap) \(unit) (\(percent)% of goal). \(pointsText)."
-        case .met:
-            sentence = "\(name): \(valueText) \(unit) of a \(goalText) \(unit) goal — GOAL MET (\(percent)% of goal). \(pointsText)."
-        case .exceeded:
-            let over = format(max(value - goal, 0), decimals: decimals)
-            sentence = "\(name): \(valueText) \(unit) of a \(goalText) \(unit) goal — GOAL EXCEEDED by \(over) \(unit) (\(percent)% of goal). \(pointsText)."
+        if level == .missing {
+            sentence = "\(name): unlogged. Goal \(goalText) \(unit)."
+        } else {
+            sentence = "\(name): \(valueText) \(unit). Goal \(goalText) \(unit). \(pointsText)."
         }
 
         return CoachMetricStatus(

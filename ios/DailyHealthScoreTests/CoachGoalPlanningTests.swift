@@ -108,9 +108,10 @@ final class CoachGoalPlanningTests: XCTestCase {
 
         XCTAssertTrue(context.contains("SELECTED goalID=\(selected.id.uuidString)"))
         XCTAssertTrue(context.contains("selected earlier goal"))
-        XCTAssertTrue(context.contains("2 more goals are not shown"))
-        XCTAssertFalse(context.contains(active[4].id.uuidString))
-        XCTAssertTrue(context.contains("ENDED"))
+        XCTAssertFalse(context.contains("not shown"))
+        XCTAssertTrue(context.contains(active[4].id.uuidString))
+        XCTAssertTrue(context.contains("Ended"))
+        XCTAssertFalse(context.contains("choresMisc"))
     }
 
     func test_contextDoesNotReconstructDeletedGoalsFromAnUnsavedDraft() throws {

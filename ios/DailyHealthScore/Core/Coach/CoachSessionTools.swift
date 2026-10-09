@@ -10,17 +10,17 @@ import Vision
 /// What each tool returns. A description names the result. Whether this
 /// message needs the tool is the model's judgment.
 enum CoachToolCopy {
-    static let lookupTodayHealth = "Today's sleep, nutrition, and movement, named for the settings selected now, plus the score, this week's averages, and sleep HRV when nights have been recorded."
+    static let lookupTodayHealth = "Today's recorded numbers for the parts named: score, sleep, nutrition, movement, week, hrv. Name only the parts this answer needs. Each part is the value, the goal, and whether it is logged. The week is finished days only, and a day with nothing logged counts as zero in those averages."
     static let lookupDays = "Sleep, nutrition, movement, the score, and sleep HRV for a past day or a stretch of days, with the averages and the days that have no record. Nutrition and movement follow the settings selected now. Give dates as yyyy-MM-dd, or count back from today with startDaysAgo and endDaysAgo."
-    static let lookupSMARTGoals = "Saved SMART goals with exact goalIDs, progress, pace, deadlines, and cues, including a draft saved earlier in the chat. A goal this chat was opened on is marked SELECTED."
+    static let lookupSMARTGoals = "Every saved SMART goal: the person's words, theme, check-in count, deadline, status, and dated check-ins, including a draft on screen. A goal this chat was opened on is marked SELECTED."
     static let lookupWhatWeRemember = "Dated notes about this person that match a topic, and summaries of other chats that match it. The topic chooses which notes come back."
     static let lookupWeightTrend = "Weight trend, BMI, age, and sex shared from Apple Health, and a kilograms figure for formulas. Age is included only when Health shared it."
     static let lookupFood = "Nutrition facts for a food or branded product from USDA FoodData Central and Open Food Facts: calories, protein, fiber, sugars, added sugars, fat, and minerals per serving when listed. The result says exact, candidates, or none. A number stated for a food should be one of these results. Candidate items are not an exact total. A food that is only being recommended does not need a lookup."
     static let searchEvidence = "PubMed records with title, journal, year, PMID, and abstract kept together. Call when the person asks for evidence or a citation, or when a current, unfamiliar, or precise claim needs verification. Ordinary explanations should use your own expertise. A keyword match is evidence only when the study actually answers the question; cite only what comes back."
     static let calculate = "Exact arithmetic and weight conversion. Use for any total, difference, percentage, unit conversion, or per-kilogram figure instead of computing in prose, e.g. '250 + 230 + 100', '20 / 50 * 100', or '268.7 lb to kg'. A g/kg formula must use kilograms, never pounds."
     static let rememberAboutPerson = "Stores, updates, merges, refiles, or retires one note under 240 characters in aboutYou, people, patterns, coaching, goals, likes, routines, body, or recent. The note is what they said, third person. stated means they said it; inferred means it is a read. Only what they said, not a metric, the score, or advice. update and retire name the existing note. merge names both notes and keeps every specific. refile moves a note without rewriting it. A note that would drop a specific already on file is refused."
-    static let proposeSMARTGoal = "Hands the person a SMART goal draft to review — a new goal, or an update to a saved one by exact goalID — once the action is clear. Details the person did not supply may be useful suggestions, but identify them as suggestions in your reply and invite changes. Only one draft can be on screen at a time; a second call replaces the first. Nothing is saved until they save it."
-    static let logGoalCheckIn = "Asks them to confirm a check-in on a saved SMART goal for today or yesterday, after they said they completed that action. The goalID is the one on the saved goals. It is not logged until they confirm."
+    static let proposeSMARTGoal = "Puts a SMART goal draft on screen for them to review — a new goal, or an update to a saved one by exact goalID — when they want a draft. Nothing is saved until they save it. Only one draft can be on screen; a second call replaces the first."
+    static let logGoalCheckIn = "Offers a check-in for them to confirm on a saved SMART goal for today or yesterday, when they said they completed that action. The goal id is the one on the saved goals. It is not logged until they confirm."
     static let showTrend = "Draws one chart of sleep, nutrition, or movement for the last 7 completed days, with the 30- and 90-day averages and the goal. Today is not included. One chart appears in the reply. The person taps it to switch among sleep, nutrition, and movement. metric is sleep, fiber, or movement. The chart follows the settings selected now, and the result names it."
     static let readTextInPhoto = "Read the text in an attached photo, such as a nutrition label, menu, or note. Use when exact words or numbers in the photo matter."
     static let readBarcodeInPhoto = "Read a barcode or QR code in an attached photo. Use when a package code would identify the product."
@@ -74,14 +74,22 @@ struct CoachLookupTodayTool: Tool {
     let context: CoachLiveContext
 
     @Generable
-    struct Arguments {}
+    struct Arguments {
+        @Guide(description: "Comma-separated parts: score, sleep, nutrition, movement, week, hrv. Name only the parts this answer needs.")
+        var parts: String
+    }
 
     func call(arguments: Arguments) async throws -> String {
-        let payload = await context.todayPayload
-        await context.log(
-            "lookupTodayHealth",
-            outcome: payload.hasPrefix("No live") ? "unavailable" : "success"
-        )
+        let payload = await context.todayPayload(parts: arguments.parts)
+        let outcome: String
+        if payload.hasPrefix("No live") {
+            outcome = "unavailable"
+        } else if payload.hasPrefix("Name one") {
+            outcome = "needs parts"
+        } else {
+            outcome = "success"
+        }
+        await context.log("lookupTodayHealth", detail: arguments.parts, outcome: outcome)
         return payload
     }
 }

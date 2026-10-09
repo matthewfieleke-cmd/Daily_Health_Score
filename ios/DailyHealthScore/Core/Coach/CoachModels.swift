@@ -142,6 +142,29 @@ struct CoachMetricStatus: Equatable, Sendable {
 }
 
 /// Compact facts for the model. Built by app code — never invent metrics in prompts.
+/// One slice of today's record. A chat tool returns only the slices he names.
+enum CoachTodayPart: String, CaseIterable, Sendable {
+    case score, sleep, nutrition, movement, week, hrv
+
+    static func parse(_ raw: String) -> Set<CoachTodayPart> {
+        let tokens = raw.lowercased().split { !$0.isLetter && !$0.isNumber }
+        var parts = Set<CoachTodayPart>()
+        for token in tokens {
+            switch String(token) {
+            case "score", "scores": parts.insert(.score)
+            case "sleep": parts.insert(.sleep)
+            case "nutrition", "fiber", "food": parts.insert(.nutrition)
+            case "movement", "exercise", "steps": parts.insert(.movement)
+            case "week", "weeks", "average", "averages": parts.insert(.week)
+            case "hrv", "variability": parts.insert(.hrv)
+            case "all": return Set(CoachTodayPart.allCases)
+            default: break
+            }
+        }
+        return parts
+    }
+}
+
 struct CoachSnapshot: Equatable, Sendable {
     var todayKey: String
     var dayPhase: DayPhase
@@ -193,114 +216,72 @@ struct CoachSnapshot: Equatable, Sendable {
         return String(format: "Sleep goal %.1f h/night · ", sleep.goal) + nutrition + " · " + movement
     }
 
-    /// Date and goals only. Used when the question is not about today's numbers,
-    /// because a model that can see the metrics will steer the answer toward them.
+    /// Date, clock, and the selected goals. No orders about what to say.
     var minimalBlock: String {
         """
         TODAY: \(todayDisplay)
         LOCAL CLOCK: \(clockLabel)
-        TIME RULES: \(timeOfDay.promptRules)
         USER'S GOALS: \(goalsBlock)
-        Today's metric details were not requested. Do not recite or refer to them.
         """
     }
 
+    /// Facts for the Home card. The same lines a chat tool can ask for one at a time.
     var promptBlock: String {
-        var lines: [String] = []
-        lines.append("USER'S GOALS: \(goalsBlock)")
-        lines.append(modeLine)
-        lines.append("DATE: \(todayDisplay)")
-        lines.append("LOCAL CLOCK: \(clockLabel)")
-        lines.append("TIME RULES: \(timeOfDay.promptRules)")
-        lines.append(String(format: "TODAY'S SCORE: %.1f of 10", totalScore))
-        lines.append("TODAY'S METRICS (comparisons already computed — repeat them exactly):")
-        for metric in metrics {
-            lines.append("- \(metric.sentence)")
-        }
-        let weakest = primaryFocus == .fiber && fiber.unit == "pts" ? "food groups" : primaryFocus.rawValue
-        lines.append("WEAKEST PILLAR RIGHT NOW: \(weakest)")
-
-        var weekly: [String] = ["COMPLETED DAYS: \(weekDaysWithData) finished days through yesterday. Today is excluded. Missing logs count as zero in these averages."]
-        if let weekAvgScore {
-            weekly.append(String(format: "avg score %.1f", weekAvgScore))
-        }
-        if let weekAvgSleep {
-            weekly.append(String(format: "avg sleep %.1f h", weekAvgSleep))
-        }
-        if let weekAvgFiber {
-            if fiber.unit == "pts" {
-                weekly.append(String(format: "avg food-group score %.1f of 4", weekAvgFiber))
-            } else {
-                weekly.append(String(format: "avg fiber %.0f g", weekAvgFiber))
-            }
-        }
-        if let weekAvgExercise {
-            let noun = exercise.unit == "steps" ? "steps" : "exercise minutes"
-            weekly.append(String(format: "avg \(noun) %.0f", weekAvgExercise))
-        }
-        let loggedName = fiber.unit == "pts" ? "food groups logged" : "fiber logged"
-        weekly.append("\(loggedName) on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days")
-        lines.append(weekly.joined(separator: "; "))
-
-        if let hrvSummary {
-            lines.append(hrvSummary)
-        }
+        var lines = [facts(for: Set(CoachTodayPart.allCases))]
         if !smartGoals.isEmpty {
-            lines.append("SMART GOALS (progress and pace already computed — repeat them exactly):")
+            lines.append("SMART GOALS:")
             lines.append(contentsOf: smartGoals.map { "- \($0)" })
         }
         if let bodyLine {
             lines.append("BODY (shared for coaching only; never part of the score): \(bodyLine)")
         }
-
-        lines.append(
-            "FACT RULES: Use only these numbers. Never claim a metric is above or below goal "
-                + "unless its status line says so. Missing data means unlogged, not zero behavior."
-        )
         return lines.joined(separator: "\n")
     }
 
-    /// Today's numbers for a chat tool. The Home card keeps `promptBlock`,
-    /// including its scheduling rules and status labels. A conversation gets
-    /// the figures without those orders, and without goals or weight, which
-    /// have their own tools.
-    var toolFacts: String {
-        var lines: [String] = []
-        lines.append(modeLine)
-        lines.append("Today, \(todayDisplay).")
-        lines.append(String(format: "Score: %.1f of 10.", totalScore))
-        for metric in metrics {
-            lines.append(Self.toolFactLine(metric))
+    /// Today's numbers for a chat tool, limited to the parts he named.
+    func facts(for parts: Set<CoachTodayPart>) -> String {
+        var lines = ["Today, \(todayDisplay).", "Local time: \(clockLabel).", modeLine]
+        if parts.contains(.score) {
+            lines.append(String(format: "Score: %.1f of 10.", totalScore))
         }
-        var weekly = ["\(weekDaysWithData) finished days through yesterday. Today is excluded. Missing logs count as zero"]
+        if parts.contains(.sleep) { lines.append(Self.toolFactLine(sleep)) }
+        if parts.contains(.nutrition) { lines.append(Self.toolFactLine(fiber)) }
+        if parts.contains(.movement) { lines.append(Self.toolFactLine(exercise)) }
+        if parts.contains(.week) { lines.append(weekFact) }
+        if parts.contains(.hrv) {
+            lines.append(hrvSummary.map(Self.plainHRVFact) ?? "No sleep HRV nights recorded.")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    var toolFacts: String { facts(for: Set(CoachTodayPart.allCases)) }
+
+    private var weekFact: String {
+        var weekly = ["\(weekDaysWithData) finished days through yesterday. Today is excluded. A day with nothing logged counts as zero in these averages"]
         if let weekAvgScore {
-            weekly.append(String(format: "average score %.1f", weekAvgScore))
+            weekly.append(String(format: "average score %.1f (today %.1f, difference %+.1f)", weekAvgScore, totalScore, totalScore - weekAvgScore))
         }
         if let weekAvgSleep {
-            weekly.append(String(format: "average sleep %.1f h", weekAvgSleep))
+            weekly.append(String(format: "average sleep %.1f h (today %.1f h, difference %+.1f h)", weekAvgSleep, sleep.value, sleep.value - weekAvgSleep))
         }
         if let weekAvgFiber {
             if fiber.unit == "pts" {
-                weekly.append(String(format: "average food-group score %.1f of 4", weekAvgFiber))
+                weekly.append(String(format: "average food-group score %.1f of 4 (today %.1f, difference %+.1f)", weekAvgFiber, fiber.value, fiber.value - weekAvgFiber))
             } else {
-                weekly.append(String(format: "average fiber %.0f g", weekAvgFiber))
+                weekly.append(String(format: "average fiber %.0f g (today %.0f g, difference %+.0f g)", weekAvgFiber, fiber.value, fiber.value - weekAvgFiber))
             }
         }
         if let weekAvgExercise {
             let noun = exercise.unit == "steps" ? "steps" : "exercise minutes"
-            weekly.append(String(format: "average \(noun) %.0f", weekAvgExercise))
+            weekly.append(String(format: "average \(noun) %.0f (today %.0f, difference %+.0f)", weekAvgExercise, exercise.value, exercise.value - weekAvgExercise))
         }
-        lines.append("This week: \(weekly.joined(separator: "; ")).")
+        var line = "This week: \(weekly.joined(separator: "; "))."
+        let loggedName = fiber.unit == "pts" ? "Food groups logged" : "Fiber logged"
+        line += " \(loggedName) on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days."
         if fiber.unit == "pts" {
-            lines.append("Food groups logged on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days.")
-            lines.append("Apple Health fiber is separate from the food-group score. Mention those grams only when asked, and call them Apple Health fiber.")
-        } else {
-            lines.append("Fiber logged on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days.")
+            line += " Apple Health fiber grams are a separate record from the food-group score."
         }
-        if let hrvSummary {
-            lines.append(Self.plainHRVFact(hrvSummary))
-        }
-        return lines.joined(separator: "\n")
+        return line
     }
 
     private static func toolFactLine(_ metric: CoachMetricStatus) -> String {
@@ -336,29 +317,6 @@ struct CoachSnapshot: Equatable, Sendable {
         return lines.joined(separator: "\n")
     }
 
-    /// Coaching posture derived from goal status, so the coach never pushes "more"
-    /// on a pillar that is already met.
-    var coachingDirective: String {
-        var directives: [String] = []
-        for metric in metrics where metric.isAtOrAboveGoal {
-            directives.append(
-                "\(metric.name) is already at or above goal — affirm and protect it; do NOT ask for more \(metric.name.lowercased())."
-            )
-        }
-        for metric in metrics where metric.level == .missing {
-            directives.append(
-                "\(metric.name) has no data today — treat as unlogged, not as failure; do not assume the behavior didn't happen."
-            )
-        }
-        if metrics.allSatisfy({ $0.isAtOrAboveGoal }) {
-            directives.append("All pillars met: shift to maintenance, recovery, or a non-scored pillar (stress, connection).")
-        } else if let weakest = metrics
-            .filter({ !$0.isAtOrAboveGoal && $0.level != .missing })
-            .min(by: { ($0.value / max($0.goal, 0.001)) < ($1.value / max($1.goal, 0.001)) }) {
-            directives.append("If offering one step, focus on \(weakest.name.lowercased()).")
-        }
-        return directives.isEmpty ? "No special directives." : directives.joined(separator: "\n")
-    }
 }
 
 enum CoachAvailabilityStatus: Equatable {

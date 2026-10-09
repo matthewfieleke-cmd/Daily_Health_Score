@@ -215,12 +215,10 @@ enum SMARTGoalActivityLogic {
         )
         if hasUndatedProgress(events) {
             lines.append(
-                "Some check-ins have no action date (migrated from earlier counts). Do not claim a streak, a missed day, or a schedule from them."
+                "Some check-ins have no action date. They were migrated from an earlier count."
             )
         } else if checkIns.isEmpty {
-            lines.append(
-                "No accepted check-ins are recorded. A missing check-in does not prove the action was missed."
-            )
+            lines.append("No accepted check-ins are recorded.")
         } else {
             let dated = checkIns.filter(\.hasKnownOccurrenceDate)
             if !dated.isEmpty {
@@ -232,7 +230,7 @@ enum SMARTGoalActivityLogic {
             let name = fallbackAction.trimmingCharacters(in: .whitespacesAndNewlines)
             let label = name.isEmpty ? "a smaller step" : name
             lines.append(
-                "\(fallbacks.count) smaller fallback action(s) recorded (\(label)). These do not satisfy the accepted goal."
+                "\(fallbacks.count) smaller fallback action(s) recorded (\(label)). They are not accepted check-ins."
             )
         }
         for revision in revisions.suffix(3) {

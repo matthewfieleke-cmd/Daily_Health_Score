@@ -666,6 +666,21 @@ enum CoachMemoryLogic {
         )
     }
 
+    /// Stated or inferred, plus a label on an old antidote-shaped note so it
+    /// reads as a past summary rather than an instruction.
+    static func provenanceSuffix(for item: CoachMemoryItem) -> String {
+        var suffix = ""
+        if item.provenance.isStated {
+            suffix += " (stated)"
+        } else if item.provenance == .coachNoted || item.provenance.yieldsToConfirmed {
+            suffix += " (inferred)"
+            if item.displayContent.lowercased().contains("antidote") {
+                suffix += " (earlier inferred summary)"
+            }
+        }
+        return suffix
+    }
+
     /// "Sep 20: … (stated)". No file heading.
     static func datedNoteLine(
         for item: CoachMemoryItem,
@@ -673,11 +688,7 @@ enum CoachMemoryLogic {
         calendar: Calendar = .current
     ) -> String {
         var line = "\(entryDate(item.createdAt, now: date, calendar: calendar)): \(item.displayContent)"
-        if item.provenance.isStated {
-            line += " (stated)"
-        } else if item.provenance == .coachNoted || item.provenance.yieldsToConfirmed {
-            line += " (inferred)"
-        }
+        line += provenanceSuffix(for: item)
         if item.section.isStateFile,
            let days = calendar.dateComponents([.day], from: item.createdAt, to: date).day,
            days > recentWindowDays {
@@ -761,7 +772,7 @@ enum CoachMemoryLogic {
             .filter { sections?.contains($0.section) ?? true }
         if live.isEmpty {
             return sections == nil
-                ? "No notes yet. Write down what a careful coach would keep."
+                ? "No notes yet."
                 : "No notes in these files yet."
         }
         var parts: [String] = []
@@ -771,11 +782,7 @@ enum CoachMemoryLogic {
             let ordered = rows.sorted { $0.createdAt > $1.createdAt }
             let lines = ordered.prefix(perSectionLimit).map { item -> String in
                 var line = "- [\(entryDate(item.createdAt, now: date, calendar: calendar))] \(item.displayContent)"
-                if item.provenance.isStated {
-                    line += " (stated)"
-                } else if item.provenance == .coachNoted || item.provenance.yieldsToConfirmed {
-                    line += " (inferred)"
-                }
+                line += provenanceSuffix(for: item)
                 if section.isStateFile,
                    let days = calendar.dateComponents([.day], from: item.createdAt, to: date).day,
                    days > recentWindowDays {
@@ -792,7 +799,7 @@ enum CoachMemoryLogic {
             !$0.isDeleted && $0.isTemporary && ($0.confirmation == .needsReview || ($0.expiresAt ?? .distantFuture) < date)
         }
         if !awaiting.isEmpty {
-            parts.append("Temporary notes may have lapsed; ask before treating them as current.")
+            parts.append("Temporary notes may have lapsed.")
         }
         _ = tombstonesIgnored
         return parts.joined(separator: "\n")
