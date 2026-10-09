@@ -57,55 +57,89 @@ final class FoundationModelsCoach {
     func generateCheckIn(
         kind: CoachCheckInKind,
         snapshot: CoachSnapshot,
-        goalRows: [CoachCheckInGoalRow],
-        trend: CoachTrendDigest?,
-        notes: String,
-        completedFacts: String = "",
-        now: Date = Date()
+        live: CoachLiveContext,
+        now: Date = Date(),
+        calendar: Calendar = .current
     ) async throws -> CoachCheckIn {
         #if canImport(FoundationModels)
         try ensureAvailable()
         // Background writes yield to chat when the daily allowance is nearly spent.
         let tier: CoachModelTier = CoachModelProvider.isServerQuotaApproaching ? .onDevice : CoachModelProvider.preferredTier()
-        // Facts only. A pillar assignment or a "offer a goalProposal" line
-        // would turn the card back into a script.
-        func makePrompt() -> String {
-            """
-            Write the Home card.
+        let cloudPrompt = """
+        Today is \(snapshot.todayDisplay). Local time: \(snapshot.clockLabel).
 
+        \(CoachCharter.homeCardInstructions)
+        """
+        func onDevicePrompt() async -> String {
+            let notes = await homeCardNotes(items: live.memoryItems, clockLabel: snapshot.clockLabel)
+            let completed = live.scoringSettings.map {
+                CompletedTrendBuilder.promptFacts(
+                    records: live.records,
+                    settings: $0,
+                    now: now,
+                    calendar: calendar
+                )
+            } ?? ""
+            let trend = CoachTrendDigest.build(
+                records: live.records,
+                goals: live.goals,
+                activities: live.activitiesByGoal.values.flatMap { $0 },
+                nutritionMode: live.scoringSettings?.nutritionMode ?? live.nutritionMode,
+                now: now,
+                calendar: calendar
+            )
+            return """
             \(snapshot.promptBlock)
 
             OPEN SMART GOALS:
-            \(CoachCheckInLogic.goalsBlock(goalRows))
+            \(live.goalsPayload)
 
             \(trend?.promptBlock ?? "Last week and the week before: none.")
 
-            \(completedFacts.isEmpty ? "COMPLETED DAY FACTS: none." : completedFacts)
+            \(completed.isEmpty ? "COMPLETED DAY FACTS: none." : completed)
 
             NOTES:
             \(notes)
-
-            \(CoachCharter.homeCardInstructions)
             """
         }
-        let content: GenerableCoachCheckIn
-        do {
-            lastTierUsed = tier
-            content = try await CoachModelProvider.respond(
-                CoachModelProvider.makeSession(tier: tier, instructions: CoachCharter.instructions(for: tier)),
-                to: makePrompt(),
-                generating: GenerableCoachCheckIn.self,
-                tier: tier,
-                depth: .deep
-            )
-        } catch where tier == .privateCloud {
-            // Network loss, quota, or a server hiccup should never cost the
-            // card; the on-device model can still write it.
-            lastTierUsed = .onDevice
-            content = try await CoachModelProvider
-                .makeSession(tier: .onDevice, instructions: CoachCharter.instructions(for: .onDevice))
-                .respond(to: makePrompt(), generating: GenerableCoachCheckIn.self)
+        func onDeviceCard() async throws -> GenerableCoachCheckIn {
+            try await CoachModelProvider
+                .makeSession(tier: .onDevice, instructions: CoachCharter.homeCardFallbackInstructions)
+                .respond(to: await onDevicePrompt(), generating: GenerableCoachCheckIn.self)
                 .content
+        }
+        let content: GenerableCoachCheckIn
+        if tier == .privateCloud {
+            live.selectNotes = { @MainActor [weak self, weak live] topic in
+                guard let self, let live else { return CoachNoteSelection.unreadMessage }
+                return await self.noteToolPayload(
+                    topic: topic,
+                    items: live.memoryItems,
+                    conversations: live.recentConversations
+                )
+            }
+            do {
+                lastTierUsed = .privateCloud
+                content = try await CoachModelProvider.respond(
+                    CoachModelProvider.makeSession(
+                        tier: .privateCloud,
+                        instructions: CoachCharter.instructions,
+                        tools: CoachSessionTools.reads(context: live)
+                    ),
+                    to: cloudPrompt,
+                    generating: GenerableCoachCheckIn.self,
+                    tier: .privateCloud,
+                    depth: .deep
+                )
+            } catch {
+                // Network loss, quota, or a server hiccup should never cost the
+                // card. This model has no tools, so the records go in the message.
+                lastTierUsed = .onDevice
+                content = try await onDeviceCard()
+            }
+        } else {
+            lastTierUsed = .onDevice
+            content = try await onDeviceCard()
         }
         var seen = Set<String>()
         let thoughts = content.thoughts.compactMap { raw -> String? in
@@ -113,7 +147,7 @@ final class FoundationModelsCoach {
             guard !line.isEmpty, seen.insert(line).inserted else { return nil }
             return line
         }
-        let chosen = Array(thoughts.prefix(3))
+        let chosen = Array(thoughts.prefix(2))
         guard let first = chosen.first else {
             throw CoachError.generationFailed("The coach returned an empty card.")
         }
@@ -283,18 +317,13 @@ final class FoundationModelsCoach {
                 framing.append(focus.openingFact.limitedToCoachBudget(CoachContextBudget.maxHistoryCharacters))
             }
         }
-        if let settings = live.scoringSettings {
-            framing.append(settings.coachModeLine)
-        }
         let earlierUserText = recentTurns
             .filter { $0.role == .user }
             .map(\.text)
             .filter { $0 != userMessage }
             .suffix(1)
             .joined(separator: " ")
-        let situation = framing
-            .filter { $0 != live.scoringSettings?.coachModeLine }
-            .joined(separator: "\n\n")
+        let situation = framing.joined(separator: "\n\n")
         var request = CoachNoteSelection.replyRequest(
             message: userMessage,
             earlier: earlierUserText,
@@ -710,10 +739,10 @@ struct GenerableNoteSelection {
 
 @Generable
 struct GenerableCoachCheckIn {
-    @Guide(description: "Up to three thoughts, most useful first.")
+    @Guide(description: "One or two findings, most useful first.")
     var thoughts: [String]
 
-    @Guide(description: "sleep, fiber, movement, or none. none unless the finished-day chart would help.")
+    @Guide(description: "sleep, fiber, movement, or none.")
     var chart: String
 }
 

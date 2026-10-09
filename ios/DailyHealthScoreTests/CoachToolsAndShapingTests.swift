@@ -585,6 +585,14 @@ final class CoachLiveContextTests: XCTestCase {
         for name in CoachLiveContext.turnScopedToolNames {
             XCTAssertTrue(CoachSessionTools.toolNames.contains(name), name)
         }
+        let reads = Set(CoachSessionTools.readToolNames.split(separator: ", ").map(String.init))
+        XCTAssertEqual(
+            reads,
+            Set(["lookupTodayHealth", "lookupDays", "lookupSMARTGoals", "lookupWhatWeRemember", "lookupWeightTrend", "lookupFood", "searchEvidence", "calculate"])
+        )
+        for name in ["rememberAboutPerson", "proposeSMARTGoal", "logGoalCheckIn", "showTrend", "readTextInPhoto"] {
+            XCTAssertFalse(reads.contains(name), name)
+        }
     }
 
     func test_onlyPersonalAndChangingToolsForceANewSession() async {

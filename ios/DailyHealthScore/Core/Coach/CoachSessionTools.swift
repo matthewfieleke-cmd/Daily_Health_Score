@@ -65,6 +65,26 @@ enum CoachSessionTools {
 
     /// The inventory, for tests and the eval screen.
     static let toolNames = "lookupTodayHealth, lookupDays, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, lookupFood, searchEvidence, calculate, rememberAboutPerson, proposeSMARTGoal, logGoalCheckIn, showTrend, readTextInPhoto, readBarcodeInPhoto"
+
+    /// What the Home card can call. The same lookups as a chat. Saving, drafting,
+    /// and check-in stay off the card: nothing there is confirmed. The chart is
+    /// a field on the card, and the app draws it.
+    static let readToolNames = "lookupTodayHealth, lookupDays, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, lookupFood, searchEvidence, calculate"
+
+    #if canImport(FoundationModels)
+    static func reads(context: CoachLiveContext) -> [any Tool] {
+        [
+            CoachLookupTodayTool(context: context),
+            CoachLookupDaysTool(context: context),
+            CoachLookupGoalsTool(context: context),
+            CoachLookupPersonTool(context: context),
+            CoachBodyTrendTool(context: context),
+            CoachFoodLookupTool(context: context),
+            CoachEvidenceSearchTool(context: context),
+            CoachCalculatorTool(context: context)
+        ]
+    }
+    #endif
 }
 
 #if canImport(FoundationModels)

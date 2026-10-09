@@ -8,7 +8,7 @@ enum CoachCheckInKind: String, Codable, Sendable {
     case evening
 }
 
-/// The Home card. Up to three thoughts the Coach chooses, rewritten for each
+/// The Home card. One or two thoughts the Coach chooses, rewritten for each
 /// window of the day and again when the day's shape changes. A deterministic
 /// line stands in when the model is unavailable. Reply opens a chat that
 /// starts with this text.
@@ -24,8 +24,9 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
     var tomorrowLine: String
     /// Older cards: last week in one sentence. Empty on a thought feed.
     var trendLine: String
-    /// The thoughts on the card, most useful first. Empty on a card saved
-    /// before the feed, which still speaks through the four older fields.
+    /// The thoughts on the card, most useful first. At most two are shown.
+    /// Empty on a card saved before the feed, which still speaks through the
+    /// four older fields.
     var thoughts: [String]
     var replyThreadID: UUID?
     var isFallback: Bool
@@ -94,7 +95,7 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         if !chosen.isEmpty {
-            return Array(chosen.prefix(3))
+            return Array(chosen.prefix(2))
         }
         return [healthLine, trendLine, tomorrowLine, question]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -211,7 +212,7 @@ enum CoachCheckInLogic {
             .map(\.id.uuidString)
             .sorted()
             .joined(separator: ",")
-        return "\(dateKey)#\(kind.rawValue)#checkin4#\(ids)#\(signature)"
+        return "\(dateKey)#\(kind.rawValue)#checkin5#\(ids)#\(signature)"
     }
 
     /// Active goals a person could still log today, unlogged ones first.

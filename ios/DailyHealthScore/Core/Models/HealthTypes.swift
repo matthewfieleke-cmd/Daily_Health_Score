@@ -96,27 +96,6 @@ struct UserSettings: Equatable {
 
     static let fiberGoalGrams = 40.0
     static let `default` = UserSettings(sleepGoal: .sevenHalf, fiberGoal: .forty)
-
-    /// The nutrition and movement settings selected now, as a fact.
-    var coachModeLine: String {
-        let nutrition: String
-        switch nutritionMode {
-        case .fiber:
-            nutrition = "Nutrition is Fiber from Apple Health, goal 40 g."
-        case .foodGroups:
-            nutrition = "Nutrition is Food groups, logged in the app, goal 4 points."
-        }
-        let movement: String
-        switch movementGoal {
-        case .exerciseMinutes:
-            movement = "Movement is Exercise Minutes, goal 30."
-        case .steps8000:
-            movement = "Movement is Steps, goal 8,000."
-        case .steps10000:
-            movement = "Movement is Steps, goal 10,000."
-        }
-        return "\(nutrition) \(movement)"
-    }
 }
 
 struct ScoreComputation: Equatable {
