@@ -96,7 +96,7 @@ final class FoundationModelsCoach {
                 to: makePrompt(),
                 generating: GenerableCoachCheckIn.self,
                 tier: tier,
-                depth: .light
+                depth: .deep
             )
         } catch where tier == .privateCloud {
             // Network loss, quota, or a server hiccup should never cost the
@@ -109,9 +109,7 @@ final class FoundationModelsCoach {
         }
         var seen = Set<String>()
         let thoughts = content.thoughts.compactMap { raw -> String? in
-            let line = CoachReplyPolish.polish(
-                CoachMarkdown.plainText(raw).trimmedForCoach().endingOnSentence(maxCharacters: 320)
-            )
+            let line = CoachReplyPolish.polish(raw.trimmedForCoach())
             guard !line.isEmpty, seen.insert(line).inserted else { return nil }
             return line
         }
@@ -712,7 +710,7 @@ struct GenerableNoteSelection {
 
 @Generable
 struct GenerableCoachCheckIn {
-    @Guide(description: "Up to three thoughts, most useful first. Each is one or two plain sentences. Omit any that only repeats today's tiles. No headers or emoji.")
+    @Guide(description: "Up to three thoughts, most useful first.")
     var thoughts: [String]
 
     @Guide(description: "sleep, fiber, movement, or none. none unless the finished-day chart would help.")

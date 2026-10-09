@@ -19,22 +19,22 @@ enum CoachSnapshotBuilder {
             movementGoal: today.movementGoal,
             nutritionMode: nutritionMode
         )
-        let filledWeek = CompletedTrendBuilder.filledRecords(
-            days: 7,
-            records: records,
-            settings: settings,
-            now: now,
-            calendar: calendar
-        )
-        let weekKeys = filledWeek.map(\.date)
-        let weekStats = weekKeys.isEmpty
+        let yesterday = CompletedTrendBuilder.yesterdayKey(now: now, calendar: calendar)
+        let windowKeys = yesterday.map {
+            CompletedTrendBuilder.effectiveKeys(count: 7, endingOn: $0, records: records, calendar: calendar).keys
+        } ?? []
+        let savedDates = Set(records.map(\.date))
+        let recordedKeys = windowKeys.filter { savedDates.contains($0) }
+        let weekDaysMissing = windowKeys.count - recordedKeys.count
+        let weekStats = recordedKeys.isEmpty
             ? nil
             : RollingStatsCalculator.compute(
-                records: filledWeek,
-                windowKeys: weekKeys,
+                records: records,
+                windowKeys: recordedKeys,
                 nutritionMode: settings.nutritionMode,
                 movementGoal: settings.movementGoal
             )
+        let weekKeys = recordedKeys
         let fiberDays = records.filter { record in
             guard weekKeys.contains(record.date) else { return false }
             if settings.nutritionMode == .foodGroups { return record.foodGroups.isLogged }
@@ -72,16 +72,11 @@ enum CoachSnapshotBuilder {
             exercise: movementStatus(for: today, goal: settings.movementGoal),
             primaryFocus: today.primaryFocus,
             weekDaysWithData: weekStats?.daysWithData ?? 0,
+            weekDaysMissing: weekDaysMissing,
             weekAvgScore: weekStats?.avgTotalScore,
-            weekAvgSleep: CompletedTrendBuilder.build(
-                metric: .sleep, records: records, settings: settings, now: now, calendar: calendar
-            )?.average,
-            weekAvgFiber: CompletedTrendBuilder.build(
-                metric: .fiber, records: records, settings: settings, now: now, calendar: calendar
-            )?.average,
-            weekAvgExercise: CompletedTrendBuilder.build(
-                metric: .movement, records: records, settings: settings, now: now, calendar: calendar
-            )?.average,
+            weekAvgSleep: weekStats?.avgSleepHours,
+            weekAvgFiber: settings.nutritionMode == .foodGroups ? weekStats?.avgFiberScore : weekStats?.avgFiberGrams,
+            weekAvgExercise: weekStats?.avgMovementValue,
             fiberDaysLoggedInWeek: fiberDays,
             hrvSummary: hrvSummary,
             smartGoals: CoachGoalSummarizer.lines(for: goals),

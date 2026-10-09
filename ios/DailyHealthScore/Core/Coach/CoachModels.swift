@@ -176,6 +176,8 @@ struct CoachSnapshot: Equatable, Sendable {
     var exercise: CoachMetricStatus
     var primaryFocus: PrimaryFocus
     var weekDaysWithData: Int
+    /// Finished days in the week window that have no saved record.
+    var weekDaysMissing: Int = 0
     var weekAvgScore: Double?
     var weekAvgSleep: Double?
     var weekAvgFiber: Double?
@@ -257,31 +259,35 @@ struct CoachSnapshot: Equatable, Sendable {
     var toolFacts: String { facts(for: Set(CoachTodayPart.allCases)) }
 
     private var weekFact: String {
-        var weekly = ["\(weekDaysWithData) finished days through yesterday. Today is excluded. A day with nothing logged counts as zero in these averages"]
+        var lines = ["Finished days with a saved record: \(weekDaysWithData). Today is not included."]
+        if weekDaysMissing > 0 {
+            let noun = weekDaysMissing == 1 ? "day has" : "days have"
+            let pronoun = weekDaysMissing == 1 ? "It is" : "They are"
+            lines.append("\(weekDaysMissing) finished \(noun) no saved record. \(pronoun) not included in these averages.")
+        }
         if let weekAvgScore {
-            weekly.append(String(format: "average score %.1f (today %.1f, difference %+.1f)", weekAvgScore, totalScore, totalScore - weekAvgScore))
+            lines.append(String(format: "Average score of days with a record: %.1f of 10.", weekAvgScore))
         }
         if let weekAvgSleep {
-            weekly.append(String(format: "average sleep %.1f h (today %.1f h, difference %+.1f h)", weekAvgSleep, sleep.value, sleep.value - weekAvgSleep))
+            lines.append(String(format: "Average sleep of days with a record: %.1f h.", weekAvgSleep))
         }
         if let weekAvgFiber {
             if fiber.unit == "pts" {
-                weekly.append(String(format: "average food-group score %.1f of 4 (today %.1f, difference %+.1f)", weekAvgFiber, fiber.value, fiber.value - weekAvgFiber))
+                lines.append(String(format: "Average food-group score of days with a record: %.1f of 4.", weekAvgFiber))
             } else {
-                weekly.append(String(format: "average fiber %.0f g (today %.0f g, difference %+.0f g)", weekAvgFiber, fiber.value, fiber.value - weekAvgFiber))
+                lines.append(String(format: "Average fiber of days with a record: %.0f g.", weekAvgFiber))
             }
         }
         if let weekAvgExercise {
             let noun = exercise.unit == "steps" ? "steps" : "exercise minutes"
-            weekly.append(String(format: "average \(noun) %.0f (today %.0f, difference %+.0f)", weekAvgExercise, exercise.value, exercise.value - weekAvgExercise))
+            lines.append(String(format: "Average \(noun) of days with a record: %.0f.", weekAvgExercise))
         }
-        var line = "This week: \(weekly.joined(separator: "; "))."
         let loggedName = fiber.unit == "pts" ? "Food groups logged" : "Fiber logged"
-        line += " \(loggedName) on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days."
+        lines.append("\(loggedName) on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days with a record.")
         if fiber.unit == "pts" {
-            line += " Apple Health fiber grams are a separate record from the food-group score."
+            lines.append("Apple Health fiber grams are a separate record from the food-group score.")
         }
-        return line
+        return lines.joined(separator: "\n")
     }
 
     private static func toolFactLine(_ metric: CoachMetricStatus) -> String {

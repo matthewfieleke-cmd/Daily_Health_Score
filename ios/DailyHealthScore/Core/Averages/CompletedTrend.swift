@@ -198,7 +198,7 @@ enum CompletedTrendBuilder {
         guard !lines.isEmpty else {
             return "COMPLETED DAY FACTS: none yet. Today is still in progress and is not part of a finished-day average."
         }
-        return "COMPLETED DAY FACTS (today is excluded; a day with nothing logged counts as zero):\n"
+        return "COMPLETED DAY FACTS (today is excluded):\n"
             + lines.map { "- \($0)" }.joined(separator: "\n")
     }
 
@@ -411,7 +411,8 @@ enum CompletedTrendBuilder {
         longer: String,
         goal: String
     ) -> String {
-        var sentence = "\(title): 7-day picture averages \(headline). Goal \(goal). \(caption)"
+        let coachCaption = caption.replacingOccurrences(of: " Those days count as zero.", with: "")
+        var sentence = "\(title): 7-day picture averages \(headline). Goal \(goal). \(coachCaption)"
         if !longer.isEmpty {
             sentence += " \(longer)."
         }
