@@ -29,9 +29,9 @@ enum CoachNoteSelection {
             .limitedToCoachBudget(2_000)
     }
 
-    /// The moment, without today's numbers. The card already shows those.
+    /// The moment, without today's numbers. He asks for a note when he wants one.
     static func homeCardRequest(clockLabel: String) -> String {
-        "A short Home card, \(clockLabel). Today's numbers are already on screen above the card. Which notes are about this moment?"
+        "A short Home card, \(clockLabel). Which notes are about this moment?"
     }
 
     static func prompt(request: String, index: String) -> String {
