@@ -83,6 +83,8 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertFalse(facts.contains("SMART"))
         XCTAssertFalse(facts.contains("BODY"))
         XCTAssertFalse(facts.contains("repeat them"))
+        XCTAssertFalse(facts.contains("counts as zero"))
+        XCTAssertFalse(facts.contains("difference"))
     }
 
     func test_minimalBlockKeepsDateAndGoalsButHidesMetrics() {
