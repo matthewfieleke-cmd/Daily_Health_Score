@@ -16,6 +16,7 @@ struct TodayCoachCheckInCard: View {
     var onContinueReply: (UUID) -> Void
     var onIntake: () -> Void
     var onShowChart: (TrendMetric) -> Void = { _ in }
+    var onShowHealthChart: (CoachHealthMeasure) -> Void = { _ in }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -263,6 +264,32 @@ struct TodayCoachCheckInCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens the finished-day chart. Close returns here.")
+        } else if let card = coach.memory.cachedCheckIn,
+                  card.dateKey == record?.date,
+                  let measure = card.healthChartMeasure {
+            Button {
+                onShowHealthChart(measure)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chart.bar")
+                        .font(.caption)
+                    Text("See \(measure.title)")
+                        .font(.footnote.weight(.semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(AppTheme.primary)
+                .padding(.vertical, 9)
+                .padding(.horizontal, 11)
+                .frame(maxWidth: .infinity)
+                .background(AppTheme.leaf.opacity(0.14))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the chart. Close returns here.")
         }
     }
 

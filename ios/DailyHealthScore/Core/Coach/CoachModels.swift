@@ -91,6 +91,8 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
     var photoFileNames: [String] = []
     /// Finished-day chart attached to this turn. Nil when the reply is words only.
     var trendChart: TrendChartReference? = nil
+    /// An Apple Health chart attached to this turn. Nil when the reply has none.
+    var healthChartMeasureRaw: String? = nil
 
     init(
         id: UUID = UUID(),
@@ -101,7 +103,8 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
         modelTier: CoachModelTier? = nil,
         fallbackReason: String? = nil,
         photoFileNames: [String] = [],
-        trendChart: TrendChartReference? = nil
+        trendChart: TrendChartReference? = nil,
+        healthChartMeasureRaw: String? = nil
     ) {
         self.id = id
         self.role = role
@@ -112,6 +115,7 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
         self.fallbackReason = fallbackReason
         self.photoFileNames = photoFileNames
         self.trendChart = trendChart
+        self.healthChartMeasureRaw = healthChartMeasureRaw
     }
 }
 

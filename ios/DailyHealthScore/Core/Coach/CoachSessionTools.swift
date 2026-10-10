@@ -11,6 +11,7 @@ import Vision
 /// message needs the tool is the model's judgment.
 enum CoachToolCopy {
     static let lookupTodayHealth = "Today's recorded numbers for the parts named: score, sleep, nutrition, movement, week, hrv. Name only the parts this answer needs. Each part is the value, the goal, and whether it is logged. Week averages use finished days that have a saved record. Today is not included."
+    static let lookupHealth = "Apple Health readings for the measures named: heartRate, restingHeartRate, bloodOxygen, bloodPressure, cardioFitness, standMinutes, distance, daylight, respiratoryRate, walkingHeartRate, wristTemperature, running. Name only the measures this answer needs. A day or a stretch uses startDate and endDate as yyyy-MM-dd, or startDaysAgo and endDaysAgo. Running includes that run's duration, distance, pace, power, and heart rate. A measure with no record says no record."
     static let lookupDays = "Sleep, nutrition, movement, the score, and sleep HRV for a past day or a stretch of days, with the averages and the days that have no record. Nutrition and movement follow the settings selected now. Give dates as yyyy-MM-dd, or count back from today with startDaysAgo and endDaysAgo."
     static let lookupSMARTGoals = "Every saved SMART goal: the person's words, theme, check-in count, deadline, status, and dated check-ins, including a draft on screen. A goal this chat was opened on is marked SELECTED."
     static let lookupWhatWeRemember = "Dated notes about this person that match a topic, and summaries of other chats that match it. The topic chooses which notes come back."
@@ -21,7 +22,7 @@ enum CoachToolCopy {
     static let rememberAboutPerson = "Stores, updates, merges, refiles, or retires one note under 240 characters in aboutYou, people, patterns, coaching, goals, likes, routines, body, or recent. The note is what they said, third person. stated means they said it; inferred means it is a read. Only what they said, not a metric, the score, or advice. update and retire name the existing note. merge names both notes and keeps every specific. refile moves a note without rewriting it. A note that would drop a specific already on file is refused."
     static let proposeSMARTGoal = "Puts a SMART goal draft on screen for them to review — a new goal, or an update to a saved one by exact goalID — when they want a draft. Nothing is saved until they save it. Only one draft can be on screen; a second call replaces the first."
     static let logGoalCheckIn = "Offers a check-in for them to confirm on a saved SMART goal for today or yesterday, when they said they completed that action. The goal id is the one on the saved goals. It is not logged until they confirm."
-    static let showTrend = "Draws one chart of sleep, nutrition, or movement for the last 7 completed days, with the 30- and 90-day averages and the goal. Today is not included. One chart appears in the reply. The person taps it to switch among sleep, nutrition, and movement. metric is sleep, fiber, or movement. The chart follows the settings selected now, and the result names it."
+    static let showTrend = "Draws one chart. Sleep, fiber, or movement uses the finished-day score chart, with the 30- and 90-day averages and the goal. Today is not included. A lookupHealth measure draws that measure's recent days, and days with no record are left out. metric is sleep, fiber, movement, or one lookupHealth measure. The app draws the chart."
     static let readTextInPhoto = "Read the text in an attached photo, such as a nutrition label, menu, or note. Use when exact words or numbers in the photo matter."
     static let readBarcodeInPhoto = "Read a barcode or QR code in an attached photo. Use when a package code would identify the product."
 }
@@ -34,6 +35,7 @@ enum CoachSessionTools {
     static func make(context: CoachLiveContext) -> [any Tool] {
         var tools: [any Tool] = [
             CoachLookupTodayTool(context: context),
+            CoachLookupHealthTool(context: context),
             CoachLookupDaysTool(context: context),
             CoachLookupGoalsTool(context: context),
             CoachLookupPersonTool(context: context),
@@ -64,17 +66,18 @@ enum CoachSessionTools {
     #endif
 
     /// The inventory, for tests and the eval screen.
-    static let toolNames = "lookupTodayHealth, lookupDays, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, lookupFood, searchEvidence, calculate, rememberAboutPerson, proposeSMARTGoal, logGoalCheckIn, showTrend, readTextInPhoto, readBarcodeInPhoto"
+    static let toolNames = "lookupTodayHealth, lookupHealth, lookupDays, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, lookupFood, searchEvidence, calculate, rememberAboutPerson, proposeSMARTGoal, logGoalCheckIn, showTrend, readTextInPhoto, readBarcodeInPhoto"
 
     /// What the Home card can call. The same lookups as a chat. Saving, drafting,
     /// and check-in stay off the card: nothing there is confirmed. The chart is
     /// a field on the card, and the app draws it.
-    static let readToolNames = "lookupTodayHealth, lookupDays, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, lookupFood, searchEvidence, calculate"
+    static let readToolNames = "lookupTodayHealth, lookupHealth, lookupDays, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, lookupFood, searchEvidence, calculate"
 
     #if canImport(FoundationModels)
     static func reads(context: CoachLiveContext) -> [any Tool] {
         [
             CoachLookupTodayTool(context: context),
+            CoachLookupHealthTool(context: context),
             CoachLookupDaysTool(context: context),
             CoachLookupGoalsTool(context: context),
             CoachLookupPersonTool(context: context),
@@ -110,6 +113,44 @@ struct CoachLookupTodayTool: Tool {
             outcome = "success"
         }
         await context.log("lookupTodayHealth", detail: arguments.parts, outcome: outcome)
+        return payload
+    }
+}
+
+struct CoachLookupHealthTool: Tool {
+    let name = "lookupHealth"
+    let description = CoachToolCopy.lookupHealth
+    let context: CoachLiveContext
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Comma-separated measures: heartRate, restingHeartRate, bloodOxygen, bloodPressure, cardioFitness, standMinutes, distance, daylight, respiratoryRate, walkingHeartRate, wristTemperature, running. Name only the measures this answer needs.")
+        var measures: String
+        @Guide(description: "First day as yyyy-MM-dd. Nil when counting back with startDaysAgo, or for today.")
+        var startDate: String?
+        @Guide(description: "Last day as yyyy-MM-dd. Nil for a single day, or when counting back with endDaysAgo.")
+        var endDate: String?
+        @Guide(description: "How many days back the window starts. 0 is today. Nil when giving dates or asking for today.")
+        var startDaysAgo: Int?
+        @Guide(description: "How many days back the window ends. 0 is today. Nil for a single day, or when giving dates.")
+        var endDaysAgo: Int?
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        let payload = await context.healthPayload(
+            measures: arguments.measures,
+            startDate: arguments.startDate,
+            endDate: arguments.endDate,
+            startDaysAgo: arguments.startDaysAgo,
+            endDaysAgo: arguments.endDaysAgo
+        )
+        let outcome: String
+        if payload.hasPrefix("Name one") || payload.hasPrefix("Apple Health readings are not") || payload.hasPrefix("No window") {
+            outcome = "unavailable"
+        } else {
+            outcome = "success"
+        }
+        await context.log("lookupHealth", detail: arguments.measures, outcome: outcome)
         return payload
     }
 }
@@ -358,12 +399,17 @@ struct CoachShowTrendTool: Tool {
 
     @Generable
     struct Arguments {
-        @Guide(description: "sleep, fiber, or movement.")
+        @Guide(description: "sleep, fiber, movement, or one lookupHealth measure.")
         var metric: String
     }
 
     func call(arguments: Arguments) async throws -> String {
-        let result = await context.showTrend(metric: arguments.metric)
+        let result: String
+        if TrendMetric.parse(arguments.metric) != nil {
+            result = await context.showTrend(metric: arguments.metric)
+        } else {
+            result = await context.showHealthChart(metric: arguments.metric)
+        }
         await context.log(
             "showTrend",
             detail: arguments.metric,

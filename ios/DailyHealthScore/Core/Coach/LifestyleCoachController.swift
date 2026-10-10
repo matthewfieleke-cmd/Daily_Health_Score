@@ -182,6 +182,7 @@ final class LifestyleCoachController: ObservableObject {
             cardLive.memoryItems = memory.effectiveMemories
             cardLive.recentConversations = memory.recentConversationsBlock()
             cardLive.bodyTrend = bodyTrend
+            attachHealthLookup(cardLive)
             let generated = try await model.generateCheckIn(
                 kind: kind,
                 snapshot: snapshot,
@@ -205,6 +206,12 @@ final class LifestyleCoachController: ObservableObject {
                 fresh.chartDayCount = reference.dayCount
                 fresh.chartMovementGoalRaw = reference.movementGoalRaw
                 fresh.chartNutritionModeRaw = reference.nutritionModeRaw
+            } else if let measure = CoachHealthMeasure.parseOne(fresh.chartMetricRaw) {
+                fresh.chartMetricRaw = measure.rawValue
+                fresh.chartEndDateKey = ""
+                fresh.chartDayCount = 0
+                fresh.chartMovementGoalRaw = ""
+                fresh.chartNutritionModeRaw = ""
             } else {
                 fresh.chartMetricRaw = ""
                 fresh.chartEndDateKey = ""
@@ -224,6 +231,19 @@ final class LifestyleCoachController: ObservableObject {
             checkInError = error.localizedDescription
         }
         kickFileReview()
+    }
+
+    /// Live Apple Health readings. The score tools stay separate.
+    private func attachHealthLookup(_ live: CoachLiveContext) {
+        let todayKey = live.todayKey
+        live.healthLookup = { measures, startKey, endKey in
+            await HealthKitService.shared.coachHealthFacts(
+                measures: measures,
+                startKey: startKey,
+                endKey: endKey,
+                todayKey: todayKey
+            )
+        }
     }
 
     /// A rewrite of the same card keeps the chat its Reply already opened.
@@ -334,6 +354,7 @@ final class LifestyleCoachController: ObservableObject {
             live.recentConversations = memory.recentConversationsBlock()
             live.bodyTrend = bodyTrend
             live.focusedGoalID = focusedGoalID ?? thread.goalId
+            attachHealthLookup(live)
             live.personsWords = ([trimmed] + memory.turns.filter { $0.role == .user }.suffix(6).map(\.text)).joined(separator: " ")
             _ = planningGoal
 
@@ -354,7 +375,8 @@ final class LifestyleCoachController: ObservableObject {
                 text: result.message,
                 modelTier: result.tier,
                 fallbackReason: reason,
-                trendChart: live.pendingTrend
+                trendChart: live.pendingTrend,
+                healthChartMeasureRaw: live.pendingHealthChart
             )
             memory.append(coachTurn)
             goalProposal = result.goalProposal

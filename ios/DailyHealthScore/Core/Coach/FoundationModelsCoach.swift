@@ -742,7 +742,7 @@ struct GenerableCoachCheckIn {
     @Guide(description: "One or two findings, most useful first.")
     var thoughts: [String]
 
-    @Guide(description: "sleep, fiber, movement, or none.")
+    @Guide(description: "A measure the app can draw, or none.")
     var chart: String
 }
 

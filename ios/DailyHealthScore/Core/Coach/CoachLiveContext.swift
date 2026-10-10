@@ -34,6 +34,8 @@ final class CoachLiveContext {
     private(set) var proposalRejected = false
     /// Chart the model asked the app to draw for this reply.
     private(set) var pendingTrend: TrendChartReference?
+    /// An Apple Health chart, separate from the score chart.
+    private(set) var pendingHealthChart: String?
     /// Tool calls the model made, with only the arguments that affected the
     /// operation and a small outcome. Ephemeral: shown by the eval, never filed.
     private(set) var toolLog: [String] = []
@@ -51,6 +53,7 @@ final class CoachLiveContext {
         pendingCheckIn = nil
         proposalRejected = false
         pendingTrend = nil
+        pendingHealthChart = nil
         toolLog = []
         requiresFreshSession = false
         selectNotes = nil
@@ -98,10 +101,13 @@ final class CoachLiveContext {
     /// guess by word overlap.
     var selectNotes: (@MainActor (String) async -> String)?
 
+    /// Apple Health readings for lookupHealth. Nil in tests that have not set it.
+    var healthLookup: (@MainActor (_ measures: [CoachHealthMeasure], _ startKey: String, _ endKey: String) async -> CoachHealthFacts)?
+
     /// Personal or changing app payloads that must not survive as hidden model
     /// transcript after the answer that requested them.
     static let turnScopedToolNames: Set<String> = [
-        "lookupTodayHealth", "lookupDays", "lookupSMARTGoals",
+        "lookupTodayHealth", "lookupHealth", "lookupDays", "lookupSMARTGoals",
         "lookupWhatWeRemember", "lookupWeightTrend",
         "rememberAboutPerson", "proposeSMARTGoal", "logGoalCheckIn"
     ]
@@ -204,7 +210,48 @@ final class CoachLiveContext {
             return "No completed days to chart yet. Today is still in progress."
         }
         pendingTrend = trend.reference(settings: settings)
+        pendingHealthChart = nil
         return "Chart shown. \(trend.coachSummary) One chart is on screen. Tapping it switches among sleep, nutrition, and movement."
+    }
+
+    /// A chart of one Apple Health measure. Days with no record stay out of it.
+    func showHealthChart(metric raw: String) async -> String {
+        guard let measure = CoachHealthMeasure.parseOne(raw) else {
+            return "Say sleep, fiber, movement, or one of: \(CoachHealthMeasure.names)."
+        }
+        guard let healthLookup else { return "Apple Health readings are not available right now." }
+        let start = DateHelpers.addDays(to: todayKey, days: -6) ?? todayKey
+        let facts = await healthLookup([measure], start, todayKey)
+        guard facts.hasRecord else { return facts.text }
+        pendingTrend = nil
+        pendingHealthChart = measure.rawValue
+        return "Chart shown. \(facts.text)"
+    }
+
+    func healthPayload(
+        measures raw: String,
+        startDate: String?,
+        endDate: String?,
+        startDaysAgo: Int?,
+        endDaysAgo: Int?
+    ) async -> String {
+        let measures = CoachHealthMeasure.parseList(raw)
+        guard !measures.isEmpty else {
+            return "Name one or more measures: \(CoachHealthMeasure.names). Today is \(DateHelpers.formatDisplayDate(todayKey))."
+        }
+        let askingForToday = startDate == nil && endDate == nil && startDaysAgo == nil && endDaysAgo == nil
+        guard let window = CoachDayRange.resolve(
+            startDate: startDate,
+            endDate: endDate,
+            startDaysAgo: askingForToday ? 0 : startDaysAgo,
+            endDaysAgo: askingForToday ? 0 : endDaysAgo,
+            todayKey: todayKey
+        ) else {
+            return CoachDayRange.guidance(todayKey: todayKey)
+        }
+        guard let healthLookup else { return "Apple Health readings are not available right now." }
+        let facts = await healthLookup(measures, window.startKey, window.endKey)
+        return facts.text
     }
 
     var bodyPayload: String {

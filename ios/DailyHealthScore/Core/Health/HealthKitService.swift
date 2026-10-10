@@ -30,7 +30,7 @@ enum HealthKitError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unavailable: return "Health data is not available on this device."
-        case .unauthorized: return "Allow Daily Health Score to read Sleep, Fiber, Exercise Minutes, Steps, and Heart Rate Variability in Settings → Health."
+        case .unauthorized: return "Allow Daily Health Score to read the Health data it asks for in Settings → Health."
         case .queryFailed(let detail): return detail
         }
     }
@@ -62,10 +62,21 @@ final class HealthKitService {
         var readTypes: Set<HKObjectType> = [sleep, fiber, exercise, steps, hrv, HKObjectType.workoutType()]
         // Weight, height, BMI, age, and sex feed the Coach only; the score never
         // sees them. Age and sex keep the Coach from guessing either.
-        for identifier in [HKQuantityTypeIdentifier.bodyMass, .height, .bodyMassIndex] {
+        // The advisor's other Health readings stay off the score too.
+        for identifier in [
+            HKQuantityTypeIdentifier.bodyMass, .height, .bodyMassIndex,
+            .heartRate, .restingHeartRate, .oxygenSaturation,
+            .bloodPressureSystolic, .bloodPressureDiastolic, .vo2Max,
+            .appleStandTime, .distanceWalkingRunning, .timeInDaylight,
+            .respiratoryRate, .walkingHeartRateAverage, .appleSleepingWristTemperature,
+            .runningSpeed, .runningPower
+        ] {
             if let type = HKObjectType.quantityType(forIdentifier: identifier) {
                 readTypes.insert(type)
             }
+        }
+        if let bloodPressure = HKCorrelationType.correlationType(forIdentifier: .bloodPressure) {
+            readTypes.insert(bloodPressure)
         }
         for identifier in [HKCharacteristicTypeIdentifier.dateOfBirth, .biologicalSex] {
             if let type = HKObjectType.characteristicType(forIdentifier: identifier) {

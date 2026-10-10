@@ -244,7 +244,7 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertFalse(charter.contains("rememberAboutPerson"))
         XCTAssertEqual(
             CoachCharter.homeCardInstructions,
-            "Find one or two relevant, helpful findings and present them clearly. The tools are how you get this person's records. Set chart to sleep, fiber, or movement when a chart would help, and to none when words are enough. The app draws the chart."
+            "Find one or two relevant, helpful findings and present them clearly. The tools are how you get this person's records. Set chart to a measure the app can draw when a chart would help, and to none when words are enough. The app draws the chart."
         )
         XCTAssertFalse(CoachCharter.homeCardInstructions.contains("up to three"))
         XCTAssertFalse(CoachCharter.homeCardInstructions.contains("already show today's score"))

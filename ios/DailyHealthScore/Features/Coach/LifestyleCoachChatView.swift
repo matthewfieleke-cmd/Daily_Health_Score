@@ -21,6 +21,7 @@ struct LifestyleCoachChatView: View {
     @State private var focus: CoachFocusContext?
     @State private var showMemory = false
     @State private var enlargedChart: TrendChartReference?
+    @State private var enlargedHealthChart: CoachHealthMeasure?
     @State private var launch: CoachChatLaunch
     @State private var didOpen = false
     @FocusState private var isInputFocused: Bool
@@ -193,6 +194,11 @@ struct LifestyleCoachChatView: View {
             NavigationStack {
                 CoachMemoryListView()
                     .environmentObject(appState)
+            }
+        }
+        .sheet(item: $enlargedHealthChart) { measure in
+            NavigationStack {
+                HealthChartScreen(measure: measure)
             }
         }
         .sheet(item: $enlargedChart) { chart in
@@ -676,6 +682,11 @@ struct LifestyleCoachChatView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityHint("Enlarges the chart. Close returns to this chat.")
+                    }
+                    if let raw = turn.healthChartMeasureRaw, let measure = CoachHealthMeasure.parseOne(raw) {
+                        HealthChartBubble(measure: measure) {
+                            enlargedHealthChart = measure
+                        }
                     }
                     if turn.modelTier == .onDevice, CoachModelProvider.serverModelExists {
                         // Honest about the fallback, and specific about why.

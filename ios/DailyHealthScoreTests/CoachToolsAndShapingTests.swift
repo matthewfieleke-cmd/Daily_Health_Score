@@ -588,7 +588,7 @@ final class CoachLiveContextTests: XCTestCase {
         let reads = Set(CoachSessionTools.readToolNames.split(separator: ", ").map(String.init))
         XCTAssertEqual(
             reads,
-            Set(["lookupTodayHealth", "lookupDays", "lookupSMARTGoals", "lookupWhatWeRemember", "lookupWeightTrend", "lookupFood", "searchEvidence", "calculate"])
+            Set(["lookupTodayHealth", "lookupHealth", "lookupDays", "lookupSMARTGoals", "lookupWhatWeRemember", "lookupWeightTrend", "lookupFood", "searchEvidence", "calculate"])
         )
         for name in ["rememberAboutPerson", "proposeSMARTGoal", "logGoalCheckIn", "showTrend", "readTextInPhoto"] {
             XCTAssertFalse(reads.contains(name), name)
