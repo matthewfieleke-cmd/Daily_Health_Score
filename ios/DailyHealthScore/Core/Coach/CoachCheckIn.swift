@@ -31,7 +31,7 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
     var replyThreadID: UUID?
     var isFallback: Bool
     var generatedAt: Date
-    /// sleep, fiber, or movement when the card offers a chart. Empty otherwise.
+    /// A score metric, or an Apple Health measure, when the card offers a chart. Empty otherwise.
     var chartMetricRaw: String = ""
     var chartEndDateKey: String = ""
     var chartDayCount: Int = 0
@@ -75,6 +75,11 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
 
     var chartMetric: TrendMetric? {
         TrendMetric(rawValue: chartMetricRaw)
+    }
+
+    var healthChartMeasure: CoachHealthMeasure? {
+        guard chartMetric == nil else { return nil }
+        return CoachHealthMeasure.parseOne(chartMetricRaw)
     }
 
     var chartReference: TrendChartReference? {
@@ -212,7 +217,7 @@ enum CoachCheckInLogic {
             .map(\.id.uuidString)
             .sorted()
             .joined(separator: ",")
-        return "\(dateKey)#\(kind.rawValue)#checkin5#\(ids)#\(signature)"
+        return "\(dateKey)#\(kind.rawValue)#checkin6#\(ids)#\(signature)"
     }
 
     /// Active goals a person could still log today, unlogged ones first.
