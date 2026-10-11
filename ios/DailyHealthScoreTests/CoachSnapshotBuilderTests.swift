@@ -102,6 +102,7 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         let snapshot = CoachSnapshotBuilder.build(today: record, records: [record])
         let sleep = snapshot.facts(for: [.sleep])
         XCTAssertTrue(sleep.contains("Sleep:"))
+        XCTAssertTrue(sleep.contains("Sleep is last night and is complete."))
         XCTAssertFalse(sleep.contains("Fiber:"))
         XCTAssertFalse(sleep.contains("BELOW GOAL"))
         XCTAssertEqual(CoachTodayPart.parse("sleep, hrv"), Set([CoachTodayPart.sleep, .hrv]))
@@ -244,7 +245,7 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertFalse(charter.contains("rememberAboutPerson"))
         XCTAssertEqual(
             CoachCharter.homeCardInstructions,
-            "Find one or two relevant, helpful findings and present them clearly. The tools are how you get this person's records. Set chart to a measure the app can draw when a chart would help, and to none when words are enough. The app draws the chart."
+            "Find one or two relevant, helpful findings and present them clearly. The tools are how you get this person's records. Set chart to a measure the app can draw when a chart would help, and to none if there is no relevant chart. The app draws the chart."
         )
         XCTAssertFalse(CoachCharter.homeCardInstructions.contains("up to three"))
         XCTAssertFalse(CoachCharter.homeCardInstructions.contains("already show today's score"))
@@ -280,6 +281,21 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertEqual(snapshot.timeOfDay, .evening)
         XCTAssertTrue(snapshot.clockLabel.contains("evening"))
         XCTAssertTrue(snapshot.promptBlock.contains("Local time:"))
+        XCTAssertTrue(snapshot.facts(for: [.score]).contains("Nutrition and movement are today's total so far."))
+        XCTAssertFalse(snapshot.facts(for: [.score]).contains("still in progress"))
+
+        let eightAM = date(calendar: calendar, hour: 8, minute: 51)
+        let morning = CoachSnapshotBuilder.build(
+            today: record,
+            records: [record],
+            phase: .day,
+            now: eightAM,
+            calendar: calendar
+        )
+        XCTAssertEqual(morning.timeOfDay, .morning)
+        let morningFacts = morning.facts(for: [.score])
+        XCTAssertTrue(morningFacts.contains("Sleep is last night and is complete. Nutrition and movement for today are still in progress."))
+        XCTAssertFalse(morningFacts.contains("today's total so far"))
         XCTAssertFalse(snapshot.promptBlock.contains("TIME RULES"))
         XCTAssertFalse(snapshot.promptBlock.lowercased().contains("after lunch"))
         XCTAssertTrue(snapshot.minimalBlock.contains("LOCAL CLOCK"))

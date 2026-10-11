@@ -247,7 +247,7 @@ struct TodayCoachCheckInCard: View {
                 HStack(spacing: 6) {
                     Image(systemName: "chart.bar")
                         .font(.caption)
-                    Text("See \(trend.title)")
+                    Text("See \(trend.title) graph")
                         .font(.footnote.weight(.semibold))
                         .lineLimit(1)
                     Spacer(minLength: 0)
@@ -273,7 +273,7 @@ struct TodayCoachCheckInCard: View {
                 HStack(spacing: 6) {
                     Image(systemName: "chart.bar")
                         .font(.caption)
-                    Text("See \(measure.title)")
+                    Text("See \(measure.title) graph")
                         .font(.footnote.weight(.semibold))
                         .lineLimit(1)
                     Spacer(minLength: 0)

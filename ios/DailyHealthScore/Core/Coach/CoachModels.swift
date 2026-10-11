@@ -269,7 +269,12 @@ struct CoachSnapshot: Equatable, Sendable {
 
     /// Today's numbers for a chat tool, limited to the parts he named.
     func facts(for parts: Set<CoachTodayPart>) -> String {
-        var lines = ["Today, \(todayDisplay).", "Local time: \(clockLabel).", modeLine]
+        var lines = [
+            "Today, \(todayDisplay).",
+            "Local time: \(clockLabel).",
+            timeOfDay.todayProgressFact,
+            modeLine
+        ]
         if parts.contains(.score) {
             lines.append(String(format: "Score: %.1f of 10.", totalScore))
         }

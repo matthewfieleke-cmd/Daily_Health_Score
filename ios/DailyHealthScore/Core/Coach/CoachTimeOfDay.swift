@@ -23,6 +23,17 @@ enum CoachTimeOfDay: String, Equatable, Sendable {
         }
     }
 
+    /// What today's score numbers are, at this hour. Sleep is the night that
+    /// already ended. Nutrition and movement keep accumulating until the day does.
+    var todayProgressFact: String {
+        let sleep = "Sleep is last night and is complete."
+        switch self {
+        case .morning, .midday, .afternoon:
+            return "\(sleep) Nutrition and movement for today are still in progress."
+        case .evening, .night:
+            return "\(sleep) Nutrition and movement are today's total so far."
+        }
+    }
 }
 
 enum CoachClock {
