@@ -29,8 +29,10 @@ final class CoachLiveContext {
     // MARK: - Actions the model asked for
 
     private(set) var pendingMemoryUpdates: [CoachMemoryUpdate] = []
-    private(set) var pendingProposal: CoachGoalProposal?
-    private(set) var pendingCheckIn: CoachGoalCheckInRequest?
+    private(set) var pendingProposals: [CoachGoalProposal] = []
+    private(set) var pendingCheckIns: [CoachGoalCheckInRequest] = []
+    var pendingProposal: CoachGoalProposal? { pendingProposals.last }
+    var pendingCheckIn: CoachGoalCheckInRequest? { pendingCheckIns.last }
     private(set) var proposalRejected = false
     /// Chart the model asked the app to draw for this reply. The last score chart.
     private(set) var pendingTrend: TrendChartReference?
@@ -51,8 +53,8 @@ final class CoachLiveContext {
 
     func beginTurn() {
         pendingMemoryUpdates = []
-        pendingProposal = nil
-        pendingCheckIn = nil
+        pendingProposals = []
+        pendingCheckIns = []
         proposalRejected = false
         pendingTrend = nil
         pendingHealthChart = nil
@@ -325,21 +327,22 @@ final class CoachLiveContext {
             fallbackAction: fallbackAction
         )
         guard let proposal else {
-            let kept = pendingProposal != nil
+            let kept = !pendingProposals.isEmpty
             if !kept { proposalRejected = true }
             let reason = "Not drafted: a new goal needs specificText, targetCount (1–30), theme (marriage, parenting, health, relationships, finances, career, choresMisc), and daysFromToday (1–30); an update needs an exact goalID from the saved goals."
-            return kept ? reason + " The draft already on screen is unchanged." : reason
+            return kept ? reason + " The drafts already on screen are unchanged." : reason
         }
         if proposal.isNoOp {
             return "Not drafted: that is the goal exactly as it already is."
         }
-        let replaced = pendingProposal != nil
-        pendingProposal = proposal
         proposalRejected = false
-        if replaced {
-            return "Replaced the earlier draft. Only this latest one is on screen. It is not saved yet."
+        if let originalID = proposal.edit.original?.id,
+           let index = pendingProposals.firstIndex(where: { $0.edit.original?.id == originalID }) {
+            pendingProposals[index] = proposal
+            return "Updated the draft for that goal. It is not saved yet."
         }
-        return "One draft is on screen. It is not saved yet."
+        pendingProposals.append(proposal)
+        return "A draft is on screen. It is not saved yet."
     }
 
     func logCheckIn(goalID: String, when: String, note: String) -> String {
@@ -349,7 +352,11 @@ final class CoachLiveContext {
         guard let request = CoachGoalCheckInRequest.make(goalID: goalID, when: when, note: note, goals: goals) else {
             return "Not offered: use an exact goalID from the saved goals, and only for a goal that can still take a check-in."
         }
-        pendingCheckIn = request
+        if let index = pendingCheckIns.firstIndex(where: { $0.goalId == request.goalId }) {
+            pendingCheckIns[index] = request
+        } else {
+            pendingCheckIns.append(request)
+        }
         return "Ready for them to confirm. It is not logged yet."
     }
 }

@@ -75,8 +75,10 @@ struct CoachGoalCheckInRequest: Identifiable, Equatable, Sendable {
 struct CoachReplyResult: Equatable {
     var message: String
     var memoryUpdates: [CoachMemoryUpdate]
-    var goalCheckIn: CoachGoalCheckInRequest?
-    var goalProposal: CoachGoalProposal?
+    var goalCheckIns: [CoachGoalCheckInRequest] = []
+    var goalProposals: [CoachGoalProposal] = []
+    var goalCheckIn: CoachGoalCheckInRequest? { goalCheckIns.last }
+    var goalProposal: CoachGoalProposal? { goalProposals.last }
     var proposalRejected: Bool
     /// Which model wrote the message.
     var tier: CoachModelTier

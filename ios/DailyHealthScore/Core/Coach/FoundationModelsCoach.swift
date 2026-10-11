@@ -528,8 +528,8 @@ final class FoundationModelsCoach {
         return CoachReplyResult(
             message: message.isEmpty ? Self.friendlyFailureMessage : message,
             memoryUpdates: live.pendingMemoryUpdates,
-            goalCheckIn: live.pendingCheckIn,
-            goalProposal: live.pendingProposal,
+            goalCheckIns: live.pendingCheckIns,
+            goalProposals: live.pendingProposals,
             proposalRejected: live.proposalRejected,
             tier: tier,
             shape: shape,

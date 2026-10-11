@@ -116,13 +116,15 @@ struct LifestyleCoachChatView: View {
                             .padding(.horizontal, 4)
                             .id("pending")
                         }
-                        if let request = coach.pendingGoalCheckIn, !coach.isChatBusy {
-                            goalCheckInCard(request)
-                                .id("goal-check-in")
-                        }
-                        if let proposal = coach.goalProposal, !coach.isChatBusy {
-                            goalProposalCard(proposal)
-                                .id("goal-proposal")
+                        if !coach.isChatBusy {
+                            ForEach(coach.pendingGoalCheckIns) { request in
+                                goalCheckInCard(request)
+                                    .id(request.id)
+                            }
+                            ForEach(coach.goalProposals) { proposal in
+                                goalProposalCard(proposal)
+                                    .id(proposal.id)
+                            }
                         }
                     }
                     .padding(16)
@@ -133,10 +135,10 @@ struct LifestyleCoachChatView: View {
                 .onChange(of: coach.isChatBusy) { _, _ in
                     scrollToEnd(proxy)
                 }
-                .onChange(of: coach.goalProposal?.id) { _, _ in
+                .onChange(of: coach.goalProposals.count) { _, _ in
                     scrollToEnd(proxy)
                 }
-                .onChange(of: coach.pendingGoalCheckIn?.id) { _, _ in
+                .onChange(of: coach.pendingGoalCheckIns.count) { _, _ in
                     scrollToEnd(proxy)
                 }
             }
@@ -374,7 +376,7 @@ struct LifestyleCoachChatView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(AppTheme.primary)
-                Button("Not now") { coach.dismissGoalCheckIn() }
+                Button("Not now") { coach.dismissGoalCheckIn(request.id) }
                     .buttonStyle(.bordered)
             }
         }
@@ -401,7 +403,7 @@ struct LifestyleCoachChatView: View {
             HStack {
                 Button("Review goal") { goalEdit = proposal.edit }
                     .buttonStyle(.borderedProminent)
-                Button("Dismiss") { coach.dismissGoalProposal() }
+                Button("Dismiss") { coach.dismissGoalProposal(proposal.id) }
                     .buttonStyle(.bordered)
             }
         }
@@ -710,10 +712,10 @@ struct LifestyleCoachChatView: View {
         DispatchQueue.main.async {
             if coach.isChatBusy {
                 withAnimation { proxy.scrollTo("pending", anchor: .bottom) }
-            } else if coach.pendingGoalCheckIn != nil {
-                withAnimation { proxy.scrollTo("goal-check-in", anchor: .bottom) }
-            } else if coach.goalProposal != nil {
-                withAnimation { proxy.scrollTo("goal-proposal", anchor: .bottom) }
+            } else if let request = coach.pendingGoalCheckIns.last {
+                withAnimation { proxy.scrollTo(request.id, anchor: .bottom) }
+            } else if let proposal = coach.goalProposals.last {
+                withAnimation { proxy.scrollTo(proposal.id, anchor: .bottom) }
             } else if let last = visibleTurns.last {
                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
             }
