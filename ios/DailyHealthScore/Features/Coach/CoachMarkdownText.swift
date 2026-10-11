@@ -28,15 +28,31 @@ struct CoachMarkdownText: View {
                         }
                     }
                 case .numbered(let items):
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 8) {
                         ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text("\(index + 1).")
-                                    .font(font)
-                                    .monospacedDigit()
-                                inline(item)
-                                    .font(font)
-                                    .fixedSize(horizontal: false, vertical: true)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Text("\(index + 1).")
+                                        .font(font)
+                                        .monospacedDigit()
+                                    inline(item.text)
+                                        .font(font)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                if !item.bullets.isEmpty {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        ForEach(Array(item.bullets.enumerated()), id: \.offset) { _, bullet in
+                                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                                Text("•")
+                                                    .font(font)
+                                                inline(bullet)
+                                                    .font(font)
+                                                    .fixedSize(horizontal: false, vertical: true)
+                                            }
+                                        }
+                                    }
+                                    .padding(.leading, 22)
+                                }
                             }
                         }
                     }

@@ -666,26 +666,31 @@ struct LifestyleCoachChatView: View {
                         .background(AppTheme.cardSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         .textSelection(.enabled)
-                    if let chart = turn.trendChart,
-                       let trend = CompletedTrendBuilder.build(
-                        reference: chart,
-                        records: appState.recordStore.records,
-                        settings: appState.settingsStore.settings
-                       ) {
-                        Button {
-                            enlargedChart = chart
-                        } label: {
-                            TrendChartCard(trend: trend, compact: true)
-                                .padding(12)
-                                .background(AppTheme.cardSurface)
-                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Enlarges the chart. Close returns to this chat.")
-                    }
-                    if let raw = turn.healthChartMeasureRaw, let measure = CoachHealthMeasure.parseOne(raw) {
-                        HealthChartBubble(measure: measure) {
-                            enlargedHealthChart = measure
+                    ForEach(Array(turn.replyCharts.enumerated()), id: \.offset) { _, drawn in
+                        switch drawn {
+                        case .score(let chart):
+                            if let trend = CompletedTrendBuilder.build(
+                                reference: chart,
+                                records: appState.recordStore.records,
+                                settings: appState.settingsStore.settings
+                            ) {
+                                Button {
+                                    enlargedChart = chart
+                                } label: {
+                                    TrendChartCard(trend: trend, compact: true)
+                                        .padding(12)
+                                        .background(AppTheme.cardSurface)
+                                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Enlarges the chart. Close returns to this chat.")
+                            }
+                        case .health(let raw):
+                            if let measure = CoachHealthMeasure.parseOne(raw) {
+                                HealthChartBubble(measure: measure) {
+                                    enlargedHealthChart = measure
+                                }
+                            }
                         }
                     }
                     if turn.modelTier == .onDevice, CoachModelProvider.serverModelExists {

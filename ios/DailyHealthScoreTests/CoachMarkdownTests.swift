@@ -21,7 +21,35 @@ final class CoachMarkdownTests: XCTestCase {
             "Half a cup of black beans on whatever you already planned.",
             "A pear before bed."
         ]))
-        XCTAssertEqual(blocks[3], .numbered(["First", "Second"]))
+        XCTAssertEqual(blocks[3], .numbered([
+            CoachMarkdownItem(text: "First"),
+            CoachMarkdownItem(text: "Second")
+        ]))
+    }
+
+    func test_numberedListKeepsCountingAroundNestedBullets() {
+        let text = """
+        1. Heart rate
+        - Sunday: 77 bpm
+        - Monday: 78 bpm
+
+        1. Resting heart rate
+        - Sunday: 63 bpm
+
+        That is the shape of the week.
+        """
+        let blocks = CoachMarkdown.blocks(from: text)
+        XCTAssertEqual(blocks.count, 2)
+        guard case .numbered(let items) = blocks[0] else {
+            return XCTFail("Expected one numbered list")
+        }
+        XCTAssertEqual(items.map(\.text), ["Heart rate", "Resting heart rate"])
+        XCTAssertEqual(items[0].bullets, ["Sunday: 77 bpm", "Monday: 78 bpm"])
+        XCTAssertEqual(items[1].bullets, ["Sunday: 63 bpm"])
+        guard case .paragraph(let closing) = blocks[1] else {
+            return XCTFail("A sentence ends the list")
+        }
+        XCTAssertEqual(closing, "That is the shape of the week.")
     }
 
     func test_headersFoldIntoBoldAndLinesWithoutBlankJoin() {

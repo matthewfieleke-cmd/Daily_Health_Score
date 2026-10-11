@@ -32,10 +32,12 @@ final class CoachLiveContext {
     private(set) var pendingProposal: CoachGoalProposal?
     private(set) var pendingCheckIn: CoachGoalCheckInRequest?
     private(set) var proposalRejected = false
-    /// Chart the model asked the app to draw for this reply.
+    /// Chart the model asked the app to draw for this reply. The last score chart.
     private(set) var pendingTrend: TrendChartReference?
-    /// An Apple Health chart, separate from the score chart.
+    /// The last Apple Health chart asked for in this reply.
     private(set) var pendingHealthChart: String?
+    /// Every chart asked for in this reply, in order. A later call does not erase an earlier one.
+    private(set) var pendingCharts: [CoachReplyChart] = []
     /// Tool calls the model made, with only the arguments that affected the
     /// operation and a small outcome. Ephemeral: shown by the eval, never filed.
     private(set) var toolLog: [String] = []
@@ -54,6 +56,7 @@ final class CoachLiveContext {
         proposalRejected = false
         pendingTrend = nil
         pendingHealthChart = nil
+        pendingCharts = []
         toolLog = []
         requiresFreshSession = false
         selectNotes = nil
@@ -209,9 +212,10 @@ final class CoachLiveContext {
         ) else {
             return "No completed days to chart yet. Today is still in progress."
         }
-        pendingTrend = trend.reference(settings: settings)
-        pendingHealthChart = nil
-        return "Chart shown. \(trend.coachSummary) One chart is on screen. Tapping it switches among sleep, nutrition, and movement."
+        let reference = trend.reference(settings: settings)
+        pendingTrend = reference
+        pendingCharts.append(.score(reference))
+        return "Chart shown. \(trend.coachSummary) The app draws the chart."
     }
 
     /// A chart of one Apple Health measure. Days with no record stay out of it.
@@ -222,10 +226,11 @@ final class CoachLiveContext {
         guard let healthLookup else { return "Apple Health readings are not available right now." }
         let start = DateHelpers.addDays(to: todayKey, days: -6) ?? todayKey
         let facts = await healthLookup([measure], start, todayKey)
-        guard facts.hasRecord else { return facts.text }
-        pendingTrend = nil
+        guard facts.hasRecord, let chart = facts.chart else { return facts.text }
         pendingHealthChart = measure.rawValue
-        return "Chart shown. \(facts.text)"
+        pendingCharts.append(.health(measure.rawValue))
+        let summary = chart.spoken.isEmpty ? "\(chart.title): \(chart.headline)" : chart.spoken
+        return "Chart shown. \(summary) The app draws the chart."
     }
 
     func healthPayload(

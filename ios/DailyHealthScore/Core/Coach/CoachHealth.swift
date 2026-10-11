@@ -125,18 +125,36 @@ struct CoachHealthMeasureFacts: Equatable, Sendable {
     var temperatureUsesFahrenheit: Bool = false
 }
 
+enum CoachHealthChartStyle: Equatable, Sendable {
+    /// One value per day, with an average line.
+    case bar
+    /// A day's low-to-high range, with the average marked.
+    case range
+    /// Each reading, from diastolic to systolic.
+    case pressure
+}
+
 struct CoachHealthChartPoint: Equatable, Identifiable, Sendable {
     var dateKey: String
     var label: String
     var value: Double
-    var id: String { dateKey }
+    var low: Double? = nil
+    var high: Double? = nil
+    /// Diastolic when `value` is systolic.
+    var secondary: Double? = nil
+    var token: String = ""
+    var id: String { token.isEmpty ? dateKey : token }
 }
 
 struct CoachHealthChart: Equatable, Sendable {
     var title: String
+    var unit: String = ""
+    var style: CoachHealthChartStyle = .bar
     var points: [CoachHealthChartPoint]
     var headline: String
     var caption: String
+    /// What the draw tool tells the advisor. The daily list stays on lookupHealth.
+    var spoken: String = ""
 }
 
 struct CoachHealthFacts: Equatable, Sendable {
@@ -177,7 +195,7 @@ enum CoachHealthReport {
         let span = spanLabel(startKey: startKey, endKey: endKey)
         switch facts.measure {
         case .running:
-            return runningSection(facts, span: span, startKey: startKey, endKey: endKey)
+            return runningSection(facts, span: span)
         case .cardioFitness:
             return fitnessSection(facts, span: span, singleDay: startKey == endKey)
         case .bloodPressure:
@@ -279,9 +297,7 @@ enum CoachHealthReport {
 
     private static func runningSection(
         _ facts: CoachHealthMeasureFacts,
-        span: String,
-        startKey: String,
-        endKey: String
+        span: String
     ) -> Section {
         guard !facts.runs.isEmpty else {
             return Section(text: "Running, \(span): no runs recorded.", hasRecord: false, chart: nil)
@@ -290,7 +306,7 @@ enum CoachHealthReport {
         for run in facts.runs {
             lines.append("- \(runLine(run, metric: facts.distanceUsesMetric))")
         }
-        let chart = runChart(facts, startKey: startKey, endKey: endKey)
+        let chart = runChart(facts)
         return Section(text: lines.joined(separator: "\n"), hasRecord: true, chart: chart)
     }
 
@@ -374,40 +390,64 @@ enum CoachHealthReport {
     }
 
     private static func chart(for facts: CoachHealthMeasureFacts, recorded: [CoachHealthDayValue], startKey: String, endKey: String) -> CoachHealthChart? {
+        let style: CoachHealthChartStyle = (facts.measure == .heartRate || facts.measure == .bloodOxygen) ? .range : .bar
         let points = recorded.compactMap { day -> CoachHealthChartPoint? in
             guard let value = chartValue(facts.measure, day: day, metric: facts.distanceUsesMetric, fahrenheit: facts.temperatureUsesFahrenheit) else { return nil }
-            return CoachHealthChartPoint(dateKey: day.dateKey, label: weekdayLetter(day.dateKey), value: value)
+            return CoachHealthChartPoint(
+                dateKey: day.dateKey,
+                label: dayLabel(day.dateKey),
+                value: value,
+                low: style == .range ? day.low : nil,
+                high: style == .range ? day.high : nil
+            )
         }
         guard !points.isEmpty else { return nil }
-        let windowDays = keys(from: startKey, through: endKey).count
-        let missing = max(windowDays - points.count, 0)
-        let caption = missing > 0
-            ? "\(points.count) \(points.count == 1 ? "day has" : "days have") a record. \(missing) \(missing == 1 ? "day has" : "days have") no record and \(missing == 1 ? "is" : "are") left out."
-            : "\(points.count) \(points.count == 1 ? "day" : "days") with a record."
-        let headline = points.count == 1
-            ? (valueLine(facts.measure, day: recorded.last ?? recorded[0], facts: facts) ?? "")
-            : (summaryLine(facts.measure, days: recorded, facts: facts))
-        return CoachHealthChart(title: facts.measure.title, points: points, headline: headline, caption: caption)
-    }
-
-    private static func pressureChart(_ facts: CoachHealthMeasureFacts, readings: [(String, CoachHealthPressureReading)]) -> CoachHealthChart? {
-        var byDay: [String: [Double]] = [:]
-        for (key, reading) in readings {
-            byDay[key, default: []].append(reading.systolic)
+        let unit = unitLabel(facts.measure, metric: facts.distanceUsesMetric, fahrenheit: facts.temperatureUsesFahrenheit)
+        let headline = headlineNumber(facts.measure, days: recorded, facts: facts)
+        let span = dateSpan(points.map(\.dateKey))
+        let missing = max(keys(from: startKey, through: endKey).count - points.count, 0)
+        var caption = span
+        if missing > 0 {
+            caption += ". \(missing) \(missing == 1 ? "day has" : "days have") no record and \(missing == 1 ? "is" : "are") left out."
         }
-        let points = byDay.keys.sorted().map { key in
-            CoachHealthChartPoint(dateKey: key, label: weekdayLetter(key), value: mean(byDay[key] ?? []))
-        }
-        guard !points.isEmpty else { return nil }
+        let spoken = spokenLine(title: facts.measure.title, span: span, headline: headline, days: recorded, measure: facts.measure)
         return CoachHealthChart(
-            title: "Blood pressure",
+            title: facts.measure.title,
+            unit: unit,
+            style: style,
             points: points,
-            headline: "Systolic",
-            caption: "\(readings.count) \(readings.count == 1 ? "reading" : "readings"). Each reading is in the text."
+            headline: headline,
+            caption: caption,
+            spoken: spoken
         )
     }
 
-    private static func runChart(_ facts: CoachHealthMeasureFacts, startKey: String, endKey: String) -> CoachHealthChart? {
+    private static func pressureChart(_ facts: CoachHealthMeasureFacts, readings: [(String, CoachHealthPressureReading)]) -> CoachHealthChart? {
+        let points = readings.enumerated().map { index, pair in
+            CoachHealthChartPoint(
+                dateKey: pair.0,
+                label: dayLabel(pair.0),
+                value: pair.1.systolic,
+                secondary: pair.1.diastolic,
+                token: "\(pair.0)#\(index)"
+            )
+        }
+        guard let last = readings.last else { return nil }
+        let headline = "\(whole(last.1.systolic))/\(whole(last.1.diastolic))"
+        let span = dateSpan(points.map(\.dateKey))
+        let spoken = "Blood pressure, \(span): \(readings.count) \(readings.count == 1 ? "reading" : "readings"), latest \(headline) mmHg."
+        return CoachHealthChart(
+            title: "Blood pressure",
+            unit: "mmHg",
+            style: .pressure,
+            points: points,
+            headline: headline,
+            caption: span,
+            spoken: spoken
+        )
+    }
+
+    private static func runChart(_ facts: CoachHealthMeasureFacts) -> CoachHealthChart? {
         var byDay: [String: Double] = [:]
         for run in facts.runs {
             byDay[run.dateKey, default: 0] += run.distanceMeters ?? 0
@@ -416,15 +456,20 @@ enum CoachHealthReport {
             let meters = byDay[key] ?? 0
             guard meters > 0 else { return nil }
             let shown = facts.distanceUsesMetric ? meters / 1_000 : meters / 1_609.344
-            return CoachHealthChartPoint(dateKey: key, label: weekdayLetter(key), value: shown)
+            return CoachHealthChartPoint(dateKey: key, label: dayLabel(key), value: shown)
         }
         guard !points.isEmpty else { return nil }
         let unit = facts.distanceUsesMetric ? "km" : "mi"
+        let total = points.map(\.value).reduce(0, +)
+        let headline = String(format: "%.1f \(unit)", total)
+        let span = dateSpan(points.map(\.dateKey))
         return CoachHealthChart(
             title: "Running",
+            unit: unit,
             points: points,
-            headline: "\(String(format: "%.1f", points.map(\.value).reduce(0, +))) \(unit)",
-            caption: "Distance of runs. Days with no run are left out."
+            headline: headline,
+            caption: span,
+            spoken: "Running, \(span): \(headline)."
         )
     }
 
@@ -468,9 +513,72 @@ enum CoachHealthReport {
         return keys
     }
 
-    private static func weekdayLetter(_ key: String) -> String {
-        guard let date = DateHelpers.date(from: key) else { return "" }
-        return date.formatted(.dateTime.weekday(.narrow))
+    private static func dayLabel(_ key: String) -> String {
+        guard let date = DateHelpers.date(from: key) else { return key }
+        return date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    private static func dateSpan(_ keys: [String]) -> String {
+        let ordered = keys.sorted()
+        guard let first = ordered.first, let last = ordered.last else { return "" }
+        if first == last { return dayLabel(first) }
+        return "\(dayLabel(first))–\(dayLabel(last))"
+    }
+
+    private static func unitLabel(_ measure: CoachHealthMeasure, metric: Bool, fahrenheit: Bool) -> String {
+        switch measure {
+        case .heartRate, .restingHeartRate, .walkingHeartRate: return "bpm"
+        case .bloodOxygen: return "%"
+        case .bloodPressure: return "mmHg"
+        case .cardioFitness: return "mL/kg/min"
+        case .standMinutes, .daylight: return "min"
+        case .distance, .running: return metric ? "km" : "mi"
+        case .respiratoryRate: return "breaths/min"
+        case .wristTemperature: return fahrenheit ? "°F" : "°C"
+        }
+    }
+
+    private static func headlineNumber(_ measure: CoachHealthMeasure, days: [CoachHealthDayValue], facts: CoachHealthMeasureFacts) -> String {
+        switch measure {
+        case .distance, .running:
+            let meters = days.compactMap(\.total).reduce(0, +)
+            return distance(meters, metric: facts.distanceUsesMetric)
+        case .standMinutes:
+            return "\(whole(days.compactMap(\.total).reduce(0, +))) min"
+        case .daylight:
+            return duration(minutes: days.compactMap(\.total).reduce(0, +))
+        case .heartRate, .restingHeartRate, .walkingHeartRate:
+            return "\(whole(mean(days.compactMap(\.average)))) bpm"
+        case .bloodOxygen:
+            let values = days.compactMap { $0.average ?? $0.low ?? $0.high }
+            return "\(whole(mean(values)))%"
+        case .respiratoryRate:
+            return String(format: "%.1f breaths/min", mean(days.compactMap(\.average)))
+        case .wristTemperature:
+            return temperature(mean(days.compactMap(\.average)), fahrenheit: facts.temperatureUsesFahrenheit)
+        case .cardioFitness:
+            return fitness(mean(days.compactMap(\.average)))
+        case .bloodPressure:
+            return ""
+        }
+    }
+
+    private static func spokenLine(title: String, span: String, headline: String, days: [CoachHealthDayValue], measure: CoachHealthMeasure) -> String {
+        if measure == .heartRate || measure == .bloodOxygen {
+            var detail = "average \(headline)"
+            let lows = band(days.compactMap(\.low))
+            let highs = band(days.compactMap(\.high))
+            if !lows.isEmpty { detail += ", lows \(lows)" }
+            if !highs.isEmpty { detail += ", highs \(highs)" }
+            return "\(title), \(span): \(detail)."
+        }
+        return "\(title), \(span): \(headline)."
+    }
+
+    private static func band(_ values: [Double]) -> String {
+        guard let low = values.min(), let high = values.max() else { return "" }
+        if abs(low - high) < 0.5 { return whole(low) }
+        return "\(whole(low))–\(whole(high))"
     }
 
     private static func whole(_ value: Double) -> String {

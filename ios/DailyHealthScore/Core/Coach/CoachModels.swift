@@ -90,9 +90,13 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
     /// JPEG file names in Coach photo storage. Empty for a text-only turn.
     var photoFileNames: [String] = []
     /// Finished-day chart attached to this turn. Nil when the reply is words only.
+    /// Kept so a message saved before several charts can still show its one chart.
     var trendChart: TrendChartReference? = nil
     /// An Apple Health chart attached to this turn. Nil when the reply has none.
     var healthChartMeasureRaw: String? = nil
+    /// Every chart this reply drew, in the order he asked. Empty on older turns,
+    /// which still show `trendChart` or `healthChartMeasureRaw`.
+    var charts: [CoachReplyChart] = []
 
     init(
         id: UUID = UUID(),
@@ -104,7 +108,8 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
         fallbackReason: String? = nil,
         photoFileNames: [String] = [],
         trendChart: TrendChartReference? = nil,
-        healthChartMeasureRaw: String? = nil
+        healthChartMeasureRaw: String? = nil,
+        charts: [CoachReplyChart] = []
     ) {
         self.id = id
         self.role = role
@@ -116,7 +121,25 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
         self.photoFileNames = photoFileNames
         self.trendChart = trendChart
         self.healthChartMeasureRaw = healthChartMeasureRaw
+        self.charts = charts
     }
+
+    /// Charts to draw under the reply. Newer turns carry the full list. An
+    /// older turn still has its single score chart or health chart.
+    var replyCharts: [CoachReplyChart] {
+        if !charts.isEmpty { return charts }
+        var legacy: [CoachReplyChart] = []
+        if let trendChart { legacy.append(.score(trendChart)) }
+        if let healthChartMeasureRaw, CoachHealthMeasure.parseOne(healthChartMeasureRaw) != nil {
+            legacy.append(.health(healthChartMeasureRaw))
+        }
+        return legacy
+    }
+}
+
+enum CoachReplyChart: Equatable, Codable, Sendable {
+    case score(TrendChartReference)
+    case health(String)
 }
 
 /// Where a metric sits against its goal. The app computes this; the model never
