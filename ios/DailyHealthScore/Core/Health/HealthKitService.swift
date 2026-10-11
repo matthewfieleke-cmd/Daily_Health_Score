@@ -75,9 +75,6 @@ final class HealthKitService {
                 readTypes.insert(type)
             }
         }
-        if let bloodPressure = HKCorrelationType.correlationType(forIdentifier: .bloodPressure) {
-            readTypes.insert(bloodPressure)
-        }
         for identifier in [HKCharacteristicTypeIdentifier.dateOfBirth, .biologicalSex] {
             if let type = HKObjectType.characteristicType(forIdentifier: identifier) {
                 readTypes.insert(type)
