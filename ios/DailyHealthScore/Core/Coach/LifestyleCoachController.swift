@@ -370,13 +370,22 @@ final class LifestyleCoachController: ObservableObject {
             let reason = result.tier == .onDevice
                 ? (result.fallbackReason ?? (CoachModelProvider.isServerQuotaExhausted ? "today’s Private Cloud Compute limit is reached" : nil))
                 : nil
+            let scoreChart = live.pendingCharts.compactMap { chart -> TrendChartReference? in
+                if case .score(let reference) = chart { return reference }
+                return nil
+            }.first
+            let healthChart = live.pendingCharts.compactMap { chart -> String? in
+                if case .health(let measure) = chart { return measure }
+                return nil
+            }.first
             let coachTurn = CoachChatTurn(
                 role: .coach,
                 text: result.message,
                 modelTier: result.tier,
                 fallbackReason: reason,
-                trendChart: live.pendingTrend,
-                healthChartMeasureRaw: live.pendingHealthChart
+                trendChart: scoreChart,
+                healthChartMeasureRaw: healthChart,
+                charts: live.pendingCharts
             )
             memory.append(coachTurn)
             goalProposal = result.goalProposal

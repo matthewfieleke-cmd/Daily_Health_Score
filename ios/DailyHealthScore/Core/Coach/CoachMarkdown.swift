@@ -3,10 +3,15 @@ import Foundation
 /// The subset of Markdown the Coach is allowed to write: paragraphs, **bold**,
 /// _italics_, and short bullet or numbered lists. Headers are folded into bold
 /// paragraphs, tables and code fences are shown as plain text.
+struct CoachMarkdownItem: Equatable, Sendable {
+    var text: String
+    var bullets: [String] = []
+}
+
 enum CoachMarkdownBlock: Equatable, Sendable {
     case paragraph(String)
     case bullets([String])
-    case numbered([String])
+    case numbered([CoachMarkdownItem])
 }
 
 enum CoachMarkdown {
@@ -14,7 +19,7 @@ enum CoachMarkdown {
         var blocks: [CoachMarkdownBlock] = []
         var paragraph: [String] = []
         var bullets: [String] = []
-        var numbered: [String] = []
+        var numbered: [CoachMarkdownItem] = []
 
         func flushParagraph() {
             let joined = paragraph.joined(separator: " ").trimmingCharacters(in: .whitespaces)
@@ -29,20 +34,23 @@ enum CoachMarkdown {
         for rawLine in text.components(separatedBy: "\n") {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             if line.isEmpty {
+                // A blank line does not end a list. A sentence does.
                 flushParagraph()
-                flushLists()
                 continue
             }
             if let item = bulletItem(line) {
                 flushParagraph()
-                if !numbered.isEmpty { blocks.append(.numbered(numbered)); numbered = [] }
-                bullets.append(item)
+                if !numbered.isEmpty {
+                    numbered[numbered.count - 1].bullets.append(item)
+                } else {
+                    bullets.append(item)
+                }
                 continue
             }
             if let item = numberedItem(line) {
                 flushParagraph()
                 if !bullets.isEmpty { blocks.append(.bullets(bullets)); bullets = [] }
-                numbered.append(item)
+                numbered.append(CoachMarkdownItem(text: item))
                 continue
             }
             flushLists()

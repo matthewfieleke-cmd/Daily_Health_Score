@@ -31,6 +31,12 @@ final class CoachHealthReportTests: XCTestCase {
         XCTAssertTrue(facts.text.contains("low 52"))
         XCTAssertTrue(facts.text.contains("high 141"))
         XCTAssertTrue(facts.text.contains("average 68 bpm"))
+        XCTAssertEqual(facts.chart?.style, .range)
+        XCTAssertEqual(facts.chart?.points.first?.low, 52)
+        XCTAssertEqual(facts.chart?.points.first?.high, 141)
+        XCTAssertEqual(facts.chart?.headline, "68 bpm")
+        XCTAssertTrue(facts.chart?.spoken.contains("average 68 bpm") == true)
+        XCTAssertFalse(facts.chart?.spoken.contains("Sunday") == true)
         XCTAssertFalse(facts.text.localizedCaseInsensitiveContains("goal"))
         XCTAssertFalse(facts.text.localizedCaseInsensitiveContains("score"))
         XCTAssertFalse(facts.text.contains("0 bpm"))
@@ -157,7 +163,18 @@ final class CoachHealthReportTests: XCTestCase {
         let live = CoachLiveContext()
         live.todayKey = "2026-10-10"
         live.healthLookup = { _, _, _ in
-            CoachHealthFacts(text: "Resting heart rate: 54 bpm.", hasRecord: true, chart: nil)
+            CoachHealthFacts(
+                text: "Resting heart rate, Oct 4–10: 62 bpm.",
+                hasRecord: true,
+                chart: CoachHealthChart(
+                    title: "Resting heart rate",
+                    unit: "bpm",
+                    points: [CoachHealthChartPoint(dateKey: "2026-10-10", label: "Oct 10", value: 62)],
+                    headline: "62 bpm",
+                    caption: "Oct 4–10",
+                    spoken: "Resting heart rate, Oct 4–10: 62 bpm."
+                )
+            )
         }
         let text = await live.showHealthChart(metric: "resting heart rate")
         XCTAssertTrue(text.hasPrefix("Chart shown"))

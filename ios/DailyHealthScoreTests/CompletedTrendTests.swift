@@ -213,5 +213,7 @@ final class CompletedTrendTests: XCTestCase {
         XCTAssertTrue(movement.contains("Steps"))
         XCTAssertEqual(live.pendingTrend?.movementGoalRaw, MovementGoal.steps10000.rawValue)
         XCTAssertFalse(movement.contains("30 min"))
+        XCTAssertEqual(live.pendingCharts.count, 2)
+        XCTAssertFalse(movement.contains("One chart is on screen"))
     }
 }

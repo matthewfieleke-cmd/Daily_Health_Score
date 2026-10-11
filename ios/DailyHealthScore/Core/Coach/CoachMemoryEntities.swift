@@ -14,6 +14,8 @@ final class CoachChatMessageEntity {
     var photoFileNamesRaw: String = ""
     /// "metric|yyyy-MM-dd|count" when this turn shows a finished-day chart.
     var trendChartRaw: String = ""
+    /// One chart per line. Empty on rows saved before a reply could hold several charts.
+    var chartsRaw: String = ""
 
     var photoFileNames: [String] {
         photoFileNamesRaw.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
@@ -28,6 +30,31 @@ final class CoachChatMessageEntity {
         modelTierRaw = turn.modelTier?.rawValue ?? ""
         photoFileNamesRaw = turn.photoFileNames.joined(separator: "\n")
         trendChartRaw = Self.encode(turn.trendChart)
+        let charts = turn.charts.isEmpty
+            ? turn.replyCharts
+            : turn.charts
+        chartsRaw = charts.map(Self.encodeReply).joined(separator: "\n")
+    }
+
+    static func encodeReply(_ chart: CoachReplyChart) -> String {
+        switch chart {
+        case .score(let reference):
+            return "score|\(encode(reference))"
+        case .health(let measure):
+            return "health|\(measure)"
+        }
+    }
+
+    static func decodeReplyCharts(_ raw: String) -> [CoachReplyChart] {
+        raw.split(separator: "\n").compactMap { line in
+            let text = String(line)
+            if text.hasPrefix("health|") {
+                let measure = String(text.dropFirst("health|".count))
+                return measure.isEmpty ? nil : .health(measure)
+            }
+            guard text.hasPrefix("score|") else { return nil }
+            return decodeChart(String(text.dropFirst("score|".count))).map(CoachReplyChart.score)
+        }
     }
 
     static func encode(_ chart: TrendChartReference?) -> String {
@@ -60,7 +87,13 @@ final class CoachChatMessageEntity {
             threadId: threadId,
             modelTier: CoachModelTier(rawValue: modelTierRaw),
             photoFileNames: photoFileNames,
-            trendChart: Self.decodeChart(trendChartRaw)
+            trendChart: Self.decodeChart(trendChartRaw),
+            charts: {
+                let stored = Self.decodeReplyCharts(chartsRaw)
+                if !stored.isEmpty { return stored }
+                if let trend = Self.decodeChart(trendChartRaw) { return [.score(trend)] }
+                return []
+            }()
         )
     }
 }
