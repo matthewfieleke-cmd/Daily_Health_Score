@@ -245,6 +245,10 @@ final class LifestyleCoachController: ObservableObject {
                 fresh.chartNutritionModeRaw = reference.nutritionModeRaw
             } else if let measure = CoachHealthMeasure.parseOne(fresh.chartMetricRaw) {
                 fresh.chartMetricRaw = measure.rawValue
+                if let chart = await HealthKitService.shared.coachHealthChart(measure: measure, endingOn: record.date),
+                   let json = chart.jsonLine() {
+                    fresh.healthChartJSON = json
+                }
                 fresh.chartEndDateKey = ""
                 fresh.chartDayCount = 0
                 fresh.chartMovementGoalRaw = ""
@@ -411,7 +415,7 @@ final class LifestyleCoachController: ObservableObject {
                 return nil
             }.first
             let healthChart = live.pendingCharts.compactMap { chart -> String? in
-                if case .health(let measure) = chart { return measure }
+                if case .health(let drawn) = chart { return drawn.measureRaw }
                 return nil
             }.first
             let coachTurn = CoachChatTurn(

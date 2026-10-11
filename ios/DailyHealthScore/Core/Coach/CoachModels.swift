@@ -131,7 +131,7 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
         var legacy: [CoachReplyChart] = []
         if let trendChart { legacy.append(.score(trendChart)) }
         if let healthChartMeasureRaw, CoachHealthMeasure.parseOne(healthChartMeasureRaw) != nil {
-            legacy.append(.health(healthChartMeasureRaw))
+            legacy.append(.health(.namedOnly(healthChartMeasureRaw)))
         }
         return legacy
     }
@@ -139,7 +139,43 @@ struct CoachChatTurn: Identifiable, Equatable, Codable, Sendable {
 
 enum CoachReplyChart: Equatable, Codable, Sendable {
     case score(TrendChartReference)
-    case health(String)
+    case health(CoachHealthChart)
+
+    /// One line in the saved message. A health chart with points is JSON so the
+    /// picture survives without reading Apple Health again.
+    func storageLine() -> String {
+        switch self {
+        case .score(let reference):
+            let movement = reference.movementGoalRaw
+            return "score|\(reference.metric.rawValue)|\(reference.endDateKey)|\(reference.dayCount)|\(movement)|\(reference.nutritionModeRaw)"
+        case .health(let chart):
+            if let json = chart.jsonLine() { return "health|\(json)" }
+            return "health|\(chart.measureRaw)"
+        }
+    }
+
+    static func fromStorageLine(_ raw: String) -> CoachReplyChart? {
+        if raw.hasPrefix("health|") {
+            let rest = String(raw.dropFirst("health|".count))
+            guard !rest.isEmpty else { return nil }
+            if rest.hasPrefix("{"), let chart = CoachHealthChart.fromJSONLine(rest) {
+                return .health(chart)
+            }
+            return .health(.namedOnly(rest))
+        }
+        guard raw.hasPrefix("score|") else { return nil }
+        let parts = String(raw.dropFirst("score|".count)).split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 3,
+              let metric = TrendMetric(rawValue: parts[0]),
+              let count = Int(parts[2]), count > 0 else { return nil }
+        return .score(TrendChartReference(
+            metric: metric,
+            endDateKey: parts[1],
+            dayCount: count,
+            movementGoalRaw: parts.count >= 4 ? parts[3] : "",
+            nutritionModeRaw: parts.count >= 5 ? parts[4] : ""
+        ))
+    }
 }
 
 /// Where a metric sits against its goal. The app computes this; the model never

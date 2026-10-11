@@ -38,6 +38,8 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
     var chartMovementGoalRaw: String = ""
     /// Nutrition mode when the card offered a fiber chart. Empty on older cards.
     var chartNutritionModeRaw: String = ""
+    /// The Health chart drawn while the card was written. Empty on older cards.
+    var healthChartJSON: String = ""
 
     init(
         kind: CoachCheckInKind,
@@ -54,7 +56,8 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         chartEndDateKey: String = "",
         chartDayCount: Int = 0,
         chartMovementGoalRaw: String = "",
-        chartNutritionModeRaw: String = ""
+        chartNutritionModeRaw: String = "",
+        healthChartJSON: String = ""
     ) {
         self.kind = kind
         self.dateKey = dateKey
@@ -71,6 +74,11 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         self.chartDayCount = chartDayCount
         self.chartMovementGoalRaw = chartMovementGoalRaw
         self.chartNutritionModeRaw = chartNutritionModeRaw
+        self.healthChartJSON = healthChartJSON
+    }
+
+    var storedHealthChart: CoachHealthChart? {
+        CoachHealthChart.fromJSONLine(healthChartJSON)
     }
 
     var chartMetric: TrendMetric? {
@@ -116,7 +124,7 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case kind, dateKey, healthLine, question, tomorrowLine, trendLine, thoughts, replyThreadID, isFallback, generatedAt
-        case chartMetricRaw, chartEndDateKey, chartDayCount, chartMovementGoalRaw, chartNutritionModeRaw
+        case chartMetricRaw, chartEndDateKey, chartDayCount, chartMovementGoalRaw, chartNutritionModeRaw, healthChartJSON
     }
 
     init(from decoder: Decoder) throws {
@@ -136,6 +144,7 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         chartDayCount = try container.decodeIfPresent(Int.self, forKey: .chartDayCount) ?? 0
         chartMovementGoalRaw = try container.decodeIfPresent(String.self, forKey: .chartMovementGoalRaw) ?? ""
         chartNutritionModeRaw = try container.decodeIfPresent(String.self, forKey: .chartNutritionModeRaw) ?? ""
+        healthChartJSON = try container.decodeIfPresent(String.self, forKey: .healthChartJSON) ?? ""
     }
 
     func encode(to encoder: Encoder) throws {
@@ -155,6 +164,7 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         try container.encode(chartDayCount, forKey: .chartDayCount)
         try container.encode(chartMovementGoalRaw, forKey: .chartMovementGoalRaw)
         try container.encode(chartNutritionModeRaw, forKey: .chartNutritionModeRaw)
+        try container.encode(healthChartJSON, forKey: .healthChartJSON)
     }
 }
 
