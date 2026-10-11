@@ -31,7 +31,7 @@ extension HealthKitService {
         return CoachHealthReport.facts(measures: loaded, startKey: startKey, endKey: endKey, todayKey: todayKey)
     }
 
-    func coachHealthChart(measure: CoachHealthMeasure, endingOn todayKey: String, days: Int = 7) async -> CoachHealthChart? {
+    func coachHealthChart(measure: CoachHealthMeasure, endingOn todayKey: String = DateHelpers.localDateKey(), days: Int = 7) async -> CoachHealthChart? {
         let start = DateHelpers.addDays(to: todayKey, days: -(max(days, 1) - 1)) ?? todayKey
         return await coachHealthFacts(measures: [measure], startKey: start, endKey: todayKey, todayKey: todayKey).chart
     }
@@ -65,15 +65,15 @@ extension HealthKitService {
         )
         switch measure {
         case .heartRate:
-            facts.days = await dailyRange(.heartRate, unit: HKUnit.count().divided(by: .minute()), window: window)
+            facts.days = await dailyRange(.heartRate, unit: HKUnit.count().unitDivided(by: .minute()), window: window)
         case .restingHeartRate:
-            facts.days = await dailyAverage(.restingHeartRate, unit: HKUnit.count().divided(by: .minute()), window: window)
+            facts.days = await dailyAverage(.restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), window: window)
         case .walkingHeartRate:
-            facts.days = await dailyAverage(.walkingHeartRateAverage, unit: HKUnit.count().divided(by: .minute()), window: window)
+            facts.days = await dailyAverage(.walkingHeartRateAverage, unit: HKUnit.count().unitDivided(by: .minute()), window: window)
         case .bloodOxygen:
             facts.days = await dailyPercent(.oxygenSaturation, window: window)
         case .respiratoryRate:
-            facts.days = await dailyAverage(.respiratoryRate, unit: HKUnit.count().divided(by: .minute()), window: window)
+            facts.days = await dailyAverage(.respiratoryRate, unit: HKUnit.count().unitDivided(by: .minute()), window: window)
         case .standMinutes:
             facts.days = await dailyTotal(.appleStandTime, unit: .minute(), window: window)
         case .daylight:
@@ -85,7 +85,7 @@ extension HealthKitService {
         case .bloodPressure:
             facts.days = await bloodPressure(window: window)
         case .cardioFitness:
-            let vo2 = HKUnit.literUnit(with: .milli).divided(by: .gramUnit(with: .kilo)).divided(by: .minute())
+            let vo2 = HKUnit.literUnit(with: .milli).unitDivided(by: .gramUnit(with: .kilo)).unitDivided(by: .minute())
             let samples = await quantityHistory(.vo2Max, unit: vo2, window: window)
             facts.days = samples.days
             facts.latest = samples.latest
@@ -247,9 +247,9 @@ extension HealthKitService {
         }
         var runs: [CoachHealthRun] = []
         for workout in workouts {
-            let speed = await workoutAverage(.runningSpeed, unit: HKUnit.meter().divided(by: .second()), workout: workout)
+            let speed = await workoutAverage(.runningSpeed, unit: HKUnit.meter().unitDivided(by: .second()), workout: workout)
             let power = await workoutAverage(.runningPower, unit: .watt(), workout: workout)
-            let heart = await workoutAverage(.heartRate, unit: HKUnit.count().divided(by: .minute()), workout: workout)
+            let heart = await workoutAverage(.heartRate, unit: HKUnit.count().unitDivided(by: .minute()), workout: workout)
             runs.append(CoachHealthRun(
                 dateKey: DateHelpers.localDateKey(from: workout.startDate),
                 timeLabel: workout.startDate.formatted(date: .omitted, time: .shortened),
