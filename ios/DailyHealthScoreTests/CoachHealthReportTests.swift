@@ -180,5 +180,33 @@ final class CoachHealthReportTests: XCTestCase {
         XCTAssertTrue(text.hasPrefix("Chart shown"))
         XCTAssertEqual(live.pendingHealthChart, CoachHealthMeasure.restingHeartRate.rawValue)
         XCTAssertNil(live.pendingTrend)
+        guard case .health(let saved) = live.pendingCharts.last else {
+            return XCTFail("The reply should keep the resting heart rate chart")
+        }
+        XCTAssertEqual(saved.points.map(\.value), [62])
+        XCTAssertEqual(saved.measureRaw, CoachHealthMeasure.restingHeartRate.rawValue)
+    }
+
+    func test_savedHealthChartKeepsItsPoints() {
+        let chart = CoachHealthChart(
+            measureRaw: "restingHeartRate",
+            title: "Resting heart rate",
+            unit: "bpm",
+            points: [CoachHealthChartPoint(dateKey: "2026-10-11", label: "Oct 11", value: 63)],
+            headline: "63 bpm",
+            caption: "Oct 5–Oct 11",
+            spoken: "Resting heart rate, Oct 5–Oct 11: 63 bpm."
+        )
+        let restored = CoachReplyChart.fromStorageLine(CoachReplyChart.health(chart).storageLine())
+        guard case .health(let saved) = restored else {
+            return XCTFail("Expected the health chart to round-trip")
+        }
+        XCTAssertEqual(saved.points.map(\.value), [63])
+        XCTAssertEqual(saved.headline, "63 bpm")
+        guard case .health(let named) = CoachReplyChart.fromStorageLine("health|restingHeartRate") else {
+            return XCTFail("An older name-only chart should still decode")
+        }
+        XCTAssertTrue(named.points.isEmpty)
+        XCTAssertEqual(named.measureRaw, "restingHeartRate")
     }
 }

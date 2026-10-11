@@ -21,7 +21,7 @@ struct LifestyleCoachChatView: View {
     @State private var focus: CoachFocusContext?
     @State private var showMemory = false
     @State private var enlargedChart: TrendChartReference?
-    @State private var enlargedHealthChart: CoachHealthMeasure?
+    @State private var enlargedHealthChart: PresentedHealthChart?
     @State private var launch: CoachChatLaunch
     @State private var didOpen = false
     @FocusState private var isInputFocused: Bool
@@ -198,9 +198,9 @@ struct LifestyleCoachChatView: View {
                     .environmentObject(appState)
             }
         }
-        .sheet(item: $enlargedHealthChart) { measure in
+        .sheet(item: $enlargedHealthChart) { presented in
             NavigationStack {
-                HealthChartScreen(measure: measure)
+                HealthChartScreen(measure: presented.measure, stored: presented.chart)
             }
         }
         .sheet(item: $enlargedChart) { chart in
@@ -687,10 +687,10 @@ struct LifestyleCoachChatView: View {
                                 .buttonStyle(.plain)
                                 .accessibilityHint("Enlarges the chart. Close returns to this chat.")
                             }
-                        case .health(let raw):
-                            if let measure = CoachHealthMeasure.parseOne(raw) {
-                                HealthChartBubble(measure: measure) {
-                                    enlargedHealthChart = measure
+                        case .health(let saved):
+                            if let measure = saved.measure ?? CoachHealthMeasure.parseOne(saved.measureRaw) {
+                                HealthChartBubble(measure: measure, stored: saved) { shown in
+                                    enlargedHealthChart = PresentedHealthChart(measure: measure, chart: shown)
                                 }
                             }
                         }

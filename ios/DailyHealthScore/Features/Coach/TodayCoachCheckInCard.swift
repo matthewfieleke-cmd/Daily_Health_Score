@@ -16,7 +16,7 @@ struct TodayCoachCheckInCard: View {
     var onContinueReply: (UUID) -> Void
     var onIntake: () -> Void
     var onShowChart: (TrendMetric) -> Void = { _ in }
-    var onShowHealthChart: (CoachHealthMeasure) -> Void = { _ in }
+    var onShowHealthChart: (CoachHealthMeasure, CoachHealthChart?) -> Void = { _, _ in }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -268,7 +268,7 @@ struct TodayCoachCheckInCard: View {
                   card.dateKey == record?.date,
                   let measure = card.healthChartMeasure {
             Button {
-                onShowHealthChart(measure)
+                onShowHealthChart(measure, card.storedHealthChart)
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "chart.bar")

@@ -132,17 +132,27 @@ struct HealthChartCard: View {
     }
 }
 
-/// Compact chart under a chat reply. The reading happens when the bubble appears.
+/// Compact chart under a chat reply. A chart saved with the message is drawn
+/// immediately. An older message that only kept the name reads Health once.
 struct HealthChartBubble: View {
     let measure: CoachHealthMeasure
-    var onEnlarge: () -> Void
+    var stored: CoachHealthChart?
+    var onEnlarge: (CoachHealthChart) -> Void
     @State private var chart: CoachHealthChart?
+
+    private var shown: CoachHealthChart? {
+        if let chart, !chart.points.isEmpty { return chart }
+        if let stored, !stored.points.isEmpty { return stored }
+        return nil
+    }
 
     var body: some View {
         Group {
-            if let chart {
-                Button(action: onEnlarge) {
-                    HealthChartCard(chart: chart, compact: true)
+            if let shown {
+                Button {
+                    onEnlarge(shown)
+                } label: {
+                    HealthChartCard(chart: shown, compact: true)
                         .padding(12)
                         .background(AppTheme.cardSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -152,7 +162,11 @@ struct HealthChartBubble: View {
             }
         }
         .task {
-            chart = await HealthKitService.shared.coachHealthChart(measure: measure)
+            if let stored, !stored.points.isEmpty {
+                chart = stored
+            } else {
+                chart = await HealthKitService.shared.coachHealthChart(measure: measure)
+            }
         }
     }
 }

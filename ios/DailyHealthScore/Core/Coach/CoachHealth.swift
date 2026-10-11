@@ -125,7 +125,7 @@ struct CoachHealthMeasureFacts: Equatable, Sendable {
     var temperatureUsesFahrenheit: Bool = false
 }
 
-enum CoachHealthChartStyle: Equatable, Sendable {
+enum CoachHealthChartStyle: String, Equatable, Codable, Sendable {
     /// One value per day, with an average line.
     case bar
     /// A day's low-to-high range, with the average marked.
@@ -134,7 +134,7 @@ enum CoachHealthChartStyle: Equatable, Sendable {
     case pressure
 }
 
-struct CoachHealthChartPoint: Equatable, Identifiable, Sendable {
+struct CoachHealthChartPoint: Equatable, Identifiable, Codable, Sendable {
     var dateKey: String
     var label: String
     var value: Double
@@ -146,7 +146,9 @@ struct CoachHealthChartPoint: Equatable, Identifiable, Sendable {
     var id: String { token.isEmpty ? dateKey : token }
 }
 
-struct CoachHealthChart: Equatable, Sendable {
+struct CoachHealthChart: Equatable, Codable, Sendable {
+    /// heartRate, restingHeartRate, and the other lookupHealth names.
+    var measureRaw: String = ""
     var title: String
     var unit: String = ""
     var style: CoachHealthChartStyle = .bar
@@ -155,6 +157,30 @@ struct CoachHealthChart: Equatable, Sendable {
     var caption: String
     /// What the draw tool tells the advisor. The daily list stays on lookupHealth.
     var spoken: String = ""
+
+    var measure: CoachHealthMeasure? { CoachHealthMeasure.parseOne(measureRaw) }
+
+    /// A saved name with no points. The screen can read Health again for an older message.
+    static func namedOnly(_ raw: String) -> CoachHealthChart {
+        let measure = CoachHealthMeasure.parseOne(raw)
+        return CoachHealthChart(
+            measureRaw: measure?.rawValue ?? raw,
+            title: measure?.title ?? raw,
+            points: [],
+            headline: "",
+            caption: ""
+        )
+    }
+
+    func jsonLine() -> String? {
+        guard !points.isEmpty, let data = try? JSONEncoder().encode(self) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func fromJSONLine(_ raw: String) -> CoachHealthChart? {
+        guard let data = raw.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(CoachHealthChart.self, from: data)
+    }
 }
 
 struct CoachHealthFacts: Equatable, Sendable {
@@ -412,6 +438,7 @@ enum CoachHealthReport {
         }
         let spoken = spokenLine(title: facts.measure.title, span: span, headline: headline, days: recorded, measure: facts.measure)
         return CoachHealthChart(
+            measureRaw: facts.measure.rawValue,
             title: facts.measure.title,
             unit: unit,
             style: style,
@@ -437,6 +464,7 @@ enum CoachHealthReport {
         let span = dateSpan(points.map(\.dateKey))
         let spoken = "Blood pressure, \(span): \(readings.count) \(readings.count == 1 ? "reading" : "readings"), latest \(headline) mmHg."
         return CoachHealthChart(
+            measureRaw: CoachHealthMeasure.bloodPressure.rawValue,
             title: "Blood pressure",
             unit: "mmHg",
             style: .pressure,
@@ -464,6 +492,7 @@ enum CoachHealthReport {
         let headline = String(format: "%.1f \(unit)", total)
         let span = dateSpan(points.map(\.dateKey))
         return CoachHealthChart(
+            measureRaw: CoachHealthMeasure.running.rawValue,
             title: "Running",
             unit: unit,
             points: points,

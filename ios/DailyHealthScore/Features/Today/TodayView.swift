@@ -10,7 +10,7 @@ struct TodayView: View {
 
     @State private var coachLaunch: CoachChatLaunch?
     @State private var trendMetric: TrendMetric?
-    @State private var healthChart: CoachHealthMeasure?
+    @State private var healthChart: PresentedHealthChart?
     @State private var showFoodLog = false
     @State private var chatAfterChart: CoachChatLaunch?
     @State private var showIntake = false
@@ -105,9 +105,9 @@ struct TodayView: View {
             FoodGroupLogSheet(dateKey: todayKey)
                 .environmentObject(appState)
         }
-        .sheet(item: $healthChart) { measure in
+        .sheet(item: $healthChart) { presented in
             NavigationStack {
-                HealthChartScreen(measure: measure)
+                HealthChartScreen(measure: presented.measure, stored: presented.chart)
             }
         }
         .sheet(item: $trendMetric, onDismiss: openChatAfterChart) { metric in
@@ -149,7 +149,9 @@ struct TodayView: View {
                     onContinueReply: { coachLaunch = .thread($0) },
                     onIntake: { showIntake = true },
                     onShowChart: { trendMetric = $0 },
-                    onShowHealthChart: { healthChart = $0 }
+                    onShowHealthChart: { measure, chart in
+                        healthChart = PresentedHealthChart(measure: measure, chart: chart)
+                    }
                 )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     // Remaining height is the grouped screen, not empty card chrome.

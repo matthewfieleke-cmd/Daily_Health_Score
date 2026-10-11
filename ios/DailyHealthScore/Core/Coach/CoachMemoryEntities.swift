@@ -37,24 +37,11 @@ final class CoachChatMessageEntity {
     }
 
     static func encodeReply(_ chart: CoachReplyChart) -> String {
-        switch chart {
-        case .score(let reference):
-            return "score|\(encode(reference))"
-        case .health(let measure):
-            return "health|\(measure)"
-        }
+        chart.storageLine()
     }
 
     static func decodeReplyCharts(_ raw: String) -> [CoachReplyChart] {
-        raw.split(separator: "\n").compactMap { line in
-            let text = String(line)
-            if text.hasPrefix("health|") {
-                let measure = String(text.dropFirst("health|".count))
-                return measure.isEmpty ? nil : .health(measure)
-            }
-            guard text.hasPrefix("score|") else { return nil }
-            return decodeChart(String(text.dropFirst("score|".count))).map(CoachReplyChart.score)
-        }
+        raw.split(separator: "\n").compactMap { CoachReplyChart.fromStorageLine(String($0)) }
     }
 
     static func encode(_ chart: TrendChartReference?) -> String {

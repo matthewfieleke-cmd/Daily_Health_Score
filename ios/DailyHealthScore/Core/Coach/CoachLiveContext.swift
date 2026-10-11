@@ -228,9 +228,10 @@ final class CoachLiveContext {
         guard let healthLookup else { return "Apple Health readings are not available right now." }
         let start = DateHelpers.addDays(to: todayKey, days: -6) ?? todayKey
         let facts = await healthLookup([measure], start, todayKey)
-        guard facts.hasRecord, let chart = facts.chart else { return facts.text }
+        guard facts.hasRecord, var chart = facts.chart, !chart.points.isEmpty else { return facts.text }
+        if chart.measureRaw.isEmpty { chart.measureRaw = measure.rawValue }
         pendingHealthChart = measure.rawValue
-        pendingCharts.append(.health(measure.rawValue))
+        pendingCharts.append(.health(chart))
         let summary = chart.spoken.isEmpty ? "\(chart.title): \(chart.headline)" : chart.spoken
         return "Chart shown. \(summary) The app draws the chart."
     }
@@ -258,7 +259,7 @@ final class CoachLiveContext {
         }
         guard let healthLookup else { return "Apple Health readings are not available right now." }
         let facts = await healthLookup(measures, window.startKey, window.endKey)
-        return facts.text
+        return facts.text + "\nThese readings are not a chart."
     }
 
     var bodyPayload: String {
