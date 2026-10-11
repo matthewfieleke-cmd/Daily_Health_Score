@@ -17,9 +17,11 @@ final class LifestyleCoachController: ObservableObject {
     @Published private(set) var checkInError: String?
     @Published var isChatBusy = false
     @Published var chatError: String?
-    @Published private(set) var goalProposal: CoachGoalProposal?
+    @Published private(set) var goalProposals: [CoachGoalProposal] = []
     /// The Coach heard "I did it"; the person confirms before anything is logged.
-    @Published private(set) var pendingGoalCheckIn: CoachGoalCheckInRequest?
+    @Published private(set) var pendingGoalCheckIns: [CoachGoalCheckInRequest] = []
+    var goalProposal: CoachGoalProposal? { goalProposals.last }
+    var pendingGoalCheckIn: CoachGoalCheckInRequest? { pendingGoalCheckIns.last }
     private var checkInGenerationID = UUID()
     private var chatGenerationID = UUID()
     /// One on-device background compile at a time. A second caller waits,
@@ -45,12 +47,47 @@ final class LifestyleCoachController: ObservableObject {
         isGeneratingCheckIn = false
     }
 
-    func dismissGoalProposal() { goalProposal = nil }
+    func dismissGoalProposal() { goalProposals = [] }
 
-    func dismissGoalCheckIn() { pendingGoalCheckIn = nil }
+    func dismissGoalProposal(_ id: UUID) {
+        goalProposals.removeAll { $0.id == id }
+    }
+
+    func dismissGoalCheckIn() { pendingGoalCheckIns = [] }
+
+    func dismissGoalCheckIn(_ id: UUID) {
+        pendingGoalCheckIns.removeAll { $0.id == id }
+    }
+
+    /// Drafts stay until saved or dismissed. An update of a goal already on screen replaces that card.
+    private func adoptDrafts(_ proposals: [CoachGoalProposal]) {
+        for proposal in proposals {
+            if let originalID = proposal.edit.original?.id,
+               let index = goalProposals.firstIndex(where: { $0.edit.original?.id == originalID }) {
+                goalProposals[index] = proposal
+            } else {
+                goalProposals.append(proposal)
+            }
+        }
+    }
+
+    /// One confirmation per goal. A different goal gets its own card.
+    private func adoptCheckIns(_ requests: [CoachGoalCheckInRequest]) {
+        for request in requests {
+            if let index = pendingGoalCheckIns.firstIndex(where: { $0.goalId == request.goalId }) {
+                pendingGoalCheckIns[index] = request
+            } else {
+                pendingGoalCheckIns.append(request)
+            }
+        }
+    }
 
     func recordGoalSaved(_ goal: SMARTGoal) {
-        goalProposal = nil
+        let savedText = goal.specificText.trimmingCharacters(in: .whitespacesAndNewlines)
+        goalProposals.removeAll { proposal in
+            proposal.edit.original?.id == goal.id
+                || proposal.edit.specificText.trimmingCharacters(in: .whitespacesAndNewlines) == savedText
+        }
         memory.append(CoachChatTurn(role: .coach, text:
             "Saved your SMART goal: \(goal.generatedSummary) Your \(goal.filledCount) recorded check-ins are preserved."
         ))
@@ -64,7 +101,7 @@ final class LifestyleCoachController: ObservableObject {
             occurredAt: request.occurredAt,
             note: request.note
         )
-        pendingGoalCheckIn = nil
+        pendingGoalCheckIns.removeAll { $0.id == request.id }
         guard logged, let goal = goals.goals.first(where: { $0.id == request.goalId }) else { return }
         let title = goal.specificText.trimmingCharacters(in: .whitespacesAndNewlines)
         memory.append(CoachChatTurn(
@@ -284,8 +321,8 @@ final class LifestyleCoachController: ObservableObject {
         // the app can, if the model declines.
         let disposition = CoachSafetyGate.evaluate(trimmed)
         if case .escalate(let message) = disposition {
-            goalProposal = nil
-            pendingGoalCheckIn = nil
+            goalProposals = []
+            pendingGoalCheckIns = []
             memory.append(CoachChatTurn(role: .user, text: trimmed, photoFileNames: photoFileNames))
             memory.append(CoachChatTurn(role: .coach, text: message))
             chatError = nil
@@ -308,7 +345,6 @@ final class LifestyleCoachController: ObservableObject {
         memory.keepTheMoreSpecificNotes()
         let memoryRevisionAtStart = memory.memoryRevision
         chatError = nil
-        pendingGoalCheckIn = nil
         defer { if chatGenerationID == generationID { isChatBusy = false } }
 
         let isFirstReply = !memory.turns.contains { $0.role == .user }
@@ -388,8 +424,8 @@ final class LifestyleCoachController: ObservableObject {
                 charts: live.pendingCharts
             )
             memory.append(coachTurn)
-            goalProposal = result.goalProposal
-            pendingGoalCheckIn = result.goalCheckIn
+            adoptDrafts(result.goalProposals)
+            adoptCheckIns(result.goalCheckIns)
             if result.proposalRejected {
                 chatError = "The draft needs clarification before it can be saved. Ask the coach to clarify the action, target, or deadline, or create the goal manually."
             }
@@ -708,9 +744,11 @@ final class LifestyleCoachController: ObservableObject {
                 tools.append(contentsOf: result.toolsUsed.map {
                     sequence.count == 1 ? $0 : "Turn \(index + 1) · \($0)"
                 })
-                if let proposal = result.goalProposal {
-                    let detail = "\(proposal.isUpdate ? "update" : "create"): \(proposal.edit.specificText) × \(proposal.edit.targetCount)"
-                    drafts.append(sequence.count == 1 ? detail : "Turn \(index + 1) · \(detail)")
+                if !result.goalProposals.isEmpty {
+                    for proposal in result.goalProposals {
+                        let detail = "\(proposal.isUpdate ? "update" : "create"): \(proposal.edit.specificText) × \(proposal.edit.targetCount)"
+                        drafts.append(sequence.count == 1 ? detail : "Turn \(index + 1) · \(detail)")
+                    }
                 } else if result.proposalRejected {
                     drafts.append(
                         sequence.count == 1
@@ -761,8 +799,8 @@ final class LifestyleCoachController: ObservableObject {
         model.forgetAllSessions()
         chatGenerationID = UUID()
         isChatBusy = false
-        goalProposal = nil
-        pendingGoalCheckIn = nil
+        goalProposals = []
+        pendingGoalCheckIns = []
         invalidateCheckIn()
         memory.clearAllMemory()
         checkIn = nil
@@ -775,8 +813,8 @@ final class LifestyleCoachController: ObservableObject {
         model.forgetAllSessions()
         chatGenerationID = UUID()
         isChatBusy = false
-        goalProposal = nil
-        pendingGoalCheckIn = nil
+        goalProposals = []
+        pendingGoalCheckIns = []
         chatError = nil
         memory.deleteAllChats()
         checkIn = memory.cachedCheckIn
