@@ -65,10 +65,15 @@ final class FoundationModelsCoach {
         try ensureAvailable()
         // Background writes yield to chat when the daily allowance is nearly spent.
         let tier: CoachModelTier = CoachModelProvider.isServerQuotaApproaching ? .onDevice : CoachModelProvider.preferredTier()
+        let goalsListed = !CoachCheckInLogic.goalRows(
+            goals: live.goals,
+            activities: live.activitiesByGoal.values.flatMap { $0 },
+            todayKey: snapshot.todayKey
+        ).isEmpty
         let cloudPrompt = """
         Today is \(snapshot.todayDisplay). Local time: \(snapshot.clockLabel).
 
-        \(CoachCharter.homeCardInstructions)
+        \(CoachCharter.homeCardInstructions(goalsListed: goalsListed))
         """
         func onDevicePrompt() async -> String {
             let notes = await homeCardNotes(items: live.memoryItems, clockLabel: snapshot.clockLabel)
@@ -104,7 +109,10 @@ final class FoundationModelsCoach {
         }
         func onDeviceCard() async throws -> GenerableCoachCheckIn {
             try await CoachModelProvider
-                .makeSession(tier: .onDevice, instructions: CoachCharter.homeCardFallbackInstructions)
+                .makeSession(
+                    tier: .onDevice,
+                    instructions: CoachCharter.homeCardFallbackInstructions(goalsListed: goalsListed)
+                )
                 .respond(to: await onDevicePrompt(), generating: GenerableCoachCheckIn.self)
                 .content
         }
@@ -141,21 +149,15 @@ final class FoundationModelsCoach {
             lastTierUsed = .onDevice
             content = try await onDeviceCard()
         }
-        var seen = Set<String>()
-        let thoughts = content.thoughts.compactMap { raw -> String? in
-            let line = CoachReplyPolish.polish(raw.trimmedForCoach())
-            guard !line.isEmpty, seen.insert(line).inserted else { return nil }
-            return line
-        }
-        let chosen = Array(thoughts.prefix(2))
-        guard let first = chosen.first else {
+        let comment = CoachReplyPolish.polish(content.comment.trimmedForCoach())
+        guard !comment.isEmpty else {
             throw CoachError.generationFailed("The coach returned an empty card.")
         }
         return CoachCheckIn(
             kind: kind,
             dateKey: snapshot.todayKey,
-            healthLine: first,
-            thoughts: chosen,
+            healthLine: comment,
+            thoughts: [comment],
             isFallback: false,
             generatedAt: now,
             chartMetricRaw: content.chart.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -739,8 +741,8 @@ struct GenerableNoteSelection {
 
 @Generable
 struct GenerableCoachCheckIn {
-    @Guide(description: "One or two findings, most useful first.")
-    var thoughts: [String]
+    @Guide(description: "One comment, a few sentences.")
+    var comment: String
 
     @Guide(description: "A measure the app can draw, or none.")
     var chart: String

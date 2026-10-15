@@ -30,8 +30,8 @@ final class CoachCheckInLogicTests: XCTestCase {
         let first = CoachTestFixtures.goal(text: "walk after lunch")
         let second = CoachTestFixtures.goal(text: "call a friend")
         let key = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .evening, goals: [first, second])
-        XCTAssertTrue(key.contains("#checkin7#"))
-        XCTAssertFalse(key.contains("checkin6"))
+        XCTAssertTrue(key.contains("#checkin8#"))
+        XCTAssertFalse(key.contains("checkin7"))
         XCTAssertEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .evening, goals: [second, first]))
 
         var logged = first
@@ -43,26 +43,16 @@ final class CoachCheckInLogicTests: XCTestCase {
         XCTAssertNotEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-20", kind: .evening, goals: [first, second]))
     }
 
-    /// A Health sync that lands the first numbers or crosses a goal changes the
-    /// signature and earns a rewrite; a few more fiber grams below goal do not.
-    func test_statusSignatureChangesOnlyWhenTheShapeOfTheDayDoes() {
-        let empty = makeRecord(date: "2026-09-19", sleep: 0, fiber: 0, exercise: 0)
-        let morning = makeRecord(date: "2026-09-19", sleep: 4.2, fiber: 7, exercise: 9)
-        let moreFiber = makeRecord(date: "2026-09-19", sleep: 4.2, fiber: 19, exercise: 9)
-        let fiberMet = makeRecord(date: "2026-09-19", sleep: 4.2, fiber: 41, exercise: 9)
-        XCTAssertNotEqual(CoachCheckInLogic.statusSignature(for: empty), CoachCheckInLogic.statusSignature(for: morning))
-        XCTAssertEqual(CoachCheckInLogic.statusSignature(for: morning), CoachCheckInLogic.statusSignature(for: moreFiber))
-        XCTAssertNotEqual(CoachCheckInLogic.statusSignature(for: moreFiber), CoachCheckInLogic.statusSignature(for: fiberMet))
-        XCTAssertTrue(CoachCheckInLogic.statusSignature(for: empty).contains("sleep=none"))
-        XCTAssertTrue(CoachCheckInLogic.statusSignature(for: fiberMet).contains("fiber=met"))
-        XCTAssertFalse(CoachCheckInLogic.statusSignature(for: morning).contains("focus"), "The weakest pillar flips all day; it must not drive rewrites")
-
+    /// A tile crossing its goal is not part of the key. The comment is about
+    /// the records behind the screen, so those crossings do not rewrite it.
+    func test_cacheKeyIgnoresTileCrossings() {
         let goals = [CoachTestFixtures.goal(text: "walk after lunch")]
-        let before = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: goals, signature: CoachCheckInLogic.statusSignature(for: morning))
-        let same = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: goals, signature: CoachCheckInLogic.statusSignature(for: moreFiber))
-        let crossed = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: goals, signature: CoachCheckInLogic.statusSignature(for: fiberMet))
-        XCTAssertEqual(before, same)
-        XCTAssertNotEqual(before, crossed)
+        let key = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: goals)
+        XCTAssertEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: goals))
+        XCTAssertTrue(key.contains("#checkin8#"))
+        XCTAssertFalse(key.contains("sleep="))
+        XCTAssertFalse(key.contains("fiber="))
+        XCTAssertFalse(key.contains("exercise="))
     }
 
     func test_goalRowsPutUnloggedFirstAndKnowWhatWasLoggedToday() {

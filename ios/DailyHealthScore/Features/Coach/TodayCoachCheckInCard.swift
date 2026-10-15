@@ -3,8 +3,8 @@ import SwiftUI
 import UIKit
 #endif
 
-/// The Home card is a short feed of thoughts the Coach chose. Active SMART
-/// goals sit under them, with Done, whenever there is something to log.
+/// The Home card is one comment the Coach wrote. Active SMART
+/// goals sit under it, with Done, whenever there is something to log.
 /// Reply opens a chat that starts with the card's words. Leftover height stays
 /// the grouped screen — never a white hole inside the card.
 struct TodayCoachCheckInCard: View {
@@ -21,11 +21,11 @@ struct TodayCoachCheckInCard: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let kind = CoachCheckInLogic.kind(for: context.date)
-            // The shape of the day is part of the id, so a Health sync that
-            // lands the first numbers or crosses a goal re-evaluates the card.
-            let signature = record.map { CoachCheckInLogic.statusSignature(for: $0) } ?? ""
+            // The first numbers of the day start the comment. A later tile
+            // crossing its goal does not: the comment is not a readout of them.
+            let hasData = record.map { CoachCheckInLogic.hasData($0) } ?? false
             cardStack(kind: kind, now: context.date)
-                .task(id: "\(record?.date ?? "")#\(kind.rawValue)#\(signature)#\(appState.smartGoalsRevision)#\(coach.memory.memoryRevision)") {
+                .task(id: "\(record?.date ?? "")#\(kind.rawValue)#\(hasData)#\(appState.smartGoalsRevision)#\(coach.memory.memoryRevision)") {
                     guard let record else { return }
                     await coach.ensureCheckIn(
                         for: record,
