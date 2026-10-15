@@ -2,16 +2,16 @@ import Foundation
 
 /// Which window Home is writing for. Morning runs until 5pm; evening after
 /// that and through the night. The card does not print this label. The window
-/// only decides when the thoughts are rewritten.
+/// only decides when the comment is rewritten.
 enum CoachCheckInKind: String, Codable, Sendable {
     case morning
     case evening
 }
 
-/// The Home card. One or two thoughts the Coach chooses, rewritten for each
-/// window of the day and again when the day's shape changes. A deterministic
-/// line stands in when the model is unavailable. Reply opens a chat that
-/// starts with this text.
+/// The Home card. One comment the Coach writes, rewritten for each window of
+/// the day. A deterministic line stands in when the model is unavailable.
+/// Reply opens a chat that starts with this text. Older cards may still
+/// carry two thoughts.
 struct CoachCheckIn: Equatable, Codable, Sendable {
     var kind: CoachCheckInKind
     var dateKey: String
@@ -24,7 +24,7 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
     var tomorrowLine: String
     /// Older cards: last week in one sentence. Empty on a thought feed.
     var trendLine: String
-    /// The thoughts on the card, most useful first. At most two are shown.
+    /// The comment, or the older two-thought feed. At most two are shown.
     /// Empty on a card saved before the feed, which still speaks through the
     /// four older fields.
     var thoughts: [String]
@@ -196,38 +196,22 @@ enum CoachCheckInLogic {
         record.sleepHours > 0 || record.fiberGrams > 0 || record.movementValue > 0 || record.foodGroups.isLogged
     }
 
-    /// The shape of the day as the card describes it: whether sleep is in, and
-    /// which pillars are met versus still open. It changes a few times a day
-    /// at most (first sync, a pillar crossing its goal), and each change earns
-    /// a rewrite so the card never contradicts the tiles above it. The weakest
-    /// pillar is deliberately not part of it: fiber and movement leapfrog each
-    /// other all day, and the card speaks in open-versus-in-hand terms instead.
-    static func statusSignature(for record: DailyRecord) -> String {
-        let sleep = record.sleepHours <= 0
-            ? "none"
-            : (record.sleepHours >= record.sleepGoal.rawValue ? "met" : "below")
-        let fiber = record.fiberScore >= 3.95 ? "met" : "open"
-        let foodLog = record.foodGroups.isLogged ? "logged" : "unlogged"
-        let exercise = record.movementValue >= record.movementGoal.goalValue ? "met" : "open"
-        return "sleep=\(sleep),fiber=\(fiber),foodLog=\(foodLog),exercise=\(exercise)"
-    }
-
-    /// One write per window and per shape of the day. Tapping a goal Done must
-    /// not rewrite the card, so progress masks stay out of the key; only which
-    /// goals exist matters. Notes are read when the card is written. A new note
-    /// shows up on the next window, the next change in shape, or a pull to refresh.
+    /// One write per window. Tapping a goal Done must not rewrite the card, so
+    /// progress stays out of the key; only which goals exist matters. A tile
+    /// crossing its goal does not rewrite either. The comment is about the
+    /// records behind the screen. Notes are read when the card is written. A
+    /// new note shows up on the next window or when the person refreshes.
     static func cacheKey(
         dateKey: String,
         kind: CoachCheckInKind,
-        goals: [SMARTGoal],
-        signature: String = ""
+        goals: [SMARTGoal]
     ) -> String {
         let ids = goals
             .filter { $0.status == .active && !$0.isComplete && !$0.isExpired }
             .map(\.id.uuidString)
             .sorted()
             .joined(separator: ",")
-        return "\(dateKey)#\(kind.rawValue)#checkin7#\(ids)#\(signature)"
+        return "\(dateKey)#\(kind.rawValue)#checkin8#\(ids)"
     }
 
     /// Active goals a person could still log today, unlogged ones first.

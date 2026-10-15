@@ -148,8 +148,7 @@ final class LifestyleCoachController: ObservableObject {
         let key = CoachCheckInLogic.cacheKey(
             dateKey: record.date,
             kind: kind,
-            goals: goals,
-            signature: CoachCheckInLogic.statusSignature(for: record)
+            goals: goals
         )
         if !force,
            memory.cachedCheckInKey == key,
