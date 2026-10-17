@@ -211,7 +211,7 @@ enum CoachCheckInLogic {
             .map(\.id.uuidString)
             .sorted()
             .joined(separator: ",")
-        return "\(dateKey)#\(kind.rawValue)#checkin8#\(ids)"
+        return "\(dateKey)#\(kind.rawValue)#checkin9#\(ids)"
     }
 
     /// Active goals a person could still log today, unlogged ones first.

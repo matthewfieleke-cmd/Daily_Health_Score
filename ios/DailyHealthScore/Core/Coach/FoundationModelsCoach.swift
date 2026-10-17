@@ -741,7 +741,7 @@ struct GenerableNoteSelection {
 
 @Generable
 struct GenerableCoachCheckIn {
-    @Guide(description: "One comment, a few sentences.")
+    @Guide(description: "One comment of several sentences.")
     var comment: String
 
     @Guide(description: "A measure the app can draw, or none.")
