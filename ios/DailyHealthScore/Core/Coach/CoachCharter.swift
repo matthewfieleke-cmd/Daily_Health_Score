@@ -72,7 +72,7 @@ enum CoachCharter {
     static func homeCardInstructions(goalsListed: Bool) -> String {
         homeCardAssignment(
             goalsListed: goalsListed,
-            recordsSentence: "The tools are how you read their records."
+            recordsSentence: "The tools are how you read their records and what you remember."
         )
     }
 
@@ -94,7 +94,9 @@ enum CoachCharter {
         return """
         \(scene)
 
-        Write the most useful thing in their records that this screen does not already show. When the records say why it matters for this person, include that. \(recordsSentence) Do not repeat the values this screen already shows. When there is little beyond this screen, keep it short and do not invent a pattern.
+        Write several sentences that connect their records to their life: what they have said, a goal in their own words, or the way their recent days have gone. Leave them curious about one specific thing, and with one encouraging step they already care about.
+
+        \(recordsSentence) Do not invent a feeling or a fact. When they have not said how a day like this feels, do not guess. Do not repeat the values this screen already shows. You may use a goal's own words when that goal is the step. Do not recite its progress.
 
         Set chart to a measure the app can draw when that measure is what the comment is about, and to none otherwise. The button is labeled with that measure and opens its recent finished days.
         """
