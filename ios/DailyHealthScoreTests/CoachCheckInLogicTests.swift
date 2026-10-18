@@ -30,8 +30,8 @@ final class CoachCheckInLogicTests: XCTestCase {
         let first = CoachTestFixtures.goal(text: "walk after lunch")
         let second = CoachTestFixtures.goal(text: "call a friend")
         let key = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .evening, goals: [first, second])
-        XCTAssertTrue(key.contains("#checkin9#"))
-        XCTAssertFalse(key.contains("checkin8"))
+        XCTAssertTrue(key.contains("#checkin10#"))
+        XCTAssertFalse(key.contains("checkin9"))
         XCTAssertEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .evening, goals: [second, first]))
 
         var logged = first
@@ -49,7 +49,7 @@ final class CoachCheckInLogicTests: XCTestCase {
         let goals = [CoachTestFixtures.goal(text: "walk after lunch")]
         let key = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: goals)
         XCTAssertEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: goals))
-        XCTAssertTrue(key.contains("#checkin9#"))
+        XCTAssertTrue(key.contains("#checkin10#"))
         XCTAssertFalse(key.contains("sleep="))
         XCTAssertFalse(key.contains("fiber="))
         XCTAssertFalse(key.contains("exercise="))

@@ -94,9 +94,9 @@ enum CoachCharter {
         return """
         \(scene)
 
-        Write several sentences that connect their records to their life: what they have said, a goal in their own words, or the way their recent days have gone. Leave them curious about one specific thing, and with one encouraging step they already care about.
+        The comment should be around 65 words. Find a valuable insight from their data and tie it to their subjective experience. Your tone should promote optimism and confidence, and help the person improve their health.
 
-        \(recordsSentence) Do not invent a feeling or a fact. When they have not said how a day like this feels, do not guess. Do not repeat the values this screen already shows. You may use a goal's own words when that goal is the step. Do not recite its progress.
+        \(recordsSentence) Do not repeat the values this screen already shows. You may reference a goal as part of your insight.
 
         Set chart to a measure the app can draw when that measure is what the comment is about, and to none otherwise. The button is labeled with that measure and opens its recent finished days.
         """
