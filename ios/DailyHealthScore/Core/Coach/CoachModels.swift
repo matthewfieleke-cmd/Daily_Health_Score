@@ -245,6 +245,11 @@ struct CoachSnapshot: Equatable, Sendable {
     var weekAvgSleep: Double?
     var weekAvgFiber: Double?
     var weekAvgExercise: Double?
+    /// Both movement counts, whether or not the score uses them.
+    var stepsToday: Double = 0
+    var exerciseMinutesToday: Double = 0
+    var weekAvgSteps: Double? = nil
+    var weekAvgExerciseMinutes: Double? = nil
     var fiberDaysLoggedInWeek: Int
     /// Precomputed HRV sentence; nil when HRV is not being tracked at all.
     var hrvSummary: String?
@@ -316,7 +321,10 @@ struct CoachSnapshot: Equatable, Sendable {
         }
         if parts.contains(.sleep) { lines.append(Self.toolFactLine(sleep)) }
         if parts.contains(.nutrition) { lines.append(Self.toolFactLine(fiber)) }
-        if parts.contains(.movement) { lines.append(Self.toolFactLine(exercise)) }
+        if parts.contains(.movement) {
+            lines.append(Self.toolFactLine(exercise))
+            lines.append(otherMovementFact)
+        }
         if parts.contains(.week) { lines.append(weekFact) }
         if parts.contains(.hrv) {
             lines.append(hrvSummary.map(Self.plainHRVFact) ?? "No sleep HRV nights recorded.")
@@ -346,9 +354,11 @@ struct CoachSnapshot: Equatable, Sendable {
                 lines.append(String(format: "Average fiber of days with a record: %.0f g.", weekAvgFiber))
             }
         }
-        if let weekAvgExercise {
-            let noun = exercise.unit == "steps" ? "steps" : "exercise minutes"
-            lines.append(String(format: "Average \(noun) of days with a record: %.0f.", weekAvgExercise))
+        if let weekAvgExerciseMinutes {
+            lines.append(String(format: "Average exercise minutes of days with a record: %.0f.", weekAvgExerciseMinutes))
+        }
+        if let weekAvgSteps {
+            lines.append(String(format: "Average steps of days with a record: %.0f.", weekAvgSteps))
         }
         let loggedName = fiber.unit == "pts" ? "Food groups logged" : "Fiber logged"
         lines.append("\(loggedName) on \(fiberDaysLoggedInWeek) of \(weekDaysWithData) finished days with a record.")
@@ -356,6 +366,14 @@ struct CoachSnapshot: Equatable, Sendable {
             lines.append("Apple Health fiber grams are a separate record from the food-group score.")
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// The movement count the score is not using. Both stay available.
+    var otherMovementFact: String {
+        if exercise.unit == "steps" {
+            return String(format: "Exercise Minutes: %.0f min today. The score uses Steps.", exerciseMinutesToday)
+        }
+        return String(format: "Steps: %.0f today. The score uses Exercise Minutes.", stepsToday)
     }
 
     private static func toolFactLine(_ metric: CoachMetricStatus) -> String {

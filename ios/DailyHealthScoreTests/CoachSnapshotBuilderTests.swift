@@ -77,6 +77,7 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(facts.contains("Fiber: 36.8 g of a 40 g goal."))
         XCTAssertTrue(facts.contains("Sleep: 7.2 h of a 7.5 h goal."))
         XCTAssertTrue(facts.contains("Exercise Minutes: 71 min of a 30 min goal."))
+        XCTAssertTrue(facts.contains("Steps: 0 today. The score uses Exercise Minutes."))
         XCTAssertFalse(facts.contains("TIME RULES"))
         XCTAssertFalse(facts.contains("WEAKEST"))
         XCTAssertFalse(facts.contains("BELOW GOAL"))

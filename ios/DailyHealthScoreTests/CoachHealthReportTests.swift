@@ -74,6 +74,32 @@ final class CoachHealthReportTests: XCTestCase {
         XCTAssertEqual(facts.chart?.points.map(\.dateKey), ["2026-10-10"])
     }
 
+    func test_bloodPressurePairsSamplesThatShareATime() {
+        let morning = Date(timeIntervalSince1970: 1_760_000_000)
+        let evening = morning.addingTimeInterval(60 * 60 * 12)
+        let readings = BloodPressureReadings.pair(
+            systolic: [
+                BloodPressureReadings.Sample(date: evening, value: 124),
+                BloodPressureReadings.Sample(date: morning, value: 126)
+            ],
+            diastolic: [
+                BloodPressureReadings.Sample(date: morning.addingTimeInterval(0.4), value: 81),
+                BloodPressureReadings.Sample(date: evening, value: 80)
+            ]
+        )
+        XCTAssertEqual(readings.map(\.systolic), [126, 124])
+        XCTAssertEqual(readings.map(\.diastolic), [81, 80])
+    }
+
+    func test_bloodPressureLeavesAnUnpairedNumberOut() {
+        let morning = Date(timeIntervalSince1970: 1_760_000_000)
+        let readings = BloodPressureReadings.pair(
+            systolic: [BloodPressureReadings.Sample(date: morning, value: 126)],
+            diastolic: [BloodPressureReadings.Sample(date: morning.addingTimeInterval(30), value: 81)]
+        )
+        XCTAssertTrue(readings.isEmpty)
+    }
+
     func test_bloodPressureKeepsEachReading() {
         let facts = CoachHealthReport.facts(
             measures: [
