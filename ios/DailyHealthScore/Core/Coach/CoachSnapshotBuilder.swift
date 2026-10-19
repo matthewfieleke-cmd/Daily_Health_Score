@@ -34,6 +34,13 @@ enum CoachSnapshotBuilder {
                 nutritionMode: settings.nutritionMode,
                 movementGoal: settings.movementGoal
             )
+        let weekRecords = records.filter { recordedKeys.contains($0.date) }
+        let weekAvgSteps = weekRecords.isEmpty
+            ? nil
+            : weekRecords.map(\.stepCount).reduce(0, +) / Double(weekRecords.count)
+        let weekAvgExerciseMinutes = weekRecords.isEmpty
+            ? nil
+            : weekRecords.map(\.exerciseMinutes).reduce(0, +) / Double(weekRecords.count)
         let weekKeys = recordedKeys
         let fiberDays = records.filter { record in
             guard weekKeys.contains(record.date) else { return false }
@@ -77,6 +84,10 @@ enum CoachSnapshotBuilder {
             weekAvgSleep: weekStats?.avgSleepHours,
             weekAvgFiber: settings.nutritionMode == .foodGroups ? weekStats?.avgFiberScore : weekStats?.avgFiberGrams,
             weekAvgExercise: weekStats?.avgMovementValue,
+            stepsToday: today.stepCount,
+            exerciseMinutesToday: today.exerciseMinutes,
+            weekAvgSteps: weekAvgSteps,
+            weekAvgExerciseMinutes: weekAvgExerciseMinutes,
             fiberDaysLoggedInWeek: fiberDays,
             hrvSummary: hrvSummary,
             smartGoals: CoachGoalSummarizer.lines(for: goals),

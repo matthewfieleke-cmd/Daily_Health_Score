@@ -182,7 +182,32 @@ extension HealthKitService {
         }
     }
 
+    /// Health shows one Blood Pressure switch. That switch covers the systolic
+    /// and diastolic samples. A paired-object query can still come back empty,
+    /// so the samples are read directly and matched by time. A paired object
+    /// fills in only a time the samples did not already provide.
     private func bloodPressure(window: DayWindow) async -> [CoachHealthDayValue] {
+        let unit = HKUnit.millimeterOfMercury()
+        async let systolicSamples = samples(of: .bloodPressureSystolic, window: window)
+        async let diastolicSamples = samples(of: .bloodPressureDiastolic, window: window)
+        let paired = BloodPressureReadings.pair(
+            systolic: await systolicSamples.map { BloodPressureReadings.Sample(date: $0.startDate, value: $0.quantity.doubleValue(for: unit)) },
+            diastolic: await diastolicSamples.map { BloodPressureReadings.Sample(date: $0.startDate, value: $0.quantity.doubleValue(for: unit)) }
+        )
+        var readings = paired
+        for extra in await correlationReadings(window: window) {
+            let alreadyHave = readings.contains { abs($0.date.timeIntervalSince(extra.date)) <= 2 }
+            if !alreadyHave { readings.append(extra) }
+        }
+        return dayValues(from: readings.sorted { $0.date < $1.date })
+    }
+
+    private func samples(of identifier: HKQuantityTypeIdentifier, window: DayWindow) async -> [HKQuantitySample] {
+        guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return [] }
+        return await samples(type: type, start: window.start, end: window.end, limit: HKObjectQueryNoLimit)
+    }
+
+    private func correlationReadings(window: DayWindow) async -> [BloodPressureReadings.Reading] {
         guard let correlation = HKCorrelationType.correlationType(forIdentifier: .bloodPressure),
               let systolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureSystolic),
               let diastolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureDiastolic) else {
@@ -197,18 +222,25 @@ extension HealthKitService {
             store.execute(query)
         }
         let unit = HKUnit.millimeterOfMercury()
-        var byDay: [String: [CoachHealthPressureReading]] = [:]
-        for sample in samples {
+        return samples.compactMap { sample in
             let systolic = (sample.objects(for: systolicType).first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
             let diastolic = (sample.objects(for: diastolicType).first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
-            guard let systolic, let diastolic else { continue }
-            let key = DateHelpers.localDateKey(from: sample.startDate)
-            let reading = CoachHealthPressureReading(
-                timeLabel: sample.startDate.formatted(date: .omitted, time: .shortened),
-                systolic: systolic,
-                diastolic: diastolic
+            guard let systolic, let diastolic else { return nil }
+            return BloodPressureReadings.Reading(date: sample.startDate, systolic: systolic, diastolic: diastolic)
+        }
+    }
+
+    private func dayValues(from readings: [BloodPressureReadings.Reading]) -> [CoachHealthDayValue] {
+        var byDay: [String: [CoachHealthPressureReading]] = [:]
+        for reading in readings {
+            let key = DateHelpers.localDateKey(from: reading.date)
+            byDay[key, default: []].append(
+                CoachHealthPressureReading(
+                    timeLabel: reading.date.formatted(date: .omitted, time: .shortened),
+                    systolic: reading.systolic,
+                    diastolic: reading.diastolic
+                )
             )
-            byDay[key, default: []].append(reading)
         }
         return byDay.keys.sorted().map { CoachHealthDayValue(dateKey: $0, readings: byDay[$0] ?? []) }
     }

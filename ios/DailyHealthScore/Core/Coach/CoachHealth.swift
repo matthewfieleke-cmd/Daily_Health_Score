@@ -1,5 +1,35 @@
 import Foundation
 
+/// Systolic and diastolic samples paired by start time. Health lists them as
+/// one Blood Pressure permission. A number with no partner within two seconds
+/// is left out.
+enum BloodPressureReadings {
+    struct Sample: Equatable {
+        var date: Date
+        var value: Double
+    }
+
+    struct Reading: Equatable {
+        var date: Date
+        var systolic: Double
+        var diastolic: Double
+    }
+
+    static func pair(systolic: [Sample], diastolic: [Sample], tolerance: TimeInterval = 2) -> [Reading] {
+        var unused = diastolic
+        var readings: [Reading] = []
+        for sample in systolic.sorted(by: { $0.date < $1.date }) {
+            guard let nearest = unused.enumerated().min(by: { lhs, rhs in
+                abs(lhs.element.date.timeIntervalSince(sample.date)) < abs(rhs.element.date.timeIntervalSince(sample.date))
+            }) else { continue }
+            guard abs(nearest.element.date.timeIntervalSince(sample.date)) <= tolerance else { continue }
+            unused.remove(at: nearest.offset)
+            readings.append(Reading(date: sample.date, systolic: sample.value, diastolic: nearest.element.value))
+        }
+        return readings.sorted { $0.date < $1.date }
+    }
+}
+
 /// Apple Health records the advisor can look up. They are not part of the
 /// Daily Health Score. A missing day stays a missing day.
 enum CoachHealthMeasure: String, CaseIterable, Identifiable, Sendable {

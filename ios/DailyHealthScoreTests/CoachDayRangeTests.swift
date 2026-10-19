@@ -111,7 +111,7 @@ final class CoachDayRangeTests: XCTestCase {
 
         XCTAssertTrue(text.contains("Sep 1 to Sep 7, 2026 — 7 days, 6 with data."))
         XCTAssertTrue(text.contains("Average across days with data: score"))
-        XCTAssertTrue(text.contains("sleep 7.0 h, fiber 20.0 g, exercise minutes 20."))
+        XCTAssertTrue(text.contains("sleep 7.0 h, fiber 20.0 g, exercise minutes 20, steps 0."))
         XCTAssertTrue(text.contains("No record for Sep 3. Unlogged, not zero."))
         XCTAssertEqual(text.components(separatedBy: "score 7").count - 1, 7, "six day lines plus the average")
     }
@@ -154,7 +154,7 @@ final class CoachDayRangeTests: XCTestCase {
         XCTAssertTrue(text.contains("not logged"))
     }
 
-    func test_stepGoalRendersStepsAndIgnoresExerciseMinutes() {
+    func test_stepGoalStillNamesExerciseMinutes() {
         let window = CoachDayRange.Window(startKey: "2026-09-04", endKey: "2026-09-04")
         let text = CoachDayRange.payload(
             records: [record("2026-09-04", exercise: 30, steps: 2_000, movement: .steps8000)],
@@ -162,7 +162,18 @@ final class CoachDayRangeTests: XCTestCase {
             todayKey: today
         )
         XCTAssertTrue(text.contains("steps 2000 of 8000"))
-        XCTAssertFalse(text.contains("exercise minutes"))
+        XCTAssertTrue(text.contains("exercise minutes 30"))
+    }
+
+    func test_exerciseGoalStillNamesSteps() {
+        let window = CoachDayRange.Window(startKey: "2026-09-04", endKey: "2026-09-04")
+        let text = CoachDayRange.payload(
+            records: [record("2026-09-04", exercise: 12, steps: 702)],
+            window: window,
+            todayKey: today
+        )
+        XCTAssertTrue(text.contains("exercise minutes 12 of 30"))
+        XCTAssertTrue(text.contains("steps 702"))
     }
 
     /// A quarter of day-lines is a worse answer than the shape of the weeks.

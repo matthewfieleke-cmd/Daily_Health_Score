@@ -53,7 +53,7 @@ enum CoachDayRange {
         }
 
         var lines = ["\(monthDay(window.startKey)) to \(monthDay(window.endKey)), \(year(window.endKey)) — \(keys.count) days, \(found.count) with data."]
-        if let averages = averageLine(found, label: "Average across days with data", nutritionMode: nutritionMode, movementGoal: movementGoal) {
+        if let averages = averageLine(found, label: "Average across days with data", nutritionMode: nutritionMode) {
             lines.append(averages)
         }
         if found.isEmpty {
@@ -62,7 +62,7 @@ enum CoachDayRange {
             lines.append(contentsOf: found.map { dayLine($0, nutritionMode: nutritionMode, movementGoal: movementGoal) })
             lines.append(contentsOf: missingNote(keys: keys, byDate: byDate))
         } else {
-            lines.append(contentsOf: weekLines(keys: keys, byDate: byDate, nutritionMode: nutritionMode, movementGoal: movementGoal))
+            lines.append(contentsOf: weekLines(keys: keys, byDate: byDate, nutritionMode: nutritionMode))
         }
         lines.append(today)
         return lines.joined(separator: "\n")
@@ -80,23 +80,24 @@ enum CoachDayRange {
 
     // MARK: - Lines
 
+    /// Both counts are always named. The goal number is attached to whichever
+    /// one the score uses.
     private static func movementFact(_ record: DailyRecord, movementGoal: MovementGoal?) -> String {
         let goal = movementGoal ?? record.movementGoal
-        let value = goal.countsSteps ? record.stepCount : record.exerciseMinutes
-        let shown = number(value, decimals: 0)
+        let steps = "steps \(number(record.stepCount, decimals: 0))"
+        let minutes = "exercise minutes \(number(record.exerciseMinutes, decimals: 0))"
         let goalText = number(goal.goalValue, decimals: 0)
         if goal.countsSteps {
-            return "steps \(shown) of \(goalText)"
+            return "\(steps) of \(goalText); \(minutes)"
         }
-        return "exercise minutes \(shown) of \(goalText)"
+        return "\(minutes) of \(goalText); \(steps)"
     }
 
-    private static func movementAverage(_ value: Double, goal: MovementGoal) -> String {
-        let shown = number(value, decimals: 0)
-        if goal.countsSteps {
-            return "steps \(shown)"
-        }
-        return "exercise minutes \(shown)"
+    private static func movementAverage(_ records: [DailyRecord]) -> String {
+        let count = Double(records.count)
+        let minutes = records.map(\.exerciseMinutes).reduce(0, +) / count
+        let steps = records.map(\.stepCount).reduce(0, +) / count
+        return "exercise minutes \(number(minutes, decimals: 0)), steps \(number(steps, decimals: 0))"
     }
 
     private static func nutritionFact(_ record: DailyRecord, mode: NutritionMode) -> String {
@@ -125,16 +126,13 @@ enum CoachDayRange {
     private static func averageLine(
         _ records: [DailyRecord],
         label: String,
-        nutritionMode: NutritionMode,
-        movementGoal: MovementGoal?
+        nutritionMode: NutritionMode
     ) -> String? {
         guard !records.isEmpty else { return nil }
         let count = Double(records.count)
         let score = records.map(\.totalScore).reduce(0, +) / count
         let sleep = records.map(\.sleepHours).reduce(0, +) / count
-        let goal = movementGoal ?? records.first?.movementGoal ?? .exerciseMinutes
-        let movement = records.map { goal.countsSteps ? $0.stepCount : $0.exerciseMinutes }.reduce(0, +) / count
-        let movementText = movementAverage(movement, goal: goal)
+        let movementText = movementAverage(records)
         let nutrition: String
         if nutritionMode == .foodGroups {
             let points = records.map { FoodGroupScore.points($0.foodGroups) }.reduce(0, +) / count
@@ -159,15 +157,14 @@ enum CoachDayRange {
     private static func weekLines(
         keys: [String],
         byDate: [String: DailyRecord],
-        nutritionMode: NutritionMode,
-        movementGoal: MovementGoal?
+        nutritionMode: NutritionMode
     ) -> [String] {
         stride(from: 0, to: keys.count, by: 7).compactMap { offset in
             let chunk = Array(keys[offset ..< Swift.min(offset + 7, keys.count)])
             guard let first = chunk.first, let last = chunk.last else { return nil }
             let found = chunk.compactMap { byDate[$0] }
             let span = "\(monthDay(first)) to \(monthDay(last))"
-            guard let averages = averageLine(found, label: "\(span), \(found.count) of \(chunk.count) days with data", nutritionMode: nutritionMode, movementGoal: movementGoal) else {
+            guard let averages = averageLine(found, label: "\(span), \(found.count) of \(chunk.count) days with data", nutritionMode: nutritionMode) else {
                 return "\(span): no days with data."
             }
             return averages
