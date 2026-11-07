@@ -223,6 +223,7 @@ final class LifestyleCoachController: ObservableObject {
                 kind: kind,
                 snapshot: snapshot,
                 live: cardLive,
+                shownComment: memory.cachedCheckIn?.spokenText ?? "",
                 now: now,
                 calendar: calendar
             )
