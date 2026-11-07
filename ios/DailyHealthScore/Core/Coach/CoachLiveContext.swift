@@ -85,7 +85,7 @@ final class CoachLiveContext {
                 .split(whereSeparator: \.isWhitespace)
                 .joined(separator: " ")
             if !clean.isEmpty {
-                line += "(\"\(String(clean.prefix(240)))\")"
+                line += "(\"\(String(clean.prefix(100)))\")"
             }
         }
         if let outcome, !outcome.isEmpty {

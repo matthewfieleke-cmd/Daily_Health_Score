@@ -17,10 +17,6 @@ final class LifestyleCoachController: ObservableObject {
     @Published private(set) var checkInError: String?
     @Published var isChatBusy = false
     @Published var chatError: String?
-    /// What the last reply actually called, and the text the tool returned.
-    /// The sentence on screen is the model's wording, which can differ.
-    @Published private(set) var toolReceipt = ""
-    @Published private(set) var toolReceiptTurnID: UUID?
     @Published private(set) var goalProposals: [CoachGoalProposal] = []
     /// The Coach heard "I did it"; the person confirms before anything is logged.
     @Published private(set) var pendingGoalCheckIns: [CoachGoalCheckInRequest] = []
@@ -430,13 +426,6 @@ final class LifestyleCoachController: ObservableObject {
                 healthChartMeasureRaw: healthChart,
                 charts: live.pendingCharts
             )
-            let whereAnswered = result.tier == .privateCloud ? "Private Cloud Compute" : "On-device"
-            if result.toolsUsed.isEmpty {
-                toolReceipt = "\(whereAnswered). No tool was called."
-            } else {
-                toolReceipt = "\(whereAnswered).\n" + result.toolsUsed.joined(separator: "\n")
-            }
-            toolReceiptTurnID = coachTurn.id
             memory.append(coachTurn)
             adoptDrafts(result.goalProposals)
             adoptCheckIns(result.goalCheckIns)
