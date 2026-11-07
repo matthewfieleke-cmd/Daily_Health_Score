@@ -18,7 +18,7 @@ extension HealthKitService {
         }
         if let heightType = HKQuantityType.quantityType(forIdentifier: .height) {
             // Height rarely changes; take the most recent reading of any age.
-            let samples = await quantitySamples(type: heightType, start: .distantPast, end: now, limit: 1)
+            let samples = await quantitySamples(type: heightType, start: HealthKitService.earliestSampleDate, end: now, limit: 1)
             measurements.heightMeters = samples.first?.quantity.doubleValue(for: .meter())
         }
         if let bmiType = HKQuantityType.quantityType(forIdentifier: .bodyMassIndex) {

@@ -50,6 +50,14 @@ final class HealthKitService {
 
     var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
 
+    /// HealthKit rejects `Date.distantPast` as a predicate bound and the query
+    /// comes back empty. Cardio fitness and height are sparse, so the latest
+    /// sample has to be searched from a real date.
+    static let earliestSampleDate: Date = {
+        Calendar(identifier: .gregorian).date(from: DateComponents(year: 2001, month: 1, day: 1))
+            ?? Date(timeIntervalSince1970: 0)
+    }()
+
     func requestAuthorization() async throws {
         guard isAvailable else { throw HealthKitError.unavailable }
         guard let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis),
@@ -66,6 +74,8 @@ final class HealthKitService {
         for identifier in [
             HKQuantityTypeIdentifier.bodyMass, .height, .bodyMassIndex,
             .heartRate, .restingHeartRate, .oxygenSaturation,
+            // The Blood Pressure switch is these two quantity types. Putting the
+            // correlation type in this set crashes authorization.
             .bloodPressureSystolic, .bloodPressureDiastolic, .vo2Max,
             .appleStandTime, .distanceWalkingRunning, .timeInDaylight,
             .respiratoryRate, .walkingHeartRateAverage, .appleSleepingWristTemperature,
