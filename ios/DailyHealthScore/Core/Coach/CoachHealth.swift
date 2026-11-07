@@ -15,6 +15,8 @@ enum BloodPressureReadings {
         var date: Date
         var systolic: Double
         var diastolic: Double
+        /// Shown instead of the clock time when the number is a whole day.
+        var label: String? = nil
     }
 
     /// One cuff inflation, and shorter than the usual gap before the next reading.
@@ -184,6 +186,8 @@ struct CoachHealthMeasureFacts: Equatable, Sendable {
     /// The Health query failed. Empty days then mean the read did not succeed,
     /// which is different from a day that has no samples.
     var unavailable: Bool = false
+    /// Extra fact when a read comes back empty, so the reply can say what Health returned.
+    var note: String? = nil
 }
 
 enum CoachHealthChartStyle: String, Equatable, Codable, Sendable {
@@ -585,7 +589,11 @@ enum CoachHealthReport {
 
     private static func missingText(_ facts: CoachHealthMeasureFacts, span: String, noun: String = "no record") -> String {
         let reason = facts.unavailable ? "Apple Health did not return this reading" : noun
-        return "\(facts.measure.title), \(span): \(reason)."
+        var text = "\(facts.measure.title), \(span): \(reason)."
+        if let note = facts.note, !note.isEmpty {
+            text += " \(note)"
+        }
+        return text
     }
 
     private static func spanLabel(startKey: String, endKey: String) -> String {
