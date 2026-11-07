@@ -13,6 +13,10 @@ final class CoachHealthReportTests: XCTestCase {
         )
         XCTAssertNil(CoachHealthMeasure.parseOne("none"))
         XCTAssertNil(CoachHealthMeasure.parseOne("sleep"))
+        XCTAssertEqual(
+            CoachHealthMeasure.parseList("heartRate, restingHeartRate, bloodOxygen, bloodPressure, cardioFitness, standMinutes, distance, daylight, respiratoryRate, walkingHeartRate, wristTemperature, running"),
+            CoachHealthMeasure.allCases
+        )
     }
 
     func test_heartRateStatesTheRangeAndDoesNotInventAGoal() {
