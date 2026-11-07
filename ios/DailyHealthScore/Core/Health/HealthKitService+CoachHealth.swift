@@ -388,9 +388,10 @@ extension HealthKitService {
         )
     }
 
-    /// One cuff inflation is one reading. Withings saves it as the blood pressure
-    /// correlation. The two numbers are read from that record. A cuff that saves
-    /// them as separate samples is paired by time instead.
+    /// Each row in Health's blood pressure list is one paired record. The
+    /// systolic and diastolic samples inside it do not show up in a normal
+    /// sample query, so the record itself is read and the two numbers are
+    /// taken from it. Loose samples are only a fallback.
     private func bloodPressure(window: DayWindow) async -> (days: [CoachHealthDayValue], failed: Bool) {
         guard let correlationType = HKCorrelationType.correlationType(forIdentifier: .bloodPressure),
               let systolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureSystolic),
@@ -398,47 +399,51 @@ extension HealthKitService {
             return ([], true)
         }
         let unit = HKUnit.millimeterOfMercury()
-        let predicate = HKQuery.predicateForSamples(withStart: window.start, end: window.end, options: .strictStartDate)
-        let correlated = await cuffReadings(
-            type: correlationType,
-            predicate: predicate,
-            systolicType: systolicType,
-            diastolicType: diastolicType,
-            unit: unit
-        )
-        if !correlated.readings.isEmpty {
-            return (dayValues(from: correlated.readings), false)
-        }
-
-        let systolic = await samples(type: systolicType, start: window.start, end: window.end, limit: HKObjectQueryNoLimit)
-        let diastolic = await samples(type: diastolicType, start: window.start, end: window.end, limit: HKObjectQueryNoLimit)
+        let systolic = await everySample(of: systolicType)
+        let diastolic = await everySample(of: diastolicType)
         let paired = BloodPressureReadings.pair(
             systolic: systolic.samples.map { BloodPressureReadings.Sample(date: $0.startDate, value: $0.quantity.doubleValue(for: unit)) },
             diastolic: diastolic.samples.map { BloodPressureReadings.Sample(date: $0.startDate, value: $0.quantity.doubleValue(for: unit)) }
         )
-        let failed = paired.isEmpty && correlated.failed && systolic.failed && diastolic.failed
-        return (dayValues(from: paired), failed)
+        let correlated = await everyCuffRecord(type: correlationType, systolicType: systolicType, diastolicType: diastolicType, unit: unit)
+        let shown = BloodPressureReadings.inWindow(
+            BloodPressureReadings.merged(correlated.readings, paired),
+            start: window.start,
+            end: window.end
+        )
+        let failed = shown.isEmpty && systolic.failed && diastolic.failed && correlated.failed
+        return (dayValues(from: shown), failed)
     }
 
-    private func cuffReadings(
+    private func everySample(of type: HKQuantityType) async -> (samples: [HKQuantitySample], failed: Bool) {
+        await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(sampleType: type, predicate: nil, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, results, error in
+                let samples = (results ?? []).compactMap { $0 as? HKQuantitySample }
+                continuation.resume(returning: (samples, samples.isEmpty && error != nil))
+            }
+            store.execute(query)
+        }
+    }
+
+    private func everyCuffRecord(
         type: HKCorrelationType,
-        predicate: NSPredicate,
         systolicType: HKQuantityType,
         diastolicType: HKQuantityType,
         unit: HKUnit
     ) async -> (readings: [BloodPressureReadings.Reading], failed: Bool) {
         await withCheckedContinuation { continuation in
-            let query = HKCorrelationQuery(
-                type: type,
-                predicate: predicate,
-                samplePredicates: [systolicType: predicate, diastolicType: predicate]
-            ) { _, results, error in
-                let readings = (results ?? []).compactMap { correlation -> BloodPressureReadings.Reading? in
-                    let systolic = (correlation.objects(for: systolicType).first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
-                    let diastolic = (correlation.objects(for: diastolicType).first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
-                    guard let systolic, let diastolic, systolic > 0, diastolic > 0 else { return nil }
-                    return BloodPressureReadings.Reading(date: correlation.startDate, systolic: systolic, diastolic: diastolic)
-                }.sorted { $0.date < $1.date }
+            let query = HKSampleQuery(sampleType: type, predicate: nil, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, results, error in
+                let readings = (results ?? []).compactMap { sample -> BloodPressureReadings.Reading? in
+                    guard let record = sample as? HKCorrelation else { return nil }
+                    let numbers = record.objects.compactMap { $0 as? HKQuantitySample }
+                    func value(_ type: HKQuantityType) -> Double? {
+                        let match = numbers.first { $0.quantityType.identifier == type.identifier }
+                            ?? (record.objects(for: type).first as? HKQuantitySample)
+                        return match?.quantity.doubleValue(for: unit)
+                    }
+                    guard let systolic = value(systolicType), let diastolic = value(diastolicType) else { return nil }
+                    return BloodPressureReadings.Reading(date: record.startDate, systolic: systolic, diastolic: diastolic)
+                }
                 continuation.resume(returning: (readings, readings.isEmpty && error != nil))
             }
             store.execute(query)
