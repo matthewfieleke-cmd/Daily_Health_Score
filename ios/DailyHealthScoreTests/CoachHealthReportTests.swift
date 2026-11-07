@@ -145,6 +145,19 @@ final class CoachHealthReportTests: XCTestCase {
         XCTAssertEqual(readings.map(\.diastolic), [84])
     }
 
+    func test_bloodPressureEmptyNamesWhatHealthReturned() {
+        var measure = CoachHealthMeasureFacts(measure: .bloodPressure)
+        measure.note = "Health returned 0 paired records, 12 systolic samples, and 12 diastolic samples."
+        let facts = CoachHealthReport.facts(
+            measures: [measure],
+            startKey: "2026-11-01",
+            endKey: "2026-11-07",
+            todayKey: "2026-11-07"
+        )
+        XCTAssertTrue(facts.text.contains("12 systolic samples"))
+        XCTAssertTrue(facts.text.contains("no record"))
+    }
+
     func test_failedHealthReadIsNotCalledNoRecord() {
         let facts = CoachHealthReport.facts(
             measures: [CoachHealthMeasureFacts(measure: .bloodPressure, unavailable: true)],

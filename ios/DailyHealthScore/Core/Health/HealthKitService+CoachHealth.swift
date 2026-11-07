@@ -104,6 +104,7 @@ extension HealthKitService {
             let read = await bloodPressure(window: window)
             facts.days = read.days
             facts.unavailable = read.failed
+            facts.note = read.note
         case .cardioFitness:
             let vo2 = HKUnit.literUnit(with: .milli).unitDivided(by: .gramUnit(with: .kilo)).unitDivided(by: .minute())
             var history = await quantityHistory(.vo2Max, unit: vo2, window: window)
@@ -392,11 +393,11 @@ extension HealthKitService {
     /// systolic and diastolic samples inside it do not show up in a normal
     /// sample query, so the record itself is read and the two numbers are
     /// taken from it. Loose samples are only a fallback.
-    private func bloodPressure(window: DayWindow) async -> (days: [CoachHealthDayValue], failed: Bool) {
+    private func bloodPressure(window: DayWindow) async -> (days: [CoachHealthDayValue], failed: Bool, note: String?) {
         guard let correlationType = HKCorrelationType.correlationType(forIdentifier: .bloodPressure),
               let systolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureSystolic),
               let diastolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureDiastolic) else {
-            return ([], true)
+            return ([], true, nil)
         }
         let unit = HKUnit.millimeterOfMercury()
         let systolic = await everySample(of: systolicType)
@@ -411,8 +412,49 @@ extension HealthKitService {
             start: window.start,
             end: window.end
         )
-        let failed = shown.isEmpty && systolic.failed && diastolic.failed && correlated.failed
-        return (dayValues(from: shown), failed)
+        if !shown.isEmpty {
+            return (dayValues(from: shown), false, nil)
+        }
+        let byDay = await dailyPressure(window: window, unit: unit)
+        if !byDay.isEmpty {
+            return (byDay, false, nil)
+        }
+        let note = "Health returned \(correlated.readings.count) paired records, \(systolic.samples.count) systolic samples, and \(diastolic.samples.count) diastolic samples."
+        let failed = systolic.failed && diastolic.failed && correlated.failed
+        return ([], failed, note)
+    }
+
+    /// The same daily read that already returns heart rate. Used when the
+    /// individual blood pressure records come back empty.
+    private func dailyPressure(window: DayWindow, unit: HKUnit) async -> [CoachHealthDayValue] {
+        let systolic = await dailyQuantities(
+            .bloodPressureSystolic,
+            unit: unit,
+            options: [.discreteMin, .discreteMax, .discreteAverage],
+            window: window
+        )
+        let diastolic = await dailyQuantities(
+            .bloodPressureDiastolic,
+            unit: unit,
+            options: [.discreteMin, .discreteMax, .discreteAverage],
+            window: window
+        )
+        let diastolicByDay = Dictionary(diastolic.days.map { (DateHelpers.localDateKey(from: $0.start), $0) }, uniquingKeysWith: { _, latest in latest })
+        return systolic.days.compactMap { day -> CoachHealthDayValue? in
+            let key = DateHelpers.localDateKey(from: day.start)
+            guard let other = diastolicByDay[key] else { return nil }
+            guard let sys = day.average ?? day.low ?? day.high,
+                  let dia = other.average ?? other.low ?? other.high else { return nil }
+            var label = "that day"
+            if let low = day.low, let high = day.high, abs(high - low) >= 1,
+               let otherLow = other.low, let otherHigh = other.high, abs(otherHigh - otherLow) >= 1 {
+                label = "that day, \(Int(low.rounded()))–\(Int(high.rounded())) over \(Int(otherLow.rounded()))–\(Int(otherHigh.rounded()))"
+            }
+            return CoachHealthDayValue(
+                dateKey: key,
+                readings: [CoachHealthPressureReading(timeLabel: label, systolic: sys, diastolic: dia)]
+            )
+        }.sorted { $0.dateKey < $1.dateKey }
     }
 
     private func everySample(of type: HKQuantityType) async -> (samples: [HKQuantitySample], failed: Bool) {
@@ -456,7 +498,7 @@ extension HealthKitService {
             let key = DateHelpers.localDateKey(from: reading.date)
             byDay[key, default: []].append(
                 CoachHealthPressureReading(
-                    timeLabel: reading.date.formatted(date: .omitted, time: .shortened),
+                    timeLabel: reading.label ?? reading.date.formatted(date: .omitted, time: .shortened),
                     systolic: reading.systolic,
                     diastolic: reading.diastolic
                 )
