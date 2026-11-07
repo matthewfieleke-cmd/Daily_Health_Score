@@ -88,7 +88,7 @@ enum CoachCharter {
     }
 
     private static func homeCardAssignment(goalsListed: Bool, recordsSentence: String, currentComment: String) -> String {
-        var scene = "You are writing the one comment on the Home screen. You know this person. The comment is the insight a wise mentor who knows them would offer. The person already sees today's score, and the Sleep, Nutrition, and Movement tiles."
+        var scene = "You are writing the one comment on the Home screen. The comment is the insight a wise mentor who knows them would offer. The person already sees today's score, and the Sleep, Nutrition, and Movement tiles."
         if goalsListed {
             scene += " Their goals are listed under this comment, with their progress."
         }
