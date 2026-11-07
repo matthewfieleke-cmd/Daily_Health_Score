@@ -344,12 +344,6 @@ enum CoachHealthReport {
         guard !readings.isEmpty else {
             return Section(text: missingText(facts, span: span), hasRecord: false, chart: nil)
         }
-        if readings.count > 24 {
-            let systolics = readings.map(\.1.systolic)
-            let diastolics = readings.map(\.1.diastolic)
-            let text = "Blood pressure, \(span): \(readings.count) readings, systolic \(whole(systolics.min() ?? 0))–\(whole(systolics.max() ?? 0)) mmHg, diastolic \(whole(diastolics.min() ?? 0))–\(whole(diastolics.max() ?? 0)) mmHg."
-            return Section(text: text, hasRecord: true, chart: pressureChart(facts, readings: readings))
-        }
         var lines = ["Blood pressure, \(span):"]
         for (key, reading) in readings {
             let when = singleDay ? reading.timeLabel : "\(DateHelpers.formatDisplayDate(key)) \(reading.timeLabel)"

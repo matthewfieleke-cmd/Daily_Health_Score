@@ -397,7 +397,7 @@ extension HealthKitService {
         let unit = HKUnit.millimeterOfMercury()
         async let systolicRead = pressureSamples(.bloodPressureSystolic, ending: window.end)
         async let diastolicRead = pressureSamples(.bloodPressureDiastolic, ending: window.end)
-        async let correlationRead = correlationReadings()
+        async let correlationRead = correlationReadings(ending: window.end)
         let systolic = await systolicRead
         let diastolic = await diastolicRead
         let correlations = await correlationRead
@@ -444,15 +444,39 @@ extension HealthKitService {
         )
     }
 
-    private func correlationReadings() async -> (readings: [BloodPressureReadings.Reading], failed: Bool) {
+    private func correlationReadings(ending end: Date) async -> (readings: [BloodPressureReadings.Reading], failed: Bool) {
         guard let correlation = HKCorrelationType.correlationType(forIdentifier: .bloodPressure),
               let systolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureSystolic),
               let diastolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureDiastolic) else {
             return ([], true)
         }
         let unit = HKUnit.millimeterOfMercury()
-        async let sampled = correlationSampleQuery(type: correlation, systolicType: systolicType, diastolicType: diastolicType, unit: unit)
-        async let queried = correlationObjectQuery(type: correlation, systolicType: systolicType, diastolicType: diastolicType, unit: unit)
+        // Without these, HealthKit returns the cuff record but leaves the two
+        // numbers out. The record is then thrown away as if it were empty.
+        let members: [HKSampleType: NSPredicate] = [
+            systolicType: NSPredicate(value: true),
+            diastolicType: NSPredicate(value: true)
+        ]
+        let predicate = HKQuery.predicateForSamples(
+            withStart: HealthKitService.earliestSampleDate,
+            end: end,
+            options: []
+        )
+        async let sampled = correlationSampleQuery(
+            type: correlation,
+            predicate: predicate,
+            systolicType: systolicType,
+            diastolicType: diastolicType,
+            unit: unit
+        )
+        async let queried = correlationObjectQuery(
+            type: correlation,
+            predicate: predicate,
+            members: members,
+            systolicType: systolicType,
+            diastolicType: diastolicType,
+            unit: unit
+        )
         let fromSamples = await sampled
         let fromQuery = await queried
         let readings = BloodPressureReadings.merged(fromSamples.readings, fromQuery.readings)
@@ -464,13 +488,14 @@ extension HealthKitService {
     /// array fails to see the correlations, so each sample is cast on its own.
     private func correlationSampleQuery(
         type: HKCorrelationType,
+        predicate: NSPredicate,
         systolicType: HKQuantityType,
         diastolicType: HKQuantityType,
         unit: HKUnit
     ) async -> (readings: [BloodPressureReadings.Reading], failed: Bool) {
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
         return await withCheckedContinuation { continuation in
-            let query = HKSampleQuery(sampleType: type, predicate: nil, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, results, error in
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, results, error in
                 let readings = (results ?? []).compactMap { sample -> BloodPressureReadings.Reading? in
                     guard let correlation = sample as? HKCorrelation else { return nil }
                     return self.reading(from: correlation, systolicType: systolicType, diastolicType: diastolicType, unit: unit)
@@ -483,12 +508,14 @@ extension HealthKitService {
 
     private func correlationObjectQuery(
         type: HKCorrelationType,
+        predicate: NSPredicate,
+        members: [HKSampleType: NSPredicate],
         systolicType: HKQuantityType,
         diastolicType: HKQuantityType,
         unit: HKUnit
     ) async -> (readings: [BloodPressureReadings.Reading], failed: Bool) {
         await withCheckedContinuation { continuation in
-            let query = HKCorrelationQuery(type: type, predicate: nil, samplePredicates: nil) { _, results, error in
+            let query = HKCorrelationQuery(type: type, predicate: predicate, samplePredicates: members) { _, results, error in
                 let readings = (results ?? []).compactMap { correlation in
                     self.reading(from: correlation, systolicType: systolicType, diastolicType: diastolicType, unit: unit)
                 }

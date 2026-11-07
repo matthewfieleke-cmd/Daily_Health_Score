@@ -182,6 +182,30 @@ final class CoachHealthReportTests: XCTestCase {
         XCTAssertFalse(facts.text.contains("average"))
     }
 
+    func test_bloodPressureListsEveryCuffReading() {
+        let readings = (0 ..< 30).map { index in
+            CoachHealthPressureReading(
+                timeLabel: String(format: "7:%02d AM", index),
+                systolic: 110 + Double(index),
+                diastolic: 70
+            )
+        }
+        let facts = CoachHealthReport.facts(
+            measures: [
+                CoachHealthMeasureFacts(
+                    measure: .bloodPressure,
+                    days: [CoachHealthDayValue(dateKey: "2026-10-10", readings: readings)]
+                )
+            ],
+            startKey: "2026-10-10",
+            endKey: "2026-10-10",
+            todayKey: "2026-10-10"
+        )
+        XCTAssertTrue(facts.text.contains("7:00 AM: 110/70 mmHg"))
+        XCTAssertTrue(facts.text.contains("7:29 AM: 139/70 mmHg"))
+        XCTAssertFalse(facts.text.contains("systolic"))
+    }
+
     func test_cardioFitnessKeepsTheLatestDate() {
         let facts = CoachHealthReport.facts(
             measures: [
