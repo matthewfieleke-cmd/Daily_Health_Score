@@ -192,9 +192,10 @@ extension HealthKitService {
         var failed: Bool
     }
 
-    /// A statistics collection that errors is retried one calendar day at a time.
-    /// Heart rate has its own path: a month of Watch samples can collapse into
-    /// the first day, and that case is rebuilt from the samples.
+    /// One statistics collection over a long window can come back as a single
+    /// interval, for heart rate and for the other daily measures. A failed
+    /// read, or at most one day in a longer window, is checked one calendar
+    /// day at a time. Heart rate still has a sample fallback after that.
     private func dailyQuantities(
         _ identifier: HKQuantityTypeIdentifier,
         unit: HKUnit,
@@ -202,9 +203,16 @@ extension HealthKitService {
         window: DayWindow
     ) async -> (days: [DayQuantities], failed: Bool) {
         guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return ([], true) }
+        let bounds = dayBounds(in: window)
         let collected = await statisticsCollection(type: type, unit: unit, options: options, window: window)
-        guard collected.failed else { return collected }
-        return await perDayQuantities(type: type, unit: unit, options: options, bounds: dayBounds(in: window))
+        let collapsed = bounds.count > 1 && collected.days.count <= 1
+        guard collected.failed || collapsed else { return collected }
+        let verified = await perDayQuantities(type: type, unit: unit, options: options, bounds: bounds)
+        if verified.days.count > collected.days.count || (collected.failed && !verified.failed) {
+            return verified
+        }
+        if collected.failed { return verified }
+        return collected
     }
 
     private func heartRateDays(window: DayWindow) async -> (days: [CoachHealthDayValue], failed: Bool) {

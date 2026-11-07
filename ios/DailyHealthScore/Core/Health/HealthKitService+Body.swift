@@ -10,7 +10,10 @@ extension HealthKitService {
         var measurements = BodyMeasurements()
 
         if let weightType = HKQuantityType.quantityType(forIdentifier: .bodyMass) {
-            let samples = await quantitySamples(type: weightType, start: start, end: now, limit: HKObjectQueryNoLimit)
+            var samples = await quantitySamples(type: weightType, start: start, end: now, limit: HKObjectQueryNoLimit)
+            if samples.isEmpty {
+                samples = await quantitySamples(type: weightType, start: HealthKitService.earliestSampleDate, end: now, limit: 1)
+            }
             measurements.weights = samples.map {
                 BodyWeightSample(date: $0.startDate, kilograms: $0.quantity.doubleValue(for: .gramUnit(with: .kilo)))
             }
@@ -22,7 +25,7 @@ extension HealthKitService {
             measurements.heightMeters = samples.first?.quantity.doubleValue(for: .meter())
         }
         if let bmiType = HKQuantityType.quantityType(forIdentifier: .bodyMassIndex) {
-            let samples = await quantitySamples(type: bmiType, start: start, end: now, limit: 1)
+            let samples = await quantitySamples(type: bmiType, start: HealthKitService.earliestSampleDate, end: now, limit: 1)
             if let sample = samples.first {
                 measurements.latestBMISample = sample.quantity.doubleValue(for: .count())
                 measurements.latestBMIDate = sample.startDate
@@ -73,7 +76,8 @@ extension HealthKitService {
                 limit: limit,
                 sortDescriptors: [sort]
             ) { _, results, _ in
-                continuation.resume(returning: (results as? [HKQuantitySample]) ?? [])
+                let samples = (results ?? []).compactMap { $0 as? HKQuantitySample }
+                continuation.resume(returning: samples)
             }
             store.execute(query)
         }

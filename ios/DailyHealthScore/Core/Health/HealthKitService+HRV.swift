@@ -34,7 +34,7 @@ extension HealthKitService {
                     continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
                     return
                 }
-                let categories = (samples as? [HKCategorySample]) ?? []
+                let categories = (samples ?? []).compactMap { $0 as? HKCategorySample }
                 let intervals: [SleepInterval] = categories.compactMap { sample in
                     guard Self.asleepCategoryValues.contains(sample.value) else { return nil }
                     return SleepInterval(start: sample.startDate, end: sample.endDate)
@@ -96,12 +96,13 @@ extension HealthKitService {
                     continuation.resume(throwing: HealthKitError.queryFailed(error.localizedDescription))
                     return
                 }
-                let mapped = (results as? [HKQuantitySample])?.map { sample in
-                    HRVSample(
-                        timestamp: sample.startDate,
-                        sdnnMilliseconds: sample.quantity.doubleValue(for: unit)
+                let mapped = (results ?? []).compactMap { sample -> HRVSample? in
+                    guard let quantity = sample as? HKQuantitySample else { return nil }
+                    return HRVSample(
+                        timestamp: quantity.startDate,
+                        sdnnMilliseconds: quantity.quantity.doubleValue(for: unit)
                     )
-                } ?? []
+                }
                 continuation.resume(returning: mapped)
             }
             store.execute(query)
