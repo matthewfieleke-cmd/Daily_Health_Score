@@ -5,14 +5,15 @@ import Foundation
 /// paraphrase, and it does not become a script in the chat.
 enum CoachIntakeField: String, CaseIterable, Identifiable, Codable, Sendable {
     case name
-    case work
-    case heavyDays
-    case household
-    case tripsUp
-    case enjoys
+    case usualDay
+    case wantToChange
+    case betterLooksLike
     case sleep
     case eating
     case movement
+    case household
+    case hardestTimes
+    case knocksOffTrack
     case health
     case coaching
 
@@ -21,54 +22,40 @@ enum CoachIntakeField: String, CaseIterable, Identifiable, Codable, Sendable {
     var title: String {
         switch self {
         case .name: return "What should I call you?"
-        case .work: return "What do you do for work?"
-        case .heavyDays: return "Which days run heaviest?"
-        case .household: return "Who’s at home?"
-        case .tripsUp: return "What tends to trip you up?"
-        case .enjoys: return "What do you enjoy, or what helps?"
-        case .sleep: return "Sleep, if you want this known"
-        case .eating: return "How you usually eat, in your words"
-        case .movement: return "Movement you already do"
-        case .health: return "Conditions, medicines, or limits"
-        case .coaching: return "How you want to be coached"
-        }
-    }
-
-    var placeholder: String {
-        switch self {
-        case .name: return "Matt"
-        case .work: return "Family Medicine"
-        case .heavyDays: return "Tuesdays"
-        case .household: return "Wife Maureen, sons Isaac and Caleb"
-        case .tripsUp: return "Eating after an argument"
-        case .enjoys: return "Music, working outside"
-        case .sleep: return "In bed by 10, up at 6"
-        case .eating: return "Oatmeal most mornings"
-        case .movement: return "Walks after clinic"
-        case .health: return "Nothing you need to work around"
-        case .coaching: return "Direct, and don’t lecture me"
+        case .usualDay: return "What does a usual day look like?"
+        case .wantToChange: return "What do you most want to change?"
+        case .betterLooksLike: return "What would better look like for you?"
+        case .sleep: return "When do you usually sleep, and what gets in the way?"
+        case .eating: return "How do you usually eat?"
+        case .movement: return "What movement do you already do, and what do you like?"
+        case .household: return "Who is part of your day at home?"
+        case .hardestTimes: return "When is it hardest to take care of yourself?"
+        case .knocksOffTrack: return "What usually knocks you off track?"
+        case .health: return "Conditions, medicines, injuries, or limits I should work around"
+        case .coaching: return "How do you want me to talk with you?"
         }
     }
 
     var section: CoachMemorySection {
         switch self {
-        case .name, .work: return .aboutYou
-        case .heavyDays, .sleep, .movement: return .routines
+        case .name: return .aboutYou
+        case .usualDay, .sleep, .movement, .hardestTimes: return .routines
+        case .wantToChange, .betterLooksLike: return .goals
         case .household: return .people
-        case .tripsUp: return .patterns
-        case .enjoys, .eating: return .likes
+        case .knocksOffTrack: return .patterns
+        case .eating: return .likes
         case .health: return .body
         case .coaching: return .coaching
         }
     }
 
-    /// Form sections, in the order a person fills them.
-    static let groups: [(title: String, fields: [CoachIntakeField])] = [
-        ("You", [.name, .work]),
-        ("Your week", [.heavyDays, .sleep, .movement]),
-        ("People", [.household]),
-        ("What gets in the way, and what you reach for", [.tripsUp, .enjoys, .eating]),
-        ("If you want this known", [.health, .coaching])
+    /// One step of the form. A person can skip any question.
+    static let groups: [(title: String, detail: String, fields: [CoachIntakeField])] = [
+        ("You", "The shape of your days.", [.name, .usualDay]),
+        ("What you want", "So the advice has a point.", [.wantToChange, .betterLooksLike]),
+        ("Sleep, eating, movement", "What you already do.", [.sleep, .eating, .movement]),
+        ("People and hard parts", "The context around the habits.", [.household, .hardestTimes, .knocksOffTrack]),
+        ("Before any advice", "What should not be guessed.", [.health, .coaching])
     ]
 
     /// Their words, labeled so the file shows which question they answered.
@@ -76,14 +63,15 @@ enum CoachIntakeField: String, CaseIterable, Identifiable, Codable, Sendable {
         let text = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         switch self {
         case .name: return "Goes by \(text)."
-        case .work: return "Work: \(text)."
-        case .heavyDays: return "Heaviest days: \(text)."
-        case .household: return "At home: \(text)."
-        case .tripsUp: return "Gets in the way: \(text)."
-        case .enjoys: return "Enjoys: \(text)."
+        case .usualDay: return "Usual day: \(text)."
+        case .wantToChange: return "Wants to change: \(text)."
+        case .betterLooksLike: return "Better looks like: \(text)."
         case .sleep: return "Sleep: \(text)."
         case .eating: return "Eating: \(text)."
         case .movement: return "Movement: \(text)."
+        case .household: return "At home: \(text)."
+        case .hardestTimes: return "Hardest times: \(text)."
+        case .knocksOffTrack: return "Knocks them off track: \(text)."
         case .health: return "Health: \(text)."
         case .coaching: return "Coaching: \(text)."
         }
