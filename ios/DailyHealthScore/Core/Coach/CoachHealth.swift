@@ -99,9 +99,14 @@ enum CoachHealthMeasure: String, CaseIterable, Identifiable, Sendable {
         allCases.map(\.rawValue).joined(separator: ", ")
     }
 
-    /// One measure from a chart field or a single token.
+    /// One measure from a chart field or a single token. The lookup tool asks
+    /// for the camelCase name, such as bloodPressure.
     static func parseOne(_ raw: String) -> CoachHealthMeasure? {
-        let text = raw
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let named = allCases.first(where: { $0.rawValue.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return named
+        }
+        let text = trimmed
             .lowercased()
             .replacingOccurrences(of: "_", with: " ")
             .split(whereSeparator: { $0.isWhitespace || $0 == "-" })
