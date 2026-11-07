@@ -95,9 +95,29 @@ final class CoachHealthReportTests: XCTestCase {
         let morning = Date(timeIntervalSince1970: 1_760_000_000)
         let readings = BloodPressureReadings.pair(
             systolic: [BloodPressureReadings.Sample(date: morning, value: 126)],
-            diastolic: [BloodPressureReadings.Sample(date: morning.addingTimeInterval(30), value: 81)]
+            diastolic: [BloodPressureReadings.Sample(date: morning.addingTimeInterval(180), value: 81)]
         )
         XCTAssertTrue(readings.isEmpty)
+    }
+
+    func test_bloodPressurePairsOneCuffInflation() {
+        let start = Date(timeIntervalSince1970: 1_760_000_000)
+        let readings = BloodPressureReadings.pair(
+            systolic: [BloodPressureReadings.Sample(date: start, value: 128)],
+            diastolic: [BloodPressureReadings.Sample(date: start.addingTimeInterval(45), value: 82)]
+        )
+        XCTAssertEqual(readings.map(\.systolic), [128])
+        XCTAssertEqual(readings.map(\.diastolic), [82])
+    }
+
+    func test_bloodPressureKeepsTheWindowAndDropsARepeatedQuery() {
+        let start = Date(timeIntervalSince1970: 1_760_000_000)
+        let inside = BloodPressureReadings.Reading(date: start.addingTimeInterval(60), systolic: 120, diastolic: 78)
+        let outside = BloodPressureReadings.Reading(date: start.addingTimeInterval(-86_400), systolic: 130, diastolic: 85)
+        let duplicate = BloodPressureReadings.Reading(date: inside.date.addingTimeInterval(1), systolic: 120, diastolic: 78)
+        let merged = BloodPressureReadings.merged([inside], [duplicate, outside])
+        let window = BloodPressureReadings.inWindow(merged, start: start, end: start.addingTimeInterval(86_400))
+        XCTAssertEqual(window, [inside])
     }
 
     func test_bloodPressurePairsACuffStampAFewSecondsLater() {

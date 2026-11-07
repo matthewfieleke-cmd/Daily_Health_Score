@@ -1,9 +1,10 @@
 import Foundation
 
-/// Systolic and diastolic samples paired by start time. Health lists them as
-/// one Blood Pressure permission. A cuff often stamps the two numbers a few
-/// seconds apart. Each number is kept only when it is the other's closest
-/// sample, and a number with no partner inside the tolerance is left out.
+/// Systolic and diastolic samples paired by time. A digital cuff, including
+/// Withings, saves one inflation as two samples. Those two stamps can be the
+/// same second or the length of the inflation apart. Each number is kept only
+/// when it is the other's closest sample. A number with no partner inside one
+/// inflation is left out.
 enum BloodPressureReadings {
     struct Sample: Equatable {
         var date: Date
@@ -16,8 +17,8 @@ enum BloodPressureReadings {
         var diastolic: Double
     }
 
-    /// Far enough for a cuff's two stamps, and inside the gap before the next reading.
-    static let pairTolerance: TimeInterval = 15
+    /// One cuff inflation, and shorter than the usual gap before the next reading.
+    static let pairTolerance: TimeInterval = 60
 
     static func pair(systolic: [Sample], diastolic: [Sample], tolerance: TimeInterval = pairTolerance) -> [Reading] {
         let systolics = systolic.sorted { $0.date < $1.date }
@@ -39,6 +40,21 @@ enum BloodPressureReadings {
             readings.append(Reading(date: sample.date, systolic: sample.value, diastolic: candidate.value))
         }
         return readings.sorted { $0.date < $1.date }
+    }
+
+    /// Readings that share a timestamp came from two queries of the same cuff result.
+    static func merged(_ first: [Reading], _ second: [Reading], tolerance: TimeInterval = pairTolerance) -> [Reading] {
+        var readings = first
+        for candidate in second {
+            let alreadyHave = readings.contains { abs($0.date.timeIntervalSince(candidate.date)) <= tolerance }
+            if !alreadyHave { readings.append(candidate) }
+        }
+        return readings.sorted { $0.date < $1.date }
+    }
+
+    /// `end` is exclusive, matching a calendar-day window.
+    static func inWindow(_ readings: [Reading], start: Date, end: Date) -> [Reading] {
+        readings.filter { $0.date >= start && $0.date < end }.sorted { $0.date < $1.date }
     }
 }
 
