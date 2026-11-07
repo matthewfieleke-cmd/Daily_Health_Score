@@ -388,10 +388,10 @@ extension HealthKitService {
         )
     }
 
-    /// Withings writes two ordinary samples, systolic and diastolic, at the
-    /// same time. A date filter on the query was returning none of them, so
-    /// this reads every saved sample and keeps the ones in the requested days.
-    /// The paired record is read the same way, with no date filter.
+    /// Each row in Health's blood pressure list is one paired record. The
+    /// systolic and diastolic samples inside it do not show up in a normal
+    /// sample query, so the record itself is read and the two numbers are
+    /// taken from it. Loose samples are only a fallback.
     private func bloodPressure(window: DayWindow) async -> (days: [CoachHealthDayValue], failed: Bool) {
         guard let correlationType = HKCorrelationType.correlationType(forIdentifier: .bloodPressure),
               let systolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureSystolic),
@@ -435,9 +435,13 @@ extension HealthKitService {
             let query = HKSampleQuery(sampleType: type, predicate: nil, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, results, error in
                 let readings = (results ?? []).compactMap { sample -> BloodPressureReadings.Reading? in
                     guard let record = sample as? HKCorrelation else { return nil }
-                    let systolic = (record.objects(for: systolicType).first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
-                    let diastolic = (record.objects(for: diastolicType).first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
-                    guard let systolic, let diastolic else { return nil }
+                    let numbers = record.objects.compactMap { $0 as? HKQuantitySample }
+                    func value(_ type: HKQuantityType) -> Double? {
+                        let match = numbers.first { $0.quantityType.identifier == type.identifier }
+                            ?? (record.objects(for: type).first as? HKQuantitySample)
+                        return match?.quantity.doubleValue(for: unit)
+                    }
+                    guard let systolic = value(systolicType), let diastolic = value(diastolicType) else { return nil }
                     return BloodPressureReadings.Reading(date: record.startDate, systolic: systolic, diastolic: diastolic)
                 }
                 continuation.resume(returning: (readings, readings.isEmpty && error != nil))
