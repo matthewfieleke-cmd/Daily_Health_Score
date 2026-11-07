@@ -144,13 +144,18 @@ struct CoachLookupHealthTool: Tool {
             startDaysAgo: arguments.startDaysAgo,
             endDaysAgo: arguments.endDaysAgo
         )
+        let flat = payload.replacingOccurrences(of: "\n", with: " ")
         let outcome: String
         if payload.hasPrefix("Name one") || payload.hasPrefix("Apple Health readings are not") || payload.hasPrefix("No window") {
             outcome = "unavailable"
+        } else if flat.contains("mmHg") {
+            outcome = "readings"
+        } else if flat.contains("Health returned") || flat.contains("no record") {
+            outcome = "empty"
         } else {
-            outcome = "success"
+            outcome = "other"
         }
-        await context.log("lookupHealth", detail: arguments.measures, outcome: outcome)
+        await context.log("lookupHealth", detail: flat, outcome: outcome)
         return payload
     }
 }

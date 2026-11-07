@@ -702,6 +702,13 @@ struct LifestyleCoachChatView: View {
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 6)
                     }
+                    if turn.id == coach.toolReceiptTurnID, !coach.toolReceipt.isEmpty {
+                        Text(coach.toolReceipt)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .padding(.horizontal, 6)
+                    }
                 }
                 Spacer(minLength: 24)
             }
