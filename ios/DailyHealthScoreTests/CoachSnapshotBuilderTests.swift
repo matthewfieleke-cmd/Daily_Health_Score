@@ -247,6 +247,7 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         let withGoals = CoachCharter.homeCardInstructions(goalsListed: true)
         let withoutGoals = CoachCharter.homeCardInstructions(goalsListed: false)
         XCTAssertTrue(withGoals.contains("the one comment on the Home screen"))
+        XCTAssertTrue(withGoals.contains("You know this person. The comment is the insight a wise mentor who knows them would offer."))
         XCTAssertTrue(withGoals.contains("Sleep, Nutrition, and Movement tiles"))
         XCTAssertTrue(withGoals.contains("Their goals are listed under this comment, with their progress."))
         XCTAssertFalse(withoutGoals.contains("Their goals are listed"))
