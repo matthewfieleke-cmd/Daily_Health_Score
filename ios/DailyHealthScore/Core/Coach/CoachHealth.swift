@@ -1,8 +1,9 @@
 import Foundation
 
 /// Systolic and diastolic samples paired by start time. Health lists them as
-/// one Blood Pressure permission. A number with no partner within two seconds
-/// is left out.
+/// one Blood Pressure permission. A cuff often stamps the two numbers a few
+/// seconds apart. Each number is kept only when it is the other's closest
+/// sample, and a number with no partner inside the tolerance is left out.
 enum BloodPressureReadings {
     struct Sample: Equatable {
         var date: Date
@@ -15,16 +16,27 @@ enum BloodPressureReadings {
         var diastolic: Double
     }
 
-    static func pair(systolic: [Sample], diastolic: [Sample], tolerance: TimeInterval = 2) -> [Reading] {
+    /// Far enough for a cuff's two stamps, and inside the gap before the next reading.
+    static let pairTolerance: TimeInterval = 15
+
+    static func pair(systolic: [Sample], diastolic: [Sample], tolerance: TimeInterval = pairTolerance) -> [Reading] {
+        let systolics = systolic.sorted { $0.date < $1.date }
         var unused = diastolic
         var readings: [Reading] = []
-        for sample in systolic.sorted(by: { $0.date < $1.date }) {
-            guard let nearest = unused.enumerated().min(by: { lhs, rhs in
-                abs(lhs.element.date.timeIntervalSince(sample.date)) < abs(rhs.element.date.timeIntervalSince(sample.date))
+        for sample in systolics {
+            guard let nearestIndex = unused.indices.min(by: { lhs, rhs in
+                abs(unused[lhs].date.timeIntervalSince(sample.date)) < abs(unused[rhs].date.timeIntervalSince(sample.date))
             }) else { continue }
-            guard abs(nearest.element.date.timeIntervalSince(sample.date)) <= tolerance else { continue }
-            unused.remove(at: nearest.offset)
-            readings.append(Reading(date: sample.date, systolic: sample.value, diastolic: nearest.element.value))
+            let candidate = unused[nearestIndex]
+            let gap = abs(candidate.date.timeIntervalSince(sample.date))
+            guard gap <= tolerance else { continue }
+            let closestSystolic = systolics.min { lhs, rhs in
+                abs(lhs.date.timeIntervalSince(candidate.date)) < abs(rhs.date.timeIntervalSince(candidate.date))
+            }
+            guard let closestSystolic,
+                  abs(closestSystolic.date.timeIntervalSince(sample.date)) < 0.001 else { continue }
+            unused.remove(at: nearestIndex)
+            readings.append(Reading(date: sample.date, systolic: sample.value, diastolic: candidate.value))
         }
         return readings.sorted { $0.date < $1.date }
     }
@@ -153,6 +165,9 @@ struct CoachHealthMeasureFacts: Equatable, Sendable {
     var latest: CoachHealthLatest?
     var distanceUsesMetric: Bool = true
     var temperatureUsesFahrenheit: Bool = false
+    /// The Health query failed. Empty days then mean the read did not succeed,
+    /// which is different from a day that has no samples.
+    var unavailable: Bool = false
 }
 
 enum CoachHealthChartStyle: String, Equatable, Codable, Sendable {
@@ -273,11 +288,11 @@ enum CoachHealthReport {
         if singleDay {
             let day = facts.days.first
             let line = day.flatMap { valueLine(facts.measure, day: $0, facts: facts) }
-            let text = "\(facts.measure.title), \(span): \(line ?? "no record")."
-            return Section(text: text, hasRecord: line != nil, chart: chart)
+            let text = line.map { "\(facts.measure.title), \(span): \($0)." } ?? missingText(facts, span: span)
+            return Section(text: text, hasRecord: line != nil, chart: line == nil ? nil : chart)
         }
         if recorded.isEmpty {
-            return Section(text: "\(facts.measure.title), \(span): no record.", hasRecord: false, chart: nil)
+            return Section(text: missingText(facts, span: span), hasRecord: false, chart: nil)
         }
         if recorded.count > maxListedDays {
             let summary = summaryLine(facts.measure, days: recorded, facts: facts)
@@ -311,7 +326,7 @@ enum CoachHealthReport {
             day.readings.map { (day.dateKey, $0) }
         }
         guard !readings.isEmpty else {
-            return Section(text: "Blood pressure, \(span): no record.", hasRecord: false, chart: nil)
+            return Section(text: missingText(facts, span: span), hasRecord: false, chart: nil)
         }
         if readings.count > 24 {
             let systolics = readings.map(\.1.systolic)
@@ -331,7 +346,9 @@ enum CoachHealthReport {
         let recorded = facts.days.filter { $0.average != nil }
         var lines: [String] = []
         if recorded.isEmpty {
-            lines.append("Cardio fitness, \(span): no record.")
+            lines.append(facts.unavailable && facts.latest == nil
+                ? missingText(facts, span: span)
+                : "Cardio fitness, \(span): no record.")
         } else if singleDay, let day = recorded.first, let value = day.average {
             lines.append("Cardio fitness, \(span): \(fitness(value)).")
         } else {
@@ -356,7 +373,7 @@ enum CoachHealthReport {
         span: String
     ) -> Section {
         guard !facts.runs.isEmpty else {
-            return Section(text: "Running, \(span): no runs recorded.", hasRecord: false, chart: nil)
+            return Section(text: missingText(facts, span: span, noun: "no runs recorded"), hasRecord: false, chart: nil)
         }
         var lines = ["Running, \(span):"]
         for run in facts.runs {
@@ -554,6 +571,11 @@ enum CoachHealthReport {
         case .bloodPressure, .running:
             return nil
         }
+    }
+
+    private static func missingText(_ facts: CoachHealthMeasureFacts, span: String, noun: String = "no record") -> String {
+        let reason = facts.unavailable ? "Apple Health did not return this reading" : noun
+        return "\(facts.measure.title), \(span): \(reason)."
     }
 
     private static func spanLabel(startKey: String, endKey: String) -> String {

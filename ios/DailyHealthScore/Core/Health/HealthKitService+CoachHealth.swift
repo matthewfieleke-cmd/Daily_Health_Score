@@ -65,103 +65,225 @@ extension HealthKitService {
         )
         switch measure {
         case .heartRate:
-            facts.days = await dailyRange(.heartRate, unit: HKUnit.count().unitDivided(by: .minute()), window: window)
+            let read = await heartRateDays(window: window)
+            facts.days = read.days
+            facts.unavailable = read.failed
         case .restingHeartRate:
-            facts.days = await dailyAverage(.restingHeartRate, unit: HKUnit.count().unitDivided(by: .minute()), window: window)
+            let read = await dailyAverage(.restingHeartRate, unit: Self.beatsPerMinute, window: window)
+            facts.days = read.days
+            facts.unavailable = read.failed
         case .walkingHeartRate:
-            facts.days = await dailyAverage(.walkingHeartRateAverage, unit: HKUnit.count().unitDivided(by: .minute()), window: window)
+            let read = await dailyAverage(.walkingHeartRateAverage, unit: Self.beatsPerMinute, window: window)
+            facts.days = read.days
+            facts.unavailable = read.failed
         case .bloodOxygen:
-            facts.days = await dailyPercent(.oxygenSaturation, window: window)
+            let read = await dailyPercent(.oxygenSaturation, window: window)
+            facts.days = read.days
+            facts.unavailable = read.failed
         case .respiratoryRate:
-            facts.days = await dailyAverage(.respiratoryRate, unit: HKUnit.count().unitDivided(by: .minute()), window: window)
+            let read = await dailyAverage(.respiratoryRate, unit: Self.beatsPerMinute, window: window)
+            facts.days = read.days
+            facts.unavailable = read.failed
         case .standMinutes:
-            facts.days = await dailyTotal(.appleStandTime, unit: .minute(), window: window)
+            let read = await dailyTotal(.appleStandTime, unit: .minute(), window: window)
+            facts.days = read.days
+            facts.unavailable = read.failed
         case .daylight:
-            facts.days = await dailyTotal(.timeInDaylight, unit: .minute(), window: window)
+            let read = await dailyTotal(.timeInDaylight, unit: .minute(), window: window)
+            facts.days = read.days
+            facts.unavailable = read.failed
         case .distance:
-            facts.days = await dailyTotal(.distanceWalkingRunning, unit: .meter(), window: window)
+            let read = await dailyTotal(.distanceWalkingRunning, unit: .meter(), window: window)
+            facts.days = read.days
+            facts.unavailable = read.failed
         case .wristTemperature:
-            facts.days = await dailyAverage(.appleSleepingWristTemperature, unit: .degreeCelsius(), window: window)
+            let read = await dailyAverage(.appleSleepingWristTemperature, unit: .degreeCelsius(), window: window)
+            facts.days = read.days
+            facts.unavailable = read.failed
         case .bloodPressure:
-            facts.days = await bloodPressure(window: window)
+            let read = await bloodPressure(window: window)
+            facts.days = read.days
+            facts.unavailable = read.failed
         case .cardioFitness:
             let vo2 = HKUnit.literUnit(with: .milli).unitDivided(by: .gramUnit(with: .kilo)).unitDivided(by: .minute())
-            let samples = await quantityHistory(.vo2Max, unit: vo2, window: window)
-            facts.days = samples.days
-            facts.latest = samples.latest
+            var history = await quantityHistory(.vo2Max, unit: vo2, window: window)
+            if history.days.isEmpty && history.latest == nil {
+                let averaged = await dailyAverage(.vo2Max, unit: vo2, window: window)
+                if !averaged.days.isEmpty {
+                    history.days = averaged.days
+                }
+                let stillEmpty = history.days.isEmpty && history.latest == nil
+                history.failed = stillEmpty && history.failed && averaged.failed
+            }
+            facts.days = history.days
+            facts.latest = history.latest
+            facts.unavailable = history.failed
         case .running:
-            facts.runs = await runs(window: window)
+            let read = await runs(window: window)
+            facts.runs = read.runs
+            facts.unavailable = read.failed
         }
         return facts
     }
+
+    private static let beatsPerMinute = HKUnit.count().unitDivided(by: .minute())
 
     private func dailyRange(
         _ identifier: HKQuantityTypeIdentifier,
         unit: HKUnit,
         window: DayWindow
-    ) async -> [CoachHealthDayValue] {
-        let stats = await statistics(identifier, options: [.discreteAverage, .discreteMin, .discreteMax], window: window)
-        return stats.compactMap { date, stat in
-            let low = stat.minimumQuantity()?.doubleValue(for: unit)
-            let high = stat.maximumQuantity()?.doubleValue(for: unit)
-            let average = stat.averageQuantity()?.doubleValue(for: unit)
-            guard low != nil || high != nil || average != nil else { return nil }
-            return CoachHealthDayValue(
-                dateKey: DateHelpers.localDateKey(from: date),
-                low: low,
-                high: high,
-                average: average
-            )
+    ) async -> (days: [CoachHealthDayValue], failed: Bool) {
+        let read = await dailyQuantities(identifier, unit: unit, options: [.discreteAverage, .discreteMin, .discreteMax], window: window)
+        let days = read.days.compactMap { day -> CoachHealthDayValue? in
+            guard day.low != nil || day.high != nil || day.average != nil else { return nil }
+            return CoachHealthDayValue(dateKey: DateHelpers.localDateKey(from: day.start), low: day.low, high: day.high, average: day.average)
         }.sorted { $0.dateKey < $1.dateKey }
+        return (days, read.failed)
     }
 
     private func dailyAverage(
         _ identifier: HKQuantityTypeIdentifier,
         unit: HKUnit,
         window: DayWindow
-    ) async -> [CoachHealthDayValue] {
-        let stats = await statistics(identifier, options: .discreteAverage, window: window)
-        return stats.compactMap { date, stat in
-            guard let average = stat.averageQuantity()?.doubleValue(for: unit) else { return nil }
-            return CoachHealthDayValue(dateKey: DateHelpers.localDateKey(from: date), average: average)
+    ) async -> (days: [CoachHealthDayValue], failed: Bool) {
+        let read = await dailyQuantities(identifier, unit: unit, options: .discreteAverage, window: window)
+        let days = read.days.compactMap { day -> CoachHealthDayValue? in
+            guard let average = day.average else { return nil }
+            return CoachHealthDayValue(dateKey: DateHelpers.localDateKey(from: day.start), average: average)
         }.sorted { $0.dateKey < $1.dateKey }
+        return (days, read.failed)
     }
 
-    private func dailyPercent(_ identifier: HKQuantityTypeIdentifier, window: DayWindow) async -> [CoachHealthDayValue] {
-        let unit = HKUnit.percent()
-        let stats = await statistics(identifier, options: [.discreteAverage, .discreteMin, .discreteMax], window: window)
-        return stats.compactMap { date, stat in
-            func percent(_ quantity: HKQuantity?) -> Double? {
-                guard let quantity else { return nil }
-                let value = quantity.doubleValue(for: unit)
+    private func dailyPercent(_ identifier: HKQuantityTypeIdentifier, window: DayWindow) async -> (days: [CoachHealthDayValue], failed: Bool) {
+        let read = await dailyQuantities(identifier, unit: .percent(), options: [.discreteAverage, .discreteMin, .discreteMax], window: window)
+        let days = read.days.compactMap { day -> CoachHealthDayValue? in
+            func percent(_ value: Double?) -> Double? {
+                guard let value else { return nil }
                 return value <= 1 ? value * 100 : value
             }
-            let low = percent(stat.minimumQuantity())
-            let high = percent(stat.maximumQuantity())
-            let average = percent(stat.averageQuantity())
+            let low = percent(day.low)
+            let high = percent(day.high)
+            let average = percent(day.average)
             guard low != nil || high != nil || average != nil else { return nil }
-            return CoachHealthDayValue(dateKey: DateHelpers.localDateKey(from: date), low: low, high: high, average: average)
+            return CoachHealthDayValue(dateKey: DateHelpers.localDateKey(from: day.start), low: low, high: high, average: average)
         }.sorted { $0.dateKey < $1.dateKey }
+        return (days, read.failed)
     }
 
     private func dailyTotal(
         _ identifier: HKQuantityTypeIdentifier,
         unit: HKUnit,
         window: DayWindow
-    ) async -> [CoachHealthDayValue] {
-        let stats = await statistics(identifier, options: .cumulativeSum, window: window)
-        return stats.compactMap { date, stat in
-            guard let total = stat.sumQuantity()?.doubleValue(for: unit), total > 0 else { return nil }
-            return CoachHealthDayValue(dateKey: DateHelpers.localDateKey(from: date), total: total)
+    ) async -> (days: [CoachHealthDayValue], failed: Bool) {
+        let read = await dailyQuantities(identifier, unit: unit, options: .cumulativeSum, window: window)
+        let days = read.days.compactMap { day -> CoachHealthDayValue? in
+            guard let total = day.sum, total > 0 else { return nil }
+            return CoachHealthDayValue(dateKey: DateHelpers.localDateKey(from: day.start), total: total)
         }.sorted { $0.dateKey < $1.dateKey }
+        return (days, read.failed)
     }
 
-    private func statistics(
+    private struct DayQuantities: Sendable {
+        var start: Date
+        var low: Double?
+        var high: Double?
+        var average: Double?
+        var sum: Double?
+        var failed: Bool
+    }
+
+    /// One statistics collection over a long window can come back as a single
+    /// interval, for heart rate and for the other daily measures. A failed
+    /// read, or at most one day in a longer window, is checked one calendar
+    /// day at a time. Heart rate still has a sample fallback after that.
+    private func dailyQuantities(
         _ identifier: HKQuantityTypeIdentifier,
+        unit: HKUnit,
         options: HKStatisticsOptions,
         window: DayWindow
-    ) async -> [(Date, HKStatistics)] {
-        guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return [] }
+    ) async -> (days: [DayQuantities], failed: Bool) {
+        guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return ([], true) }
+        let bounds = dayBounds(in: window)
+        let collected = await statisticsCollection(type: type, unit: unit, options: options, window: window)
+        let collapsed = bounds.count > 1 && collected.days.count <= 1
+        guard collected.failed || collapsed else { return collected }
+        let verified = await perDayQuantities(type: type, unit: unit, options: options, bounds: bounds)
+        if verified.days.count > collected.days.count || (collected.failed && !verified.failed) {
+            return verified
+        }
+        if collected.failed { return verified }
+        return collected
+    }
+
+    private func heartRateDays(window: DayWindow) async -> (days: [CoachHealthDayValue], failed: Bool) {
+        var read = await dailyRange(.heartRate, unit: Self.beatsPerMinute, window: window)
+        guard dayBounds(in: window).count > 1, read.days.count <= 1 else { return read }
+        let sampled = await heartRateFromSamples(window: window)
+        if sampled.days.count > read.days.count {
+            read = sampled
+        } else if read.days.isEmpty {
+            read.failed = read.failed && sampled.failed
+        }
+        return read
+    }
+
+    /// Plain average of the samples in each calendar day. Used when the
+    /// statistics query reports at most one day of a longer window.
+    private func heartRateFromSamples(window: DayWindow) async -> (days: [CoachHealthDayValue], failed: Bool) {
+        guard let type = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return ([], true) }
+        let read = await samples(type: type, start: window.start, end: window.end, limit: HKObjectQueryNoLimit)
+        if read.failed { return ([], true) }
+        struct Bucket {
+            var low: Double
+            var high: Double
+            var sum: Double
+            var count: Int
+        }
+        var buckets: [String: Bucket] = [:]
+        for sample in read.samples {
+            let value = sample.quantity.doubleValue(for: Self.beatsPerMinute)
+            let key = DateHelpers.localDateKey(from: sample.startDate)
+            if var bucket = buckets[key] {
+                bucket.low = min(bucket.low, value)
+                bucket.high = max(bucket.high, value)
+                bucket.sum += value
+                bucket.count += 1
+                buckets[key] = bucket
+            } else {
+                buckets[key] = Bucket(low: value, high: value, sum: value, count: 1)
+            }
+        }
+        let days = buckets.map { key, bucket in
+            CoachHealthDayValue(
+                dateKey: key,
+                low: bucket.low,
+                high: bucket.high,
+                average: bucket.sum / Double(bucket.count)
+            )
+        }.sorted { $0.dateKey < $1.dateKey }
+        return (days, false)
+    }
+
+    private func dayBounds(in window: DayWindow) -> [(start: Date, end: Date)] {
+        var bounds: [(Date, Date)] = []
+        var cursor = window.start
+        while cursor < window.end && bounds.count < 400 {
+            guard let next = window.calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            bounds.append((cursor, min(next, window.end)))
+            cursor = next
+        }
+        return bounds
+    }
+
+    private func statisticsCollection(
+        type: HKQuantityType,
+        unit: HKUnit,
+        options: HKStatisticsOptions,
+        window: DayWindow
+    ) async -> (days: [DayQuantities], failed: Bool) {
+        var interval = DateComponents()
+        interval.calendar = window.calendar
+        interval.day = 1
         let predicate = HKQuery.predicateForSamples(withStart: window.start, end: window.end, options: .strictStartDate)
         return await withCheckedContinuation { continuation in
             let query = HKStatisticsCollectionQuery(
@@ -169,64 +291,153 @@ extension HealthKitService {
                 quantitySamplePredicate: predicate,
                 options: options,
                 anchorDate: window.start,
-                intervalComponents: DateComponents(day: 1)
+                intervalComponents: interval
             )
-            query.initialResultsHandler = { _, collection, _ in
-                var rows: [(Date, HKStatistics)] = []
-                collection?.enumerateStatistics(from: window.start, to: window.end) { stat, _ in
-                    rows.append((stat.startDate, stat))
+            query.initialResultsHandler = { _, collection, error in
+                guard error == nil, let collection else {
+                    continuation.resume(returning: ([], true))
+                    return
                 }
-                continuation.resume(returning: rows)
+                var days: [DayQuantities] = []
+                collection.enumerateStatistics(from: window.start, to: window.end) { stat, _ in
+                    let quantities = Self.quantities(stat, unit: unit)
+                    guard quantities.hasValue else { return }
+                    days.append(DayQuantities(
+                        start: stat.startDate,
+                        low: quantities.low,
+                        high: quantities.high,
+                        average: quantities.average,
+                        sum: quantities.sum,
+                        failed: false
+                    ))
+                }
+                continuation.resume(returning: (days, false))
             }
             store.execute(query)
         }
     }
 
-    /// Health shows one Blood Pressure switch. That switch covers the systolic
-    /// and diastolic samples. A paired-object query can still come back empty,
-    /// so the samples are read directly and matched by time. A paired object
-    /// fills in only a time the samples did not already provide.
-    private func bloodPressure(window: DayWindow) async -> [CoachHealthDayValue] {
-        let unit = HKUnit.millimeterOfMercury()
-        async let systolicSamples = samples(of: .bloodPressureSystolic, window: window)
-        async let diastolicSamples = samples(of: .bloodPressureDiastolic, window: window)
-        let paired = BloodPressureReadings.pair(
-            systolic: await systolicSamples.map { BloodPressureReadings.Sample(date: $0.startDate, value: $0.quantity.doubleValue(for: unit)) },
-            diastolic: await diastolicSamples.map { BloodPressureReadings.Sample(date: $0.startDate, value: $0.quantity.doubleValue(for: unit)) }
-        )
-        var readings = paired
-        for extra in await correlationReadings(window: window) {
-            let alreadyHave = readings.contains { abs($0.date.timeIntervalSince(extra.date)) <= 2 }
-            if !alreadyHave { readings.append(extra) }
+    private func perDayQuantities(
+        type: HKQuantityType,
+        unit: HKUnit,
+        options: HKStatisticsOptions,
+        bounds: [(start: Date, end: Date)]
+    ) async -> (days: [DayQuantities], failed: Bool) {
+        var days: [DayQuantities] = []
+        var failures = 0
+        for bound in bounds {
+            let outcome = await dayStatistics(type: type, unit: unit, options: options, start: bound.start, end: bound.end)
+            if outcome.failed {
+                failures += 1
+                continue
+            }
+            guard outcome.hasValue else { continue }
+            days.append(DayQuantities(
+                start: bound.start,
+                low: outcome.low,
+                high: outcome.high,
+                average: outcome.average,
+                sum: outcome.sum,
+                failed: false
+            ))
         }
-        return dayValues(from: readings.sorted { $0.date < $1.date })
+        let failed = !bounds.isEmpty && failures == bounds.count
+        return (days, failed)
     }
 
-    private func samples(of identifier: HKQuantityTypeIdentifier, window: DayWindow) async -> [HKQuantitySample] {
-        guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return [] }
+    private struct QuantityValues {
+        var low: Double? = nil
+        var high: Double? = nil
+        var average: Double? = nil
+        var sum: Double? = nil
+        var failed: Bool = false
+
+        var hasValue: Bool {
+            low != nil || high != nil || average != nil || (sum ?? 0) > 0
+        }
+    }
+
+    private func dayStatistics(
+        type: HKQuantityType,
+        unit: HKUnit,
+        options: HKStatisticsOptions,
+        start: Date,
+        end: Date
+    ) async -> QuantityValues {
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        return await withCheckedContinuation { continuation in
+            let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: options) { _, stats, error in
+                guard error == nil, let stats else {
+                    continuation.resume(returning: QuantityValues(failed: true))
+                    return
+                }
+                var values = Self.quantities(stats, unit: unit)
+                values.failed = false
+                continuation.resume(returning: values)
+            }
+            store.execute(query)
+        }
+    }
+
+    private static func quantities(_ stats: HKStatistics, unit: HKUnit) -> QuantityValues {
+        QuantityValues(
+            low: stats.minimumQuantity()?.doubleValue(for: unit),
+            high: stats.maximumQuantity()?.doubleValue(for: unit),
+            average: stats.averageQuantity()?.doubleValue(for: unit),
+            sum: stats.sumQuantity()?.doubleValue(for: unit)
+        )
+    }
+
+    /// Health shows one Blood Pressure switch for the systolic and diastolic
+    /// types. The readings are stored as correlations, and a sample query on
+    /// that correlation type comes back empty, so this uses a correlation
+    /// query. Loose quantity samples fill in a time the correlation did not.
+    private func bloodPressure(window: DayWindow) async -> (days: [CoachHealthDayValue], failed: Bool) {
+        let unit = HKUnit.millimeterOfMercury()
+        async let systolicRead = samples(of: .bloodPressureSystolic, window: window)
+        async let diastolicRead = samples(of: .bloodPressureDiastolic, window: window)
+        async let correlationRead = correlationReadings(window: window)
+        let systolic = await systolicRead
+        let diastolic = await diastolicRead
+        let correlations = await correlationRead
+        let paired = BloodPressureReadings.pair(
+            systolic: systolic.samples.map { BloodPressureReadings.Sample(date: $0.startDate, value: $0.quantity.doubleValue(for: unit)) },
+            diastolic: diastolic.samples.map { BloodPressureReadings.Sample(date: $0.startDate, value: $0.quantity.doubleValue(for: unit)) }
+        )
+        var readings = paired
+        for extra in correlations.readings {
+            let alreadyHave = readings.contains { abs($0.date.timeIntervalSince(extra.date)) <= BloodPressureReadings.pairTolerance }
+            if !alreadyHave { readings.append(extra) }
+        }
+        let failed = readings.isEmpty && systolic.failed && diastolic.failed && correlations.failed
+        return (dayValues(from: readings.sorted { $0.date < $1.date }), failed)
+    }
+
+    private func samples(of identifier: HKQuantityTypeIdentifier, window: DayWindow) async -> (samples: [HKQuantitySample], failed: Bool) {
+        guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return ([], true) }
         return await samples(type: type, start: window.start, end: window.end, limit: HKObjectQueryNoLimit)
     }
 
-    private func correlationReadings(window: DayWindow) async -> [BloodPressureReadings.Reading] {
+    private func correlationReadings(window: DayWindow) async -> (readings: [BloodPressureReadings.Reading], failed: Bool) {
         guard let correlation = HKCorrelationType.correlationType(forIdentifier: .bloodPressure),
               let systolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureSystolic),
               let diastolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureDiastolic) else {
-            return []
+            return ([], true)
         }
         let predicate = HKQuery.predicateForSamples(withStart: window.start, end: window.end, options: .strictStartDate)
-        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
-        let samples: [HKCorrelation] = await withCheckedContinuation { continuation in
-            let query = HKSampleQuery(sampleType: correlation, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, results, _ in
-                continuation.resume(returning: (results as? [HKCorrelation]) ?? [])
+        let unit = HKUnit.millimeterOfMercury()
+        return await withCheckedContinuation { continuation in
+            let query = HKCorrelationQuery(type: correlation, predicate: predicate, samplePredicates: nil) { _, results, error in
+                let readings = (results ?? []).compactMap { sample -> BloodPressureReadings.Reading? in
+                    let systolic = (sample.objects(for: systolicType).first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
+                    let diastolic = (sample.objects(for: diastolicType).first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
+                    guard let systolic, let diastolic else { return nil }
+                    return BloodPressureReadings.Reading(date: sample.startDate, systolic: systolic, diastolic: diastolic)
+                }
+                let failed = readings.isEmpty && error != nil
+                continuation.resume(returning: (readings, failed))
             }
             store.execute(query)
-        }
-        let unit = HKUnit.millimeterOfMercury()
-        return samples.compactMap { sample in
-            let systolic = (sample.objects(for: systolicType).first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
-            let diastolic = (sample.objects(for: diastolicType).first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
-            guard let systolic, let diastolic else { return nil }
-            return BloodPressureReadings.Reading(date: sample.startDate, systolic: systolic, diastolic: diastolic)
         }
     }
 
@@ -249,36 +460,39 @@ extension HealthKitService {
         _ identifier: HKQuantityTypeIdentifier,
         unit: HKUnit,
         window: DayWindow
-    ) async -> (days: [CoachHealthDayValue], latest: CoachHealthLatest?) {
-        guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return ([], nil) }
+    ) async -> (days: [CoachHealthDayValue], latest: CoachHealthLatest?, failed: Bool) {
+        guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return ([], nil, true) }
         let inWindow = await samples(type: type, start: window.start, end: window.end, limit: HKObjectQueryNoLimit)
-        let newest = await samples(type: type, start: .distantPast, end: window.end, limit: 1)
-        let days = inWindow.map {
+        let newest = await samples(type: type, start: HealthKitService.earliestSampleDate, end: window.end, limit: 1)
+        let days = inWindow.samples.map {
             CoachHealthDayValue(
                 dateKey: DateHelpers.localDateKey(from: $0.startDate),
                 average: $0.quantity.doubleValue(for: unit)
             )
         }.sorted { $0.dateKey < $1.dateKey }
-        let latest = newest.first.map {
+        let latest = newest.samples.first.map {
             CoachHealthLatest(value: $0.quantity.doubleValue(for: unit), dateKey: DateHelpers.localDateKey(from: $0.startDate))
         }
-        return (days, latest)
+        let failed = days.isEmpty && latest == nil && inWindow.failed && newest.failed
+        return (days, latest, failed)
     }
 
-    private func runs(window: DayWindow) async -> [CoachHealthRun] {
+    private func runs(window: DayWindow) async -> (runs: [CoachHealthRun], failed: Bool) {
         let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
             HKQuery.predicateForSamples(withStart: window.start, end: window.end, options: .strictStartDate),
             HKQuery.predicateForWorkouts(with: .running)
         ])
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
-        let workouts: [HKWorkout] = await withCheckedContinuation { continuation in
-            let query = HKSampleQuery(sampleType: HKObjectType.workoutType(), predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, results, _ in
-                continuation.resume(returning: (results as? [HKWorkout]) ?? [])
+        let workouts: (samples: [HKWorkout], failed: Bool) = await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(sampleType: HKObjectType.workoutType(), predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, results, error in
+                let samples = (results ?? []).compactMap { $0 as? HKWorkout }
+                continuation.resume(returning: (samples, samples.isEmpty && error != nil))
             }
             store.execute(query)
         }
+        if workouts.failed { return ([], true) }
         var runs: [CoachHealthRun] = []
-        for workout in workouts {
+        for workout in workouts.samples {
             let speed = await workoutAverage(.runningSpeed, unit: HKUnit.meter().unitDivided(by: .second()), workout: workout)
             let power = await workoutAverage(.runningPower, unit: .watt(), workout: workout)
             let heart = await workoutAverage(.heartRate, unit: HKUnit.count().unitDivided(by: .minute()), workout: workout)
@@ -292,7 +506,7 @@ extension HealthKitService {
                 averageHeartRate: heart
             ))
         }
-        return runs
+        return (runs, false)
     }
 
     private func workoutAverage(_ identifier: HKQuantityTypeIdentifier, unit: HKUnit, workout: HKWorkout) async -> Double? {
@@ -306,12 +520,13 @@ extension HealthKitService {
         }
     }
 
-    private func samples(type: HKQuantityType, start: Date, end: Date, limit: Int) async -> [HKQuantitySample] {
+    private func samples(type: HKQuantityType, start: Date, end: Date, limit: Int) async -> (samples: [HKQuantitySample], failed: Bool) {
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
         let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
         return await withCheckedContinuation { continuation in
-            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: limit, sortDescriptors: [sort]) { _, results, _ in
-                continuation.resume(returning: (results as? [HKQuantitySample]) ?? [])
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: limit, sortDescriptors: [sort]) { _, results, error in
+                let samples = (results ?? []).compactMap { $0 as? HKQuantitySample }
+                continuation.resume(returning: (samples, samples.isEmpty && error != nil))
             }
             store.execute(query)
         }

@@ -100,6 +100,43 @@ final class CoachHealthReportTests: XCTestCase {
         XCTAssertTrue(readings.isEmpty)
     }
 
+    func test_bloodPressurePairsACuffStampAFewSecondsLater() {
+        let morning = Date(timeIntervalSince1970: 1_760_000_000)
+        let readings = BloodPressureReadings.pair(
+            systolic: [BloodPressureReadings.Sample(date: morning, value: 126)],
+            diastolic: [BloodPressureReadings.Sample(date: morning.addingTimeInterval(10), value: 81)]
+        )
+        XCTAssertEqual(readings.map(\.systolic), [126])
+        XCTAssertEqual(readings.map(\.diastolic), [81])
+    }
+
+    func test_bloodPressureKeepsTheCloserPartner() {
+        let start = Date(timeIntervalSince1970: 1_760_000_000)
+        let readings = BloodPressureReadings.pair(
+            systolic: [
+                BloodPressureReadings.Sample(date: start, value: 110),
+                BloodPressureReadings.Sample(date: start.addingTimeInterval(1.6), value: 128)
+            ],
+            diastolic: [
+                BloodPressureReadings.Sample(date: start.addingTimeInterval(1.5), value: 84)
+            ]
+        )
+        XCTAssertEqual(readings.map(\.systolic), [128])
+        XCTAssertEqual(readings.map(\.diastolic), [84])
+    }
+
+    func test_failedHealthReadIsNotCalledNoRecord() {
+        let facts = CoachHealthReport.facts(
+            measures: [CoachHealthMeasureFacts(measure: .bloodPressure, unavailable: true)],
+            startKey: "2026-10-08",
+            endKey: "2026-11-07",
+            todayKey: "2026-11-07"
+        )
+        XCTAssertTrue(facts.text.contains("Apple Health did not return this reading"))
+        XCTAssertFalse(facts.text.contains("no record"))
+        XCTAssertFalse(facts.hasRecord)
+    }
+
     func test_bloodPressureKeepsEachReading() {
         let facts = CoachHealthReport.facts(
             measures: [
