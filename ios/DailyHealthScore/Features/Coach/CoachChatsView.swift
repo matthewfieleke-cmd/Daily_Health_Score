@@ -141,7 +141,7 @@ struct CoachChatsView: View {
                     Text("Intake")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text("A short form so your coach knows your life before the numbers.")
+                    Text("So your coach knows you, not only your numbers.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

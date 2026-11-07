@@ -906,25 +906,25 @@ final class CoachMemoryFilesStoreTests: XCTestCase {
         let store = makeStore()
         XCTAssertTrue(store.needsAcquaintance)
         store.saveIntake([
-            .name: "Matt",
-            .work: "Family Medicine",
-            .household: "Maureen and two sons"
+            .name: "Alex",
+            .usualDay: "Workdays, home by evening",
+            .household: "A partner and one child"
         ])
         XCTAssertFalse(store.needsAcquaintance)
-        XCTAssertTrue(store.effectiveMemories.contains { $0.section == .aboutYou && $0.content == "Goes by Matt." })
-        XCTAssertTrue(store.effectiveMemories.contains { $0.section == .aboutYou && $0.content == "Work: Family Medicine." })
-        XCTAssertTrue(store.effectiveMemories.contains { $0.section == .people && $0.content == "At home: Maureen and two sons." })
+        XCTAssertTrue(store.effectiveMemories.contains { $0.section == .aboutYou && $0.content == "Goes by Alex." })
+        XCTAssertTrue(store.effectiveMemories.contains { $0.section == .routines && $0.content == "Usual day: Workdays, home by evening." })
+        XCTAssertTrue(store.effectiveMemories.contains { $0.section == .people && $0.content == "At home: A partner and one child." })
         let count = store.effectiveMemories.count
 
         store.saveIntake([
-            .name: "Matthew",
-            .work: "Family Medicine",
-            .household: "Maureen and two sons"
+            .name: "Alexis",
+            .usualDay: "Workdays, home by evening",
+            .household: "A partner and one child"
         ])
         XCTAssertEqual(store.effectiveMemories.count, count)
-        XCTAssertTrue(store.effectiveMemories.contains { $0.content == "Goes by Matthew." })
-        XCTAssertFalse(store.effectiveMemories.contains { $0.content == "Goes by Matt." })
-        XCTAssertEqual(store.intakeAnswers()[.name], "Matthew")
+        XCTAssertTrue(store.effectiveMemories.contains { $0.content == "Goes by Alexis." })
+        XCTAssertFalse(store.effectiveMemories.contains { $0.content == "Goes by Alex." })
+        XCTAssertEqual(store.intakeAnswers()[.name], "Alexis")
     }
 
     func test_skippingIntakeDoesNotCreateNotes() {
