@@ -58,6 +58,7 @@ final class FoundationModelsCoach {
         kind: CoachCheckInKind,
         snapshot: CoachSnapshot,
         live: CoachLiveContext,
+        shownComment: String = "",
         now: Date = Date(),
         calendar: Calendar = .current
     ) async throws -> CoachCheckIn {
@@ -73,7 +74,7 @@ final class FoundationModelsCoach {
         let cloudPrompt = """
         Today is \(snapshot.todayDisplay). Local time: \(snapshot.clockLabel).
 
-        \(CoachCharter.homeCardInstructions(goalsListed: goalsListed))
+        \(CoachCharter.homeCardInstructions(goalsListed: goalsListed, currentComment: shownComment))
         """
         func onDevicePrompt() async -> String {
             let notes = await homeCardNotes(items: live.memoryItems, clockLabel: snapshot.clockLabel)
@@ -111,7 +112,7 @@ final class FoundationModelsCoach {
             try await CoachModelProvider
                 .makeSession(
                     tier: .onDevice,
-                    instructions: CoachCharter.homeCardFallbackInstructions(goalsListed: goalsListed)
+                    instructions: CoachCharter.homeCardFallbackInstructions(goalsListed: goalsListed, currentComment: shownComment)
                 )
                 .respond(to: await onDevicePrompt(), generating: GenerableCoachCheckIn.self)
                 .content
@@ -741,7 +742,7 @@ struct GenerableNoteSelection {
 
 @Generable
 struct GenerableCoachCheckIn {
-    @Guide(description: "One comment of about 65 words.")
+    @Guide(description: "The comment.")
     var comment: String
 
     @Guide(description: "A measure the app can draw, or none.")
