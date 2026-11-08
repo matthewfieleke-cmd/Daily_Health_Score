@@ -346,10 +346,10 @@ enum CoachInsightRecord {
         guard stats.contains(where: { $0.count >= minimumPoints }) else { return nil }
         let style = averageStyle(facts)
         return section(name: facts.measure.title, stats: stats, describe: { value in
-            "average \(style.text(value, facts: facts))"
+            "average \(style.text(value, facts))"
         }, compared: { difference in
             compared(difference, threshold: style.threshold) { value in
-                style.text(value, facts: facts)
+                style.text(value, facts)
             }
         })
     }
