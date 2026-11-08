@@ -26,33 +26,13 @@ final class CoachCheckInLogicTests: XCTestCase {
         XCTAssertFalse(CoachCheckInLogic.isMonday(date(day: 19, hour: 8), calendar: calendar))
     }
 
-    func test_cacheKeyIgnoresProgressButTracksWhichGoalsExist() {
-        let first = CoachTestFixtures.goal(text: "walk after lunch")
-        let second = CoachTestFixtures.goal(text: "call a friend")
-        let key = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .evening, goals: [first, second])
-        XCTAssertTrue(key.contains("#checkin10#"))
-        XCTAssertFalse(key.contains("checkin9"))
-        XCTAssertEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .evening, goals: [second, first]))
-
-        var logged = first
-        logged.fillNextEmpty()
-        XCTAssertEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .evening, goals: [logged, second]))
-
-        XCTAssertNotEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .evening, goals: [first]))
-        XCTAssertNotEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: [first, second]))
-        XCTAssertNotEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-20", kind: .evening, goals: [first, second]))
-    }
-
-    /// A tile crossing its goal is not part of the key. The comment is about
-    /// the records behind the screen, so those crossings do not rewrite it.
-    func test_cacheKeyIgnoresTileCrossings() {
-        let goals = [CoachTestFixtures.goal(text: "walk after lunch")]
-        let key = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: goals)
-        XCTAssertEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-19", kind: .morning, goals: goals))
-        XCTAssertTrue(key.contains("#checkin10#"))
-        XCTAssertFalse(key.contains("sleep="))
-        XCTAssertFalse(key.contains("fiber="))
-        XCTAssertFalse(key.contains("exercise="))
+    func test_cacheKeyIsTheCalendarDay() {
+        let key = CoachCheckInLogic.cacheKey(dateKey: "2026-09-19")
+        XCTAssertEqual(key, "2026-09-19#insights1")
+        XCTAssertEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-19"))
+        XCTAssertNotEqual(key, CoachCheckInLogic.cacheKey(dateKey: "2026-09-20"))
+        XCTAssertFalse(key.contains("morning"))
+        XCTAssertFalse(key.contains("evening"))
     }
 
     func test_goalRowsPutUnloggedFirstAndKnowWhatWasLoggedToday() {

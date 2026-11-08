@@ -31,6 +31,61 @@ extension HealthKitService {
         return CoachHealthReport.facts(measures: loaded, startKey: startKey, endKey: endKey, todayKey: todayKey)
     }
 
+    /// Daily aggregates for the 90 finished days before `todayKey`. Heart rate
+    /// does not fall back to every sample: a failed daily read leaves that
+    /// metric out of the Home card instead of scanning the raw series.
+    func insightMeasureFacts(endingOn todayKey: String) async -> [CoachHealthMeasureFacts] {
+        guard isAvailable,
+              let endKey = DateHelpers.addDays(to: todayKey, days: -1),
+              let startKey = DateHelpers.addDays(to: endKey, days: -89),
+              let window = dayWindow(startKey: startKey, endKey: endKey) else {
+            return []
+        }
+        let distanceMetric = await prefersMetricDistance()
+        let fahrenheit = Locale.current.measurementSystem == .us
+        var loaded: [CoachHealthMeasureFacts] = []
+        for measure in CoachHealthMeasure.allCases {
+            loaded.append(await load(
+                measure,
+                window: window,
+                distanceUsesMetric: distanceMetric,
+                temperatureUsesFahrenheit: fahrenheit,
+                sampleFallback: false
+            ))
+        }
+        return loaded
+    }
+
+    /// Workouts in the 90 finished days before `todayKey`.
+    func insightWorkouts(endingOn todayKey: String) async -> [CoachWorkoutSummary] {
+        guard isAvailable,
+              let endKey = DateHelpers.addDays(to: todayKey, days: -1),
+              let startKey = DateHelpers.addDays(to: endKey, days: -89),
+              let window = dayWindow(startKey: startKey, endKey: endKey) else {
+            return []
+        }
+        let predicate = HKQuery.predicateForSamples(withStart: window.start, end: window.end, options: .strictStartDate)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        let workouts: [HKWorkout] = await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: HKObjectType.workoutType(),
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, results, _ in
+                continuation.resume(returning: (results ?? []).compactMap { $0 as? HKWorkout })
+            }
+            store.execute(query)
+        }
+        return workouts.map { workout in
+            CoachWorkoutSummary(
+                dateKey: DateHelpers.localDateKey(from: workout.startDate),
+                activity: Self.workoutActivityName(workout.workoutActivityType),
+                durationMinutes: workout.duration / 60
+            )
+        }
+    }
+
     func coachHealthChart(measure: CoachHealthMeasure, endingOn todayKey: String = DateHelpers.localDateKey(), days: Int = 7) async -> CoachHealthChart? {
         let start = DateHelpers.addDays(to: todayKey, days: -(max(days, 1) - 1)) ?? todayKey
         return await coachHealthFacts(measures: [measure], startKey: start, endKey: todayKey, todayKey: todayKey).chart
@@ -56,7 +111,8 @@ extension HealthKitService {
         _ measure: CoachHealthMeasure,
         window: DayWindow,
         distanceUsesMetric: Bool,
-        temperatureUsesFahrenheit: Bool
+        temperatureUsesFahrenheit: Bool,
+        sampleFallback: Bool = true
     ) async -> CoachHealthMeasureFacts {
         var facts = CoachHealthMeasureFacts(
             measure: measure,
@@ -65,7 +121,7 @@ extension HealthKitService {
         )
         switch measure {
         case .heartRate:
-            let read = await heartRateDays(window: window)
+            let read = await heartRateDays(window: window, sampleFallback: sampleFallback)
             facts.days = read.days
             facts.unavailable = read.failed
         case .restingHeartRate:
@@ -216,9 +272,12 @@ extension HealthKitService {
         return collected
     }
 
-    private func heartRateDays(window: DayWindow) async -> (days: [CoachHealthDayValue], failed: Bool) {
+    private func heartRateDays(
+        window: DayWindow,
+        sampleFallback: Bool = true
+    ) async -> (days: [CoachHealthDayValue], failed: Bool) {
         var read = await dailyRange(.heartRate, unit: Self.beatsPerMinute, window: window)
-        guard dayBounds(in: window).count > 1, read.days.count <= 1 else { return read }
+        guard sampleFallback, dayBounds(in: window).count > 1, read.days.count <= 1 else { return read }
         let sampled = await heartRateFromSamples(window: window)
         if sampled.days.count > read.days.count {
             read = sampled
@@ -586,6 +645,24 @@ extension HealthKitService {
                 continuation.resume(returning: (samples, samples.isEmpty && error != nil))
             }
             store.execute(query)
+        }
+    }
+
+    private static func workoutActivityName(_ type: HKWorkoutActivityType) -> String {
+        switch type {
+        case .running: return "Running"
+        case .walking: return "Walking"
+        case .cycling: return "Cycling"
+        case .hiking: return "Hiking"
+        case .swimming: return "Swimming"
+        case .yoga: return "Yoga"
+        case .traditionalStrengthTraining, .functionalStrengthTraining: return "Strength training"
+        case .highIntensityIntervalTraining: return "Cardio"
+        case .rowing: return "Rowing"
+        case .elliptical: return "Elliptical"
+        case .stairClimbing: return "Stair climbing"
+        case .dance: return "Dance"
+        default: return "Workout"
         }
     }
 

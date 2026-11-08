@@ -144,16 +144,13 @@ final class LifestyleCoachController: ObservableObject {
         calendar: Calendar = .current
     ) async {
         refreshAvailability()
+        _ = activities
+        _ = hrvSensitivity
         let kind = CoachCheckInLogic.kind(for: now, calendar: calendar)
-        let key = CoachCheckInLogic.cacheKey(
-            dateKey: record.date,
-            kind: kind,
-            goals: goals
-        )
+        let key = CoachCheckInLogic.cacheKey(dateKey: record.date)
         if !force,
            memory.cachedCheckInKey == key,
            let cached = memory.cachedCheckIn,
-           cached.kind == kind,
            cached.dateKey == record.date {
             checkIn = cached
             checkInError = nil
@@ -161,114 +158,63 @@ final class LifestyleCoachController: ObservableObject {
             return
         }
 
-        // Nothing has synced for today: a written card would describe an empty
-        // day as a bad one. Show the waiting note under a key that never
-        // matches, so the first real numbers trigger the write.
-        guard CoachCheckInLogic.hasData(record), availability == .available else {
-            let fallback = carryingReplyLink(
-                HomeCoachCardCopy.fallbackCheckIn(for: record, kind: kind, now: now)
-            )
-            // A fallback is saved so Reply can quote it, under a key that never
-            // matches: the next visit tries the model again.
-            memory.saveCheckIn(fallback, key: key + "#fallback")
-            checkIn = fallback
-            checkInError = nil
-            if availability == .available { kickFileReview() }
-            return
-        }
-
         isGeneratingCheckIn = true
         let generationID = UUID()
         checkInGenerationID = generationID
         checkInError = nil
-        if memory.cachedCheckIn?.kind != kind || memory.cachedCheckIn?.dateKey != record.date {
-            // A morning card must not sit on Home while the evening one generates.
+        defer { if checkInGenerationID == generationID { isGeneratingCheckIn = false } }
+
+        let settings = scoringSettings ?? UserSettings(
+            sleepGoal: record.sleepGoal,
+            fiberGoal: .forty,
+            movementGoal: record.movementGoal,
+            nutritionMode: nutritionMode
+        )
+        let measures = await HealthKitService.shared.insightMeasureFacts(endingOn: record.date)
+        let workouts = await HealthKitService.shared.insightWorkouts(endingOn: record.date)
+        let packet = CoachInsightRecord.make(
+            records: records,
+            settings: settings,
+            weight: bodyTrend,
+            goals: goals,
+            measures: measures,
+            workouts: workouts,
+            todayKey: record.date
+        )
+        guard !packet.isEmpty, availability == .available else {
+            if packet.isEmpty {
+                let waiting = carryingReplyLink(
+                    CoachInsightRecord.waitingCard(dateKey: record.date, kind: kind, now: now)
+                )
+                memory.saveCheckIn(waiting, key: key + "#needsData")
+                checkIn = waiting
+                checkInError = nil
+            }
+            return
+        }
+        if checkIn?.waitingForHealthData == true {
             checkIn = nil
         }
-        defer { if checkInGenerationID == generationID { isGeneratingCheckIn = false } }
 
         do {
             await waitForBackgroundMemoryWork()
             guard checkInGenerationID == generationID else { return }
-            let settings = scoringSettings ?? UserSettings(
-                sleepGoal: record.sleepGoal,
-                fiberGoal: .forty,
-                movementGoal: record.movementGoal,
-                nutritionMode: nutritionMode
-            )
-            let snapshot = CoachSnapshotBuilder.build(
-                today: record,
-                records: records,
-                goals: goals,
-                hrvSensitivity: hrvSensitivity,
-                phase: DayPhase.current(from: now, calendar: calendar),
-                now: now,
-                calendar: calendar,
-                bodyTrend: bodyTrend,
-                scoringSettings: settings
-            )
-            let cardLive = CoachLiveContext()
-            cardLive.snapshot = snapshot
-            cardLive.records = records
-            cardLive.todayKey = record.date
-            cardLive.nutritionMode = settings.nutritionMode
-            cardLive.scoringSettings = settings
-            cardLive.goals = goals
-            cardLive.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
-            cardLive.memoryItems = memory.effectiveMemories
-            cardLive.recentConversations = memory.recentConversationsBlock()
-            cardLive.bodyTrend = bodyTrend
-            attachHealthLookup(cardLive)
             let generated = try await model.generateCheckIn(
                 kind: kind,
-                snapshot: snapshot,
-                live: cardLive,
-                shownComment: memory.cachedCheckIn?.spokenText ?? "",
-                now: now,
-                calendar: calendar
+                dateKey: record.date,
+                recordText: packet.text,
+                currentCard: memory.cachedCheckIn?.insightPrompt ?? "",
+                now: now
             )
             guard checkInGenerationID == generationID else { return }
-            var fresh = carryingReplyLink(generated)
-            if let metric = TrendMetric.parse(fresh.chartMetricRaw),
-               let trendChart = CompletedTrendBuilder.build(
-                metric: metric,
-                records: records,
-                settings: settings,
-                now: now,
-                calendar: calendar
-               ) {
-                let reference = trendChart.reference(settings: settings)
-                fresh.chartMetricRaw = reference.metric.rawValue
-                fresh.chartEndDateKey = reference.endDateKey
-                fresh.chartDayCount = reference.dayCount
-                fresh.chartMovementGoalRaw = reference.movementGoalRaw
-                fresh.chartNutritionModeRaw = reference.nutritionModeRaw
-            } else if let measure = CoachHealthMeasure.parseOne(fresh.chartMetricRaw) {
-                fresh.chartMetricRaw = measure.rawValue
-                if let chart = await HealthKitService.shared.coachHealthChart(measure: measure, endingOn: record.date),
-                   let json = chart.jsonLine() {
-                    fresh.healthChartJSON = json
-                }
-                fresh.chartEndDateKey = ""
-                fresh.chartDayCount = 0
-                fresh.chartMovementGoalRaw = ""
-                fresh.chartNutritionModeRaw = ""
-            } else {
-                fresh.chartMetricRaw = ""
-                fresh.chartEndDateKey = ""
-                fresh.chartDayCount = 0
-                fresh.chartMovementGoalRaw = ""
-                fresh.chartNutritionModeRaw = ""
-            }
+            let fresh = carryingReplyLink(generated)
             memory.saveCheckIn(fresh, key: key)
             checkIn = fresh
         } catch {
             guard checkInGenerationID == generationID else { return }
-            let fallback = carryingReplyLink(
-                HomeCoachCardCopy.fallbackCheckIn(for: record, kind: kind, now: now)
-            )
-            memory.saveCheckIn(fallback, key: key + "#fallback")
-            checkIn = fallback
+            if checkIn?.waitingForHealthData == true {
+                checkIn = nil
+            }
             checkInError = error.localizedDescription
         }
         kickFileReview()
@@ -290,7 +236,7 @@ final class LifestyleCoachController: ObservableObject {
     /// A rewrite of the same card keeps the chat its Reply already opened.
     private func carryingReplyLink(_ fresh: CoachCheckIn) -> CoachCheckIn {
         var card = fresh
-        if let old = memory.cachedCheckIn, old.dateKey == fresh.dateKey, old.kind == fresh.kind {
+        if let old = memory.cachedCheckIn, old.dateKey == fresh.dateKey {
             card.replyThreadID = old.replyThreadID
         }
         return card

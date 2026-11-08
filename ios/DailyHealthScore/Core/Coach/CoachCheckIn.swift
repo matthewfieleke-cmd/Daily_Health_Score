@@ -1,17 +1,14 @@
 import Foundation
 
-/// Which window Home is writing for. Morning runs until 5pm; evening after
-/// that and through the night. The card does not print this label. The window
-/// only decides when the comment is rewritten.
+/// Kept so older cards still decode. The Home card no longer rewrites at 5pm.
 enum CoachCheckInKind: String, Codable, Sendable {
     case morning
     case evening
 }
 
-/// The Home card. One comment the Coach writes, rewritten for each window of
-/// the day. A deterministic line stands in when the model is unavailable.
-/// Reply opens a chat that starts with this text. Older cards may still
-/// carry two thoughts.
+/// The Home card. Three insights from the last 7, 30, and 90 days, rewritten
+/// on the first open of a day and on a refresh. Older cards may still carry
+/// one comment. Reply opens a chat that starts with this text.
 struct CoachCheckIn: Equatable, Codable, Sendable {
     var kind: CoachCheckInKind
     var dateKey: String
@@ -40,6 +37,11 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
     var chartNutritionModeRaw: String = ""
     /// The Health chart drawn while the card was written. Empty on older cards.
     var healthChartJSON: String = ""
+    /// Green, Yellow, and Red. Empty on a card written before insights.
+    var insights: [CoachInsightPanel] = []
+    /// Apple Health has no metric with enough readings. The card asks the
+    /// person to start populating it.
+    var waitingForHealthData: Bool = false
 
     init(
         kind: CoachCheckInKind,
@@ -57,7 +59,9 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         chartDayCount: Int = 0,
         chartMovementGoalRaw: String = "",
         chartNutritionModeRaw: String = "",
-        healthChartJSON: String = ""
+        healthChartJSON: String = "",
+        insights: [CoachInsightPanel] = [],
+        waitingForHealthData: Bool = false
     ) {
         self.kind = kind
         self.dateKey = dateKey
@@ -75,6 +79,8 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         self.chartMovementGoalRaw = chartMovementGoalRaw
         self.chartNutritionModeRaw = chartNutritionModeRaw
         self.healthChartJSON = healthChartJSON
+        self.insights = insights
+        self.waitingForHealthData = waitingForHealthData
     }
 
     var storedHealthChart: CoachHealthChart? {
@@ -101,9 +107,13 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         )
     }
 
-    /// What the card shows. Thoughts when the Coach wrote them; otherwise the
+    /// What the card shows. Insights when the Coach wrote them; otherwise the
     /// older fields, in the order a reply used to speak them.
     var displayLines: [String] {
+        let filled = insights.filter { !$0.isBlank }
+        if !filled.isEmpty {
+            return filled.map(\.spoken)
+        }
         let chosen = thoughts
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -117,7 +127,25 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
 
     /// Everything the card says, as the first message of the reply chat.
     var spokenText: String {
-        displayLines.joined(separator: " ")
+        if waitingForHealthData { return CoachInsightRecord.needsDataSentence }
+        let filled = insights.filter { !$0.isBlank }
+        if !filled.isEmpty {
+            return filled.map(\.spoken).joined(separator: "\n\n")
+        }
+        return displayLines.joined(separator: " ")
+    }
+
+    /// The card already on screen, so a refresh can advise differently.
+    var insightPrompt: String {
+        let filled = insights.filter { !$0.isBlank }
+        guard !filled.isEmpty else { return "" }
+        return filled.map { panel in
+            """
+            \(panel.tone.name): \(panel.topic)
+            Finding: \(panel.finding)
+            Advice: \(panel.advice)
+            """
+        }.joined(separator: "\n")
     }
 
     var hasReply: Bool { replyThreadID != nil }
@@ -125,6 +153,7 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case kind, dateKey, healthLine, question, tomorrowLine, trendLine, thoughts, replyThreadID, isFallback, generatedAt
         case chartMetricRaw, chartEndDateKey, chartDayCount, chartMovementGoalRaw, chartNutritionModeRaw, healthChartJSON
+        case insights, waitingForHealthData
     }
 
     init(from decoder: Decoder) throws {
@@ -145,6 +174,8 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         chartMovementGoalRaw = try container.decodeIfPresent(String.self, forKey: .chartMovementGoalRaw) ?? ""
         chartNutritionModeRaw = try container.decodeIfPresent(String.self, forKey: .chartNutritionModeRaw) ?? ""
         healthChartJSON = try container.decodeIfPresent(String.self, forKey: .healthChartJSON) ?? ""
+        insights = try container.decodeIfPresent([CoachInsightPanel].self, forKey: .insights) ?? []
+        waitingForHealthData = try container.decodeIfPresent(Bool.self, forKey: .waitingForHealthData) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -165,6 +196,8 @@ struct CoachCheckIn: Equatable, Codable, Sendable {
         try container.encode(chartMovementGoalRaw, forKey: .chartMovementGoalRaw)
         try container.encode(chartNutritionModeRaw, forKey: .chartNutritionModeRaw)
         try container.encode(healthChartJSON, forKey: .healthChartJSON)
+        try container.encode(insights, forKey: .insights)
+        try container.encode(waitingForHealthData, forKey: .waitingForHealthData)
     }
 }
 
@@ -196,22 +229,11 @@ enum CoachCheckInLogic {
         record.sleepHours > 0 || record.fiberGrams > 0 || record.movementValue > 0 || record.foodGroups.isLogged
     }
 
-    /// One write per window. Tapping a goal Done must not rewrite the card, so
-    /// progress stays out of the key; only which goals exist matters. A tile
-    /// crossing its goal does not rewrite either. The comment is about the
-    /// records behind the screen. Notes are read when the card is written. A
-    /// new note shows up on the next window or when the person refreshes.
-    static func cacheKey(
-        dateKey: String,
-        kind: CoachCheckInKind,
-        goals: [SMARTGoal]
-    ) -> String {
-        let ids = goals
-            .filter { $0.status == .active && !$0.isComplete && !$0.isExpired }
-            .map(\.id.uuidString)
-            .sorted()
-            .joined(separator: ",")
-        return "\(dateKey)#\(kind.rawValue)#checkin10#\(ids)"
+    /// One card for the calendar day. A refresh asks for another. Opening the
+    /// app later the same day, including after 5pm, does not. Goals and the
+    /// morning or evening hour stay out of the key.
+    static func cacheKey(dateKey: String) -> String {
+        "\(dateKey)#insights1"
     }
 
     /// Active goals a person could still log today, unlogged ones first.
