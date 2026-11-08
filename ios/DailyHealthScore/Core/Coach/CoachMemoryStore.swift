@@ -253,7 +253,7 @@ final class CoachMemoryStore: ObservableObject {
                 pendingSeed = CoachThreadSeed(
                     kind: .checkInReply,
                     pillar: .general,
-                    provisionalTitle: "Today · \(shortDate(checkIn.dateKey))",
+                    provisionalTitle: "Insights · \(shortDate(checkIn.dateKey))",
                     contextNote: "Reply to today's Home card for \(DateHelpers.formatDisplayDate(checkIn.dateKey)). The card said: \(checkIn.spokenText)",
                     coachOpeners: [checkIn.spokenText],
                     linksCheckIn: true,

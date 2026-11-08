@@ -54,95 +54,42 @@ final class FoundationModelsCoach {
 
     // MARK: - Check-in card
 
+    /// The Home card. The record is already gathered. Neither model is given
+    /// tools, notes, or today's totals.
     func generateCheckIn(
         kind: CoachCheckInKind,
-        snapshot: CoachSnapshot,
-        live: CoachLiveContext,
-        shownComment: String = "",
-        now: Date = Date(),
-        calendar: Calendar = .current
+        dateKey: String,
+        recordText: String,
+        currentCard: String = "",
+        now: Date = Date()
     ) async throws -> CoachCheckIn {
         #if canImport(FoundationModels)
         try ensureAvailable()
-        // Background writes yield to chat when the daily allowance is nearly spent.
         let tier: CoachModelTier = CoachModelProvider.isServerQuotaApproaching ? .onDevice : CoachModelProvider.preferredTier()
-        let goalsListed = !CoachCheckInLogic.goalRows(
-            goals: live.goals,
-            activities: live.activitiesByGoal.values.flatMap { $0 },
-            todayKey: snapshot.todayKey
-        ).isEmpty
-        let cloudPrompt = """
-        Today is \(snapshot.todayDisplay). Local time: \(snapshot.clockLabel).
-
-        \(CoachCharter.homeCardInstructions(goalsListed: goalsListed, currentComment: shownComment))
-        """
-        func onDevicePrompt() async -> String {
-            let notes = await homeCardNotes(items: live.memoryItems, clockLabel: snapshot.clockLabel)
-            let completed = live.scoringSettings.map {
-                CompletedTrendBuilder.promptFacts(
-                    records: live.records,
-                    settings: $0,
-                    now: now,
-                    calendar: calendar
-                )
-            } ?? ""
-            let trend = CoachTrendDigest.build(
-                records: live.records,
-                goals: live.goals,
-                activities: live.activitiesByGoal.values.flatMap { $0 },
-                nutritionMode: live.scoringSettings?.nutritionMode ?? live.nutritionMode,
-                now: now,
-                calendar: calendar
-            )
-            return """
-            \(snapshot.promptBlock)
-
-            OPEN SMART GOALS:
-            \(live.goalsPayload)
-
-            \(trend?.promptBlock ?? "Last week and the week before: none.")
-
-            \(completed.isEmpty ? "COMPLETED DAY FACTS: none." : completed)
-
-            NOTES:
-            \(notes)
-            """
-        }
-        func onDeviceCard() async throws -> GenerableCoachCheckIn {
+        func onDeviceCard() async throws -> GenerableHomeInsights {
             try await CoachModelProvider
                 .makeSession(
                     tier: .onDevice,
-                    instructions: CoachCharter.homeCardFallbackInstructions(goalsListed: goalsListed, currentComment: shownComment)
+                    instructions: CoachCharter.homeCardFallbackInstructions(currentCard: currentCard)
                 )
-                .respond(to: await onDevicePrompt(), generating: GenerableCoachCheckIn.self)
+                .respond(to: recordText, generating: GenerableHomeInsights.self)
                 .content
         }
-        let content: GenerableCoachCheckIn
+        let content: GenerableHomeInsights
         if tier == .privateCloud {
-            live.selectNotes = { @MainActor [weak self, weak live] topic in
-                guard let self, let live else { return CoachNoteSelection.unreadMessage }
-                return await self.noteToolPayload(
-                    topic: topic,
-                    items: live.memoryItems,
-                    conversations: live.recentConversations
-                )
-            }
             do {
                 lastTierUsed = .privateCloud
                 content = try await CoachModelProvider.respond(
                     CoachModelProvider.makeSession(
                         tier: .privateCloud,
-                        instructions: CoachCharter.instructions,
-                        tools: CoachSessionTools.reads(context: live)
+                        instructions: CoachCharter.homeCardInstructions(currentCard: currentCard)
                     ),
-                    to: cloudPrompt,
-                    generating: GenerableCoachCheckIn.self,
+                    to: recordText,
+                    generating: GenerableHomeInsights.self,
                     tier: .privateCloud,
                     depth: .deep
                 )
             } catch {
-                // Network loss, quota, or a server hiccup should never cost the
-                // card. This model has no tools, so the records go in the message.
                 lastTierUsed = .onDevice
                 content = try await onDeviceCard()
             }
@@ -150,39 +97,32 @@ final class FoundationModelsCoach {
             lastTierUsed = .onDevice
             content = try await onDeviceCard()
         }
-        let comment = CoachReplyPolish.polish(content.comment.trimmedForCoach())
-        guard !comment.isEmpty else {
-            throw CoachError.generationFailed("The coach returned an empty card.")
-        }
-        return CoachCheckIn(
+        let insights = CoachInsightRecord.panels(
+            greenTopic: content.greenTopic,
+            greenFinding: content.greenFinding,
+            greenAdvice: content.greenAdvice,
+            yellowTopic: content.yellowTopic,
+            yellowFinding: content.yellowFinding,
+            yellowAdvice: content.yellowAdvice,
+            redTopic: content.redTopic,
+            redFinding: content.redFinding,
+            redAdvice: content.redAdvice,
+            recordText: recordText
+        )
+        let card = CoachCheckIn(
             kind: kind,
-            dateKey: snapshot.todayKey,
-            healthLine: comment,
-            thoughts: [comment],
+            dateKey: dateKey,
+            healthLine: "",
             isFallback: false,
             generatedAt: now,
-            chartMetricRaw: content.chart.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            insights: insights
         )
+        var spoken = card
+        spoken.healthLine = spoken.spokenText
+        return spoken
         #else
         throw CoachError.unavailable(.unavailable)
         #endif
-    }
-
-    /// Notes for the Home card. Empty files stay empty. A failed or empty
-    /// choice does not pretend the file is gone, and does not fall back to
-    /// the newest notes.
-    func homeCardNotes(items: [CoachMemoryItem], clockLabel: String) async -> String {
-        guard !items.isEmpty else { return CoachNoteSelection.noSavedNotes }
-        switch await selectNotes(
-            request: CoachNoteSelection.homeCardRequest(clockLabel: clockLabel),
-            items: items,
-            limit: CoachNoteSelection.cardLimit
-        ) {
-        case .notes(let block):
-            return block
-        case .none, .unread:
-            return CoachNoteSelection.noneForCard
-        }
     }
 
     /// Ids from Private Cloud Compute, then the full text of only those notes.
@@ -741,12 +681,33 @@ struct GenerableNoteSelection {
 }
 
 @Generable
-struct GenerableCoachCheckIn {
-    @Guide(description: "The comment.")
-    var comment: String
+struct GenerableHomeInsights {
+    @Guide(description: "Green metric name, copied from the record. Empty when Green stays blank.")
+    var greenTopic: String
 
-    @Guide(description: "A measure the app can draw, or none.")
-    var chart: String
+    @Guide(description: "Green finding from the record. Empty when Green stays blank.")
+    var greenFinding: String
+
+    @Guide(description: "Green advice, without the words Maintain the Green. Empty when Green stays blank.")
+    var greenAdvice: String
+
+    @Guide(description: "Yellow metric name, copied from the record. Empty when Yellow stays blank.")
+    var yellowTopic: String
+
+    @Guide(description: "Yellow finding from the record. Empty when Yellow stays blank.")
+    var yellowFinding: String
+
+    @Guide(description: "Yellow advice, without the words Monitor the Yellow. Empty when Yellow stays blank.")
+    var yellowAdvice: String
+
+    @Guide(description: "Red metric name, copied from the record. Empty when Red stays blank.")
+    var redTopic: String
+
+    @Guide(description: "Red finding from the record. Empty when Red stays blank.")
+    var redFinding: String
+
+    @Guide(description: "Red advice, without the words Improve the Red. Empty when Red stays blank.")
+    var redAdvice: String
 }
 
 @Generable

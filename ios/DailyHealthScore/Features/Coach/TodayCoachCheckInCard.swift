@@ -1,12 +1,8 @@
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
-/// The Home card is one comment the Coach wrote. Active SMART
-/// goals sit under it, with Done, whenever there is something to log.
-/// Reply opens a chat that starts with the card's words. Leftover height stays
-/// the grouped screen — never a white hole inside the card.
+/// The Home card is three insights from the last 7, 30, and 90 days.
+/// Reply opens a chat that starts with those words. Leftover height stays
+/// the grouped screen.
 struct TodayCoachCheckInCard: View {
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var coach: LifestyleCoachController
@@ -19,14 +15,29 @@ struct TodayCoachCheckInCard: View {
     var onShowHealthChart: (CoachHealthMeasure, CoachHealthChart?) -> Void = { _, _ in }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 60)) { context in
-            let kind = CoachCheckInLogic.kind(for: context.date)
-            // The first numbers of the day start the comment. A later tile
-            // crossing its goal does not: the comment is not a readout of them.
-            let hasData = record.map { CoachCheckInLogic.hasData($0) } ?? false
-            cardStack(kind: kind, now: context.date)
-                .task(id: "\(record?.date ?? "")#\(kind.rawValue)#\(hasData)#\(appState.smartGoalsRevision)#\(coach.memory.memoryRevision)") {
-                    guard let record else { return }
+        let today = record?.date ?? ""
+        let finished = appState.recordStore.records.contains { item in
+            item.date < today && (
+                item.sleepHours > 0 || item.fiberGrams > 0 || item.movementValue > 0 || item.foodGroups.isLogged
+            )
+        }
+        let cachedToday = coach.memory.cachedCheckInKey == CoachCheckInLogic.cacheKey(dateKey: today)
+        cardStack
+            .task(id: "\(today)#\(finished)#\(cachedToday)") {
+                guard let record else { return }
+                await coach.ensureCheckIn(
+                    for: record,
+                    records: appState.recordStore.records,
+                    goals: appState.smartGoalStore.goals,
+                    activities: appState.smartGoalStore.activities,
+                    hrvSensitivity: appState.settingsStore.hrvSensitivity,
+                    bodyTrend: appState.bodyTrend,
+                    scoringSettings: appState.settingsStore.settings
+                )
+            }
+            .onChange(of: appState.userRefreshToken) { _, _ in
+                guard let record else { return }
+                Task {
                     await coach.ensureCheckIn(
                         for: record,
                         records: appState.recordStore.records,
@@ -35,41 +46,30 @@ struct TodayCoachCheckInCard: View {
                         hrvSensitivity: appState.settingsStore.hrvSensitivity,
                         bodyTrend: appState.bodyTrend,
                         scoringSettings: appState.settingsStore.settings,
-                        now: context.date
+                        force: true
                     )
                 }
-        }
-        .onChange(of: appState.userRefreshToken) { _, _ in
-            guard let record else { return }
-            Task {
-                await coach.ensureCheckIn(
-                    for: record,
-                    records: appState.recordStore.records,
-                    goals: appState.smartGoalStore.goals,
-                    activities: appState.smartGoalStore.activities,
-                    hrvSensitivity: appState.settingsStore.hrvSensitivity,
-                    bodyTrend: appState.bodyTrend,
-                    scoringSettings: appState.settingsStore.settings,
-                    force: true
-                )
             }
-        }
     }
 
-    private func cardStack(kind: CoachCheckInKind, now: Date) -> some View {
+    private var cardStack: some View {
         VStack(alignment: .leading, spacing: 10) {
             cardHeader
-
-            // Natural height when it fits; only an overflowing card scrolls.
-            ViewThatFits(in: .vertical) {
-                noteBody(kind: kind, now: now)
-                ScrollView(.vertical, showsIndicators: false) {
-                    noteBody(kind: kind, now: now)
+            if coach.isGeneratingCheckIn, coach.checkIn != nil {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Writing new insights.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
-
-            chartDoor
-            door(kind: kind, now: now)
+            ViewThatFits(in: .vertical) {
+                noteBody
+                ScrollView(.vertical, showsIndicators: false) {
+                    noteBody
+                }
+            }
+            door
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .top)
@@ -78,24 +78,49 @@ struct TodayCoachCheckInCard: View {
         .cardShadow()
     }
 
-    private func noteBody(kind: CoachCheckInKind, now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if coach.memory.needsAcquaintance {
-                acquaintBody
-            } else if coach.isGeneratingCheckIn && coach.checkIn == nil {
-                loadingBody
-            } else if let card = displayedCheckIn(kind: kind, now: now) {
-                checkInBody(card)
+    @ViewBuilder
+    private var noteBody: some View {
+        if let card = coach.checkIn, card.waitingForHealthData {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(CoachInsightTone.allCases) { tone in
+                    needsDataPanel(tone)
+                }
+            }
+        } else if let card = coach.checkIn, !card.insights.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(card.insights) { panel in
+                    if panel.isBlank {
+                        blankPanel(panel.tone)
+                    } else {
+                        filledPanel(panel)
+                    }
+                }
+            }
+        } else if let card = coach.checkIn {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(card.displayLines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
+                        .font(.footnote)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else if coach.isGeneratingCheckIn {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Writing your insights.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(CoachInsightTone.allCases) { tone in
+                    blankPanel(tone)
+                }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// The generated card for this window, or a deterministic one while it writes.
-    private func displayedCheckIn(kind: CoachCheckInKind, now: Date) -> CoachCheckIn? {
-        if let card = coach.checkIn, card.kind == kind, card.dateKey == record?.date { return card }
-        guard !coach.isGeneratingCheckIn, let record else { return nil }
-        return HomeCoachCardCopy.fallbackCheckIn(for: record, kind: kind, now: now)
     }
 
     private var cardHeader: some View {
@@ -106,202 +131,101 @@ struct TodayCoachCheckInCard: View {
                 .frame(width: 32, height: 32)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("DHS Lifestyle Coach")
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                if coach.memory.needsAcquaintance {
-                    Label("Intake", systemImage: "list.clipboard")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else {
-                    Text("Today")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
+            Text("DHS Lifestyle Coach")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
             Spacer(minLength: 0)
         }
     }
 
-    private var loadingBody: some View {
-        HStack(spacing: 10) {
-            ProgressView()
-            Text("Writing today’s note.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var acquaintBody: some View {
+    private func filledPanel(_ panel: CoachInsightPanel) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let record {
-                Text(HomeCoachCardCopy.healthLine(for: record))
-                    .font(.footnote)
-                    .foregroundStyle(.primary)
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(toneColor(panel.tone))
+                    .frame(width: 10, height: 10)
+                Text("\(panel.tone.name) · \(panel.topic)")
+                    .font(.subheadline.weight(.bold))
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("Intake is a short form, so what your coach says fits your life before the numbers.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            bullet(Text(panel.finding))
+            if !panel.advice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                bullet(
+                    Text(panel.tone.actionLead).fontWeight(.bold)
+                    + Text(" \(panel.advice)")
+                )
+            }
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(toneColor(panel.tone).opacity(0.14))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 
-    @ViewBuilder
-    private func checkInBody(_ card: CoachCheckIn) -> some View {
-        ForEach(Array(card.displayLines.enumerated()), id: \.offset) { _, line in
-            Text(line)
+    private func blankPanel(_ tone: CoachInsightTone) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(toneColor(tone))
+                .frame(width: 10, height: 10)
+            Text(tone.name)
+                .font(.subheadline.weight(.semibold))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(toneColor(tone).opacity(0.14))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityLabel("\(tone.name), blank")
+    }
+
+    private func needsDataPanel(_ tone: CoachInsightTone) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(toneColor(tone))
+                    .frame(width: 10, height: 10)
+                Text(tone.name)
+                    .font(.subheadline.weight(.semibold))
+            }
+            Text(CoachInsightRecord.needsDataSentence)
                 .font(.footnote)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-
-        goalRows
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(toneColor(tone).opacity(0.14))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    /// Active SMART goals with a tap to log. Progress comes straight from the
-    /// store, so a Done tap updates the row without rewriting the card.
-    @ViewBuilder
-    private var goalRows: some View {
-        let rows = CoachCheckInLogic.goalRows(
-            goals: appState.smartGoalStore.goals,
-            activities: appState.smartGoalStore.activities,
-            todayKey: record?.date ?? DateHelpers.localDateKey()
-        )
-        if !rows.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(rows.prefix(3)) { row in
-                    goalRow(row)
-                }
-                if rows.count > 3 {
-                    Text("\(rows.count - 3) more in SMART goals")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(10)
-            .background(AppTheme.screenBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    private func bullet(_ text: Text) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("•")
+                .font(.footnote.weight(.bold))
+            text
+                .font(.footnote)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
     }
 
-    private func goalRow(_ row: CoachCheckInGoalRow) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: row.loggedToday ? "checkmark.circle.fill" : "circle")
-                .font(.subheadline)
-                .foregroundStyle(row.loggedToday ? AppTheme.leaf : Color.secondary)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(row.title)
-                    .font(.caption.weight(.medium))
-                    .lineLimit(1)
-                Text(row.loggedToday ? "Logged today · \(row.progressText)" : row.progressText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 4)
-            if row.canLog {
-                Button {
-                    #if canImport(UIKit)
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    #endif
-                    _ = appState.smartGoalStore.recordCheckIn(
-                        goalId: row.goalId,
-                        source: .iPhone,
-                        occurredAt: Date()
-                    )
-                } label: {
-                    Text("Done")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(AppTheme.primary.opacity(0.12))
-                        .foregroundStyle(AppTheme.primary)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Log \(row.title) as done today")
-            }
+    private func toneColor(_ tone: CoachInsightTone) -> Color {
+        switch tone {
+        case .green: return AppTheme.leaf
+        case .yellow: return Color(red: 0.85, green: 0.62, blue: 0.10)
+        case .red: return Color(red: 0.82, green: 0.28, blue: 0.28)
         }
-        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
-    private var chartDoor: some View {
+    private var door: some View {
         if let card = coach.memory.cachedCheckIn,
            card.dateKey == record?.date,
-           let metric = card.chartMetric,
-           let trend = CompletedTrendBuilder.build(
-            metric: metric,
-            records: appState.recordStore.records,
-            settings: appState.settingsStore.settings
-           ) {
-            Button {
-                onShowChart(metric)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chart.bar")
-                        .font(.caption)
-                    Text("See \(trend.title) graph")
-                        .font(.footnote.weight(.semibold))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .foregroundStyle(AppTheme.primary)
-                .padding(.vertical, 9)
-                .padding(.horizontal, 11)
-                .frame(maxWidth: .infinity)
-                .background(AppTheme.leaf.opacity(0.14))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Opens the finished-day chart. Close returns here.")
-        } else if let card = coach.memory.cachedCheckIn,
-                  card.dateKey == record?.date,
-                  let measure = card.healthChartMeasure {
-            Button {
-                onShowHealthChart(measure, card.storedHealthChart)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chart.bar")
-                        .font(.caption)
-                    Text("See \(measure.title) graph")
-                        .font(.footnote.weight(.semibold))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .foregroundStyle(AppTheme.primary)
-                .padding(.vertical, 9)
-                .padding(.horizontal, 11)
-                .frame(maxWidth: .infinity)
-                .background(AppTheme.leaf.opacity(0.14))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Opens the chart. Close returns here.")
-        }
-    }
-
-    @ViewBuilder
-    private func door(kind: CoachCheckInKind, now: Date) -> some View {
-        if coach.memory.needsAcquaintance {
-            doorButton(title: "Intake", systemImage: "list.clipboard", action: onIntake)
-        } else if let card = coach.memory.cachedCheckIn,
-                  card.kind == kind,
-                  card.dateKey == record?.date,
-                  let replyID = card.replyThreadID,
-                  let thread = coach.memory.threads.first(where: { $0.id == replyID }) {
+           let replyID = card.replyThreadID,
+           let thread = coach.memory.threads.first(where: { $0.id == replyID }) {
             doorButton(
                 title: "Continue · \(thread.title)",
                 systemImage: "arrow.uturn.backward",
