@@ -86,7 +86,7 @@ enum CoachPillar: String, CaseIterable, Codable, Sendable, Identifiable {
         case .sleep, .hrv, .sleepDiagnostic: return .sleep
         case .fiber: return .nutrition
         case .exercise: return .activity
-        case .today, .history, .goal: return .general
+        case .today, .history, .goal, .insight: return .general
         }
     }
 
@@ -374,6 +374,8 @@ enum CoachChatLaunch: Equatable, Identifiable {
     case acquaint
     /// Reply to the current Home check-in.
     case replyToCheckIn
+    /// Reply to one Green / Yellow / Red panel on the Home card.
+    case replyToInsight(CoachInsightPanel, dateKey: String)
     /// A chat seeded with a metric or a selected period.
     case focus(CoachFocusContext)
     /// A chat about one saved SMART goal.
@@ -388,9 +390,24 @@ enum CoachChatLaunch: Equatable, Identifiable {
         case .compose(let text): return "compose-\(text.hashValue)"
         case .acquaint: return "acquaint"
         case .replyToCheckIn: return "check-in-reply"
+        case .replyToInsight(let panel, let dateKey):
+            return "insight-\(panel.tone.rawValue)-\(panel.topic.hashValue)-\(dateKey)"
         case .focus(let focus): return "focus-\(focus.id.uuidString)"
         case .goal(let id): return "goal-\(id.uuidString)"
         case .thread(let id): return "thread-\(id.uuidString)"
+        }
+    }
+
+    /// Optional composer seed when Talk opens from a chart.
+    var seededDraft: String {
+        switch self {
+        case .focus(let focus) where focus.feature == .history:
+            if let name = focus.metricName, !name.isEmpty {
+                return "What stands out in my \(name) over these finished days?"
+            }
+            return "What stands out in this trend?"
+        default:
+            return ""
         }
     }
 }

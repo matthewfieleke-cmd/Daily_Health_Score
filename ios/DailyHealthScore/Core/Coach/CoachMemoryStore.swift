@@ -254,7 +254,7 @@ final class CoachMemoryStore: ObservableObject {
                     kind: .checkInReply,
                     pillar: .general,
                     provisionalTitle: "Insights · \(shortDate(checkIn.dateKey))",
-                    contextNote: "Reply to today's Home card for \(DateHelpers.formatDisplayDate(checkIn.dateKey)). The card said: \(checkIn.spokenText)",
+                    contextNote: "Reply to the Home card insights for \(DateHelpers.formatDisplayDate(checkIn.dateKey)). Those insights cover finished days, not today's tiles. The card said: \(checkIn.spokenText)",
                     coachOpeners: [checkIn.spokenText],
                     linksCheckIn: true,
                     openerChart: checkIn.chartReference
@@ -263,13 +263,27 @@ final class CoachMemoryStore: ObservableObject {
                 openThreadID = nil
                 pendingSeed = CoachThreadSeed()
             }
+        case .replyToInsight(let panel, let dateKey):
+            openThreadID = nil
+            let title = "\(panel.tone.name) · \(panel.topic)".limitedToCoachBudget(CoachThreadLogic.maxTitleCharacters)
+            pendingSeed = CoachThreadSeed(
+                kind: .checkInReply,
+                pillar: .general,
+                provisionalTitle: title.isEmpty ? "\(panel.tone.name) insight" : title,
+                contextNote: "Reply to the \(panel.tone.name) Home insight for \(DateHelpers.formatDisplayDate(dateKey)). Stay with this insight and its recent direction. Do not switch to today's score tiles unless they ask. The card said: \(panel.spoken)",
+                coachOpeners: [panel.spoken],
+                linksCheckIn: false
+            )
         case .focus(let focus):
             openThreadID = nil
+            let stay = focus.isHistorical
+                ? " Stay with this selected period; do not switch to today unless they ask."
+                : ""
             pendingSeed = CoachThreadSeed(
                 kind: .conversation,
                 pillar: CoachPillar.from(focus: focus),
                 provisionalTitle: focus.title,
-                contextNote: "Started from the \(focus.title) card. \(focus.valueSummary)".limitedToCoachBudget(400),
+                contextNote: "Started from \(focus.title). \(focus.valueSummary)\(stay)".limitedToCoachBudget(400),
                 goalId: focus.goalId
             )
         case .goal(let goalId):

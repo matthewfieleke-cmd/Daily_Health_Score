@@ -252,9 +252,15 @@ final class FoundationModelsCoach {
             if let thread = context.thread {
                 switch thread.kind {
                 case .conversation, .acquaintance:
-                    break
+                    // Focus chats carry openingFact below. Other seeds still need the note.
+                    if focus == nil {
+                        let note = thread.contextNote.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !note.isEmpty {
+                            framing.append(note.limitedToCoachBudget(CoachContextBudget.maxHistoryCharacters))
+                        }
+                    }
                 case .checkInReply:
-                    framing.append("This chat began from today's Home card.")
+                    framing.append("This chat began from a Home card insight about finished days (7 / 30 / 90), not today's score tiles. Stay with that insight unless they ask about today.")
                 case .goal:
                     let goalID = thread.goalId ?? live.focusedGoalID
                     if let goalID, let goal = live.goals.first(where: { $0.id == goalID }) {

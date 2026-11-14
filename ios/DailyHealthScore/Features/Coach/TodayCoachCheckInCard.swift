@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// The Home card is three insights from the last 7, 30, and 90 days.
-/// Reply opens a chat that starts with those words. Leftover height stays
-/// the grouped screen.
+/// Tapping a panel replies about that color. Reply opens the full card.
+/// When advice matches a SMART goal, one row logs or opens it.
 struct TodayCoachCheckInCard: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var appState: AppState
@@ -11,6 +11,7 @@ struct TodayCoachCheckInCard: View {
     let record: DailyRecord?
     var onReply: () -> Void
     var onContinueReply: (UUID) -> Void
+    var onReplyToInsight: (CoachInsightPanel) -> Void
     var onIntake: () -> Void
     var onShowChart: (TrendMetric) -> Void = { _ in }
     var onShowHealthChart: (CoachHealthMeasure, CoachHealthChart?) -> Void = { _, _ in }
@@ -52,6 +53,17 @@ struct TodayCoachCheckInCard: View {
         )
     }
 
+    private var linkedGoal: CoachCheckInGoalRow? {
+        guard let card = coach.checkIn, !card.insights.isEmpty else { return nil }
+        let today = record?.date ?? DateHelpers.localDateKey()
+        return CoachCheckInLogic.linkedGoal(
+            for: card.insights,
+            goals: appState.smartGoalStore.goals,
+            activities: appState.smartGoalStore.activities,
+            todayKey: today
+        )
+    }
+
     private var cardStack: some View {
         VStack(alignment: .leading, spacing: 10) {
             cardHeader
@@ -68,6 +80,9 @@ struct TodayCoachCheckInCard: View {
                 ScrollView(.vertical, showsIndicators: false) {
                     noteBody
                 }
+            }
+            if let linkedGoal {
+                goalHandoff(linkedGoal)
             }
             door
         }
@@ -139,28 +154,39 @@ struct TodayCoachCheckInCard: View {
     }
 
     private func filledPanel(_ panel: CoachInsightPanel) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(toneColor(panel.tone))
-                    .frame(width: 10, height: 10)
-                Text("\(panel.tone.name) · \(panel.topic)")
-                    .font(.subheadline.weight(.bold))
-                    .fixedSize(horizontal: false, vertical: true)
+        Button {
+            onReplyToInsight(panel)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(toneColor(panel.tone))
+                        .frame(width: 10, height: 10)
+                    Text("\(panel.tone.name) · \(panel.topic)")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Image(systemName: "bubble.left")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                bullet(Text(panel.finding))
+                if !panel.advice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    bullet(
+                        Text(panel.tone.actionLead).fontWeight(.bold)
+                        + Text(" \(panel.advice)")
+                    )
+                }
             }
-            bullet(Text(panel.finding))
-            if !panel.advice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                bullet(
-                    Text(panel.tone.actionLead).fontWeight(.bold)
-                    + Text(" \(panel.advice)")
-                )
-            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(toneColor(panel.tone).opacity(0.14))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(toneColor(panel.tone).opacity(0.14))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
+        .accessibilityHint("Opens a chat about this \(panel.tone.name) insight")
     }
 
     private func blankPanel(_ tone: CoachInsightTone) -> some View {
@@ -204,6 +230,7 @@ struct TodayCoachCheckInCard: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("•")
                 .font(.footnote.weight(.bold))
+                .foregroundStyle(.primary)
             text
                 .font(.footnote)
                 .foregroundStyle(.primary)
@@ -220,6 +247,40 @@ struct TodayCoachCheckInCard: View {
         }
     }
 
+    private func goalHandoff(_ row: CoachCheckInGoalRow) -> some View {
+        Button {
+            if row.canLog {
+                _ = appState.smartGoalStore.recordCheckIn(
+                    goalId: row.goalId,
+                    source: .iPhone,
+                    occurredAt: Date()
+                )
+            } else {
+                appState.pendingGoalId = row.goalId
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: row.canLog ? "checkmark.circle" : "flag")
+                    .font(.caption)
+                Text(row.canLog ? "Log · \(row.title)" : "Open · \(row.title)")
+                    .font(.footnote.weight(.semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text(row.progressText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundStyle(AppTheme.primary)
+            .padding(.vertical, 9)
+            .padding(.horizontal, 11)
+            .frame(maxWidth: .infinity)
+            .background(AppTheme.primary.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(row.canLog ? "Logs a check-in for this SMART goal" : "Opens this SMART goal")
+    }
+
     @ViewBuilder
     private var door: some View {
         if let card = coach.memory.cachedCheckIn,
@@ -232,7 +293,7 @@ struct TodayCoachCheckInCard: View {
                 action: { onContinueReply(replyID) }
             )
         } else {
-            doorButton(title: "Reply", systemImage: "arrowshape.turn.up.left.fill", action: onReply)
+            doorButton(title: "Reply to all", systemImage: "arrowshape.turn.up.left.fill", action: onReply)
         }
     }
 

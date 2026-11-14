@@ -283,28 +283,6 @@ final class AppState: ObservableObject {
         )
     }
 
-    /// Refreshes today's suggestion when the day/evening phase changes (e.g. after 7:30 PM).
-    func refreshTodaySuggestionForDisplayIfNeeded() {
-        let todayKey = DateHelpers.localDateKey()
-        guard let existing = recordStore.records.first(where: { $0.date == todayKey }) else { return }
-
-        let phase = DayPhase.current()
-        guard existing.suggestionPhase != phase else { return }
-
-        let resolved = SuggestionResolver.resolve(
-            date: todayKey,
-            focus: existing.primaryFocus,
-            existing: nil,
-            settingsStore: settingsStore
-        )
-
-        var updated = existing
-        updated.suggestion = resolved.text
-        updated.suggestionPhase = resolved.phase
-        updated.updatedAt = Date()
-        recordStore.save(updated)
-    }
-
     func refreshTodayAfterGoalChange() async {
         await syncTodayFromHealth(userInitiated: true)
         if lastSyncError != nil {

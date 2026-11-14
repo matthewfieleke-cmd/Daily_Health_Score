@@ -59,6 +59,9 @@ struct LifestyleCoachChatView: View {
             resolvedFocus = context
             goalID = goalID ?? context.goalId
             isPlanning = isPlanning || context.feature == .goal
+            if prefill.isEmpty { prefill = resolved.seededDraft }
+        case .replyToInsight(let panel, let dateKey):
+            resolvedFocus = CoachFocusContextBuilder.homeInsight(panel, dateKey: dateKey)
         default:
             break
         }

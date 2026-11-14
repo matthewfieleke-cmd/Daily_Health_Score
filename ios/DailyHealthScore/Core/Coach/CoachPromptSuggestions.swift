@@ -28,6 +28,11 @@ enum CoachPromptSuggestions {
             ]
         }
 
+        // A historical or insight chat must not silently pivot to today's tiles.
+        if let focus, focus.isHistorical {
+            return historicalSuggestions(focus: focus)
+        }
+
         // Rotation: the day of the year moves through each pool; the caller's
         // phase separates a morning open from an evening one.
         let dayIndex = calendar.ordinality(of: .day, in: .year, for: now) ?? 0
@@ -110,6 +115,29 @@ enum CoachPromptSuggestions {
             return "Why does short sleep affect me so much?"
         }
         return nil
+    }
+
+    private static func historicalSuggestions(focus: CoachFocusContext) -> [String] {
+        var suggestions: [String] = []
+        switch focus.feature {
+        case .insight:
+            suggestions.append("What should I do with this insight?")
+            suggestions.append("How does this connect to my SMART goals?")
+            suggestions.append("What would progress look like from here?")
+        case .history, .sleepDiagnostic, .hrv:
+            if let name = focus.metricName, !name.isEmpty {
+                suggestions.append("What stands out in my \(name)?")
+            } else {
+                suggestions.append("What stands out in this period?")
+            }
+            suggestions.append("What should I change based on this?")
+            suggestions.append("How does this compare to a good week for me?")
+        default:
+            suggestions.append("What should I take from this?")
+            suggestions.append("What would you watch next?")
+        }
+        var seen = Set<String>()
+        return suggestions.filter { seen.insert($0).inserted }.prefix(maximum).map { $0 }
     }
 
     private static func pick(_ pool: [String], _ index: Int) -> String {
