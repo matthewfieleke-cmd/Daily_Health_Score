@@ -5,6 +5,13 @@ import Foundation
 /// Built on the iPhone from Apple Health + SMART goals. The Watch never
 /// recomputes the 10-point score; it displays this snapshot and sends check-ins
 /// back for the iPhone to merge.
+enum WatchSnapshotOrigin {
+    /// Built on the iPhone from the saved day. This is the score the Watch should show.
+    static let phone = "phone"
+    /// Built on the Watch from its own Health read, only when the iPhone has not sent today.
+    static let health = "health"
+}
+
 struct WatchSnapshot: Codable, Equatable, Sendable {
     var dateKey: String
     var totalScore: Double
@@ -14,6 +21,62 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
     var goals: [WatchGoalSnapshot]
     var updatedAt: Date
     var paceNudgesEnabled: Bool
+    /// Missing on snapshots saved before this field. Those are iPhone snapshots.
+    var origin: String = WatchSnapshotOrigin.phone
+
+    var isPhoneSnapshot: Bool { origin != WatchSnapshotOrigin.health }
+
+    init(
+        dateKey: String,
+        totalScore: Double,
+        sleep: WatchPillarSnapshot,
+        fiber: WatchPillarSnapshot,
+        exercise: WatchPillarSnapshot,
+        goals: [WatchGoalSnapshot],
+        updatedAt: Date,
+        paceNudgesEnabled: Bool,
+        origin: String = WatchSnapshotOrigin.phone
+    ) {
+        self.dateKey = dateKey
+        self.totalScore = totalScore
+        self.sleep = sleep
+        self.fiber = fiber
+        self.exercise = exercise
+        self.goals = goals
+        self.updatedAt = updatedAt
+        self.paceNudgesEnabled = paceNudgesEnabled
+        self.origin = origin
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case dateKey, totalScore, sleep, fiber, exercise, goals, updatedAt, paceNudgesEnabled, origin
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        dateKey = try container.decode(String.self, forKey: .dateKey)
+        totalScore = try container.decode(Double.self, forKey: .totalScore)
+        sleep = try container.decode(WatchPillarSnapshot.self, forKey: .sleep)
+        fiber = try container.decode(WatchPillarSnapshot.self, forKey: .fiber)
+        exercise = try container.decode(WatchPillarSnapshot.self, forKey: .exercise)
+        goals = try container.decode([WatchGoalSnapshot].self, forKey: .goals)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        paceNudgesEnabled = try container.decode(Bool.self, forKey: .paceNudgesEnabled)
+        origin = try container.decodeIfPresent(String.self, forKey: .origin) ?? WatchSnapshotOrigin.phone
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(dateKey, forKey: .dateKey)
+        try container.encode(totalScore, forKey: .totalScore)
+        try container.encode(sleep, forKey: .sleep)
+        try container.encode(fiber, forKey: .fiber)
+        try container.encode(exercise, forKey: .exercise)
+        try container.encode(goals, forKey: .goals)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(paceNudgesEnabled, forKey: .paceNudgesEnabled)
+        try container.encode(origin, forKey: .origin)
+    }
 
     var pillars: [WatchPillarSnapshot] { [sleep, fiber, exercise] }
 
@@ -83,6 +146,8 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
         let b = displayable(second, at: date, calendar: calendar)
         switch (a, b) {
         case let (a?, b?):
+            if a.isPhoneSnapshot, !b.isPhoneSnapshot { return a }
+            if b.isPhoneSnapshot, !a.isPhoneSnapshot { return b }
             return a.updatedAt >= b.updatedAt ? a : b
         case let (a?, nil):
             return a
@@ -110,7 +175,27 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
             let age = date.timeIntervalSince(snapshot.updatedAt)
             return age >= -3600 && age <= recentInterval
         }
+        if let phone = recent.filter(\.isPhoneSnapshot).max(by: { $0.updatedAt < $1.updatedAt }) {
+            return phone
+        }
         return recent.max(by: { $0.updatedAt < $1.updatedAt })
+    }
+
+    /// Whether `candidate` should replace what is already on screen. A phone
+    /// snapshot for today beats a Watch Health reading. Yesterday's cached
+    /// iPhone context does not beat a reading already saved for today.
+    static func replaces(
+        _ current: WatchSnapshot?,
+        with candidate: WatchSnapshot,
+        at date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard let winner = preferredForFace(current, candidate, at: date, calendar: calendar) else {
+            return current == nil
+        }
+        return winner.dateKey == candidate.dateKey
+            && winner.updatedAt == candidate.updatedAt
+            && winner.origin == candidate.origin
     }
 
     /// Prefer a matching dateKey. If the widget calendar disagrees with the
@@ -139,7 +224,8 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
             String(exercise.value),
             exercise.unit,
             String(Int(updatedAt.timeIntervalSince1970)),
-            String(exercise.goal)
+            String(exercise.goal),
+            origin
         ].joined(separator: "|")
     }
 
@@ -178,7 +264,8 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
             ),
             goals: [],
             updatedAt: Date(timeIntervalSince1970: updated),
-            paceNudgesEnabled: true
+            paceNudgesEnabled: true,
+            origin: parts.count >= 11 ? parts[10] : WatchSnapshotOrigin.phone
         )
     }
 }

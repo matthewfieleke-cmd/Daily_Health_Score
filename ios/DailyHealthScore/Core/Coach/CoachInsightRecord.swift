@@ -128,8 +128,7 @@ enum CoachInsightRecord {
 
         \(sections.joined(separator: "\n\n"))
 
-        SMART GOALS
-        Advice may name one of these when it makes the next step clearer. A goal is not a finding.
+        SAVED GOALS
         \(goalsText(goals))
         """
         return CoachInsightPacket(text: body, metricCount: sections.count)

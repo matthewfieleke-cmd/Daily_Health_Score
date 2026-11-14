@@ -63,9 +63,18 @@ final class WatchSnapshotController: NSObject, ObservableObject {
     }
 
     func refreshForForeground() {
-        if snapshot == nil {
-            snapshot = WatchSnapshotStore.load()
-            handshakeNeeded = snapshot == nil
+        #if canImport(WatchConnectivity)
+        if WCSession.isSupported(), WCSession.default.activationState == .activated,
+           let incoming = WatchBridge.snapshot(from: WCSession.default.receivedApplicationContext),
+           WatchSnapshot.replaces(snapshot, with: incoming) {
+            applyIncoming(incoming)
+        }
+        #endif
+        if let stored = WatchSnapshotStore.load(), WatchSnapshot.replaces(snapshot, with: stored) {
+            snapshot = stored
+            handshakeNeeded = false
+        } else if snapshot == nil {
+            handshakeNeeded = true
         }
         persistSnapshotForComplication()
         refreshNudges()
@@ -94,7 +103,8 @@ final class WatchSnapshotController: NSObject, ObservableObject {
 
     private func persistSnapshotForComplication() {
         guard let snapshot else { return }
-        WatchSnapshotStore.save(snapshot)
+        let source: WatchSnapshotStore.Source = snapshot.isPhoneSnapshot ? .phone : .health
+        WatchSnapshotStore.save(snapshot, source: source)
     }
 
     /// Companion HealthKit authorization is shared with iPhone. Asking here
@@ -130,6 +140,7 @@ final class WatchSnapshotController: NSObject, ObservableObject {
     }
 
     private func applyIncoming(_ incoming: WatchSnapshot) {
+        guard WatchSnapshot.replaces(snapshot, with: incoming) else { return }
         let merged = WatchCheckInMerge.apply(
             current: snapshot,
             incoming: incoming,

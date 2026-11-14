@@ -54,37 +54,46 @@ final class FoundationModelsCoach {
 
     // MARK: - Check-in card
 
-    /// The Home card. The record is already gathered. Neither model is given
-    /// tools, notes, or today's totals.
+    /// The Home card. The prepared record is always in the message. Private
+    /// Cloud Compute may dig with read tools. The on-device model has the
+    /// record only. Notes stay out of the finding.
     func generateCheckIn(
         kind: CoachCheckInKind,
         dateKey: String,
         recordText: String,
+        live: CoachLiveContext? = nil,
         currentCard: String = "",
         now: Date = Date()
     ) async throws -> CoachCheckIn {
         #if canImport(FoundationModels)
         try ensureAvailable()
         let tier: CoachModelTier = CoachModelProvider.isServerQuotaApproaching ? .onDevice : CoachModelProvider.preferredTier()
+        let prompt = """
+        \(recordText)
+
+        Write the Green, Yellow, and Red panels now.
+        """
         func onDeviceCard() async throws -> GenerableHomeInsights {
             try await CoachModelProvider
                 .makeSession(
                     tier: .onDevice,
                     instructions: CoachCharter.homeCardFallbackInstructions(currentCard: currentCard)
                 )
-                .respond(to: recordText, generating: GenerableHomeInsights.self)
+                .respond(to: prompt, generating: GenerableHomeInsights.self)
                 .content
         }
         let content: GenerableHomeInsights
         if tier == .privateCloud {
             do {
                 lastTierUsed = .privateCloud
+                let tools = live.map { CoachSessionTools.homeCardReads(context: $0) } ?? []
                 content = try await CoachModelProvider.respond(
                     CoachModelProvider.makeSession(
                         tier: .privateCloud,
-                        instructions: CoachCharter.homeCardInstructions(currentCard: currentCard)
+                        instructions: CoachCharter.homeCardInstructions(currentCard: currentCard),
+                        tools: tools
                     ),
-                    to: recordText,
+                    to: prompt,
                     generating: GenerableHomeInsights.self,
                     tier: .privateCloud,
                     depth: .deep

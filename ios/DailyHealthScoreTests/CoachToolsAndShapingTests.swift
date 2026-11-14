@@ -595,6 +595,14 @@ final class CoachLiveContextTests: XCTestCase {
         for name in ["rememberAboutPerson", "proposeSMARTGoal", "logGoalCheckIn", "showTrend", "readTextInPhoto"] {
             XCTAssertFalse(reads.contains(name), name)
         }
+        let homeCard = Set(CoachSessionTools.homeCardToolNames.split(separator: ", ").map(String.init))
+        XCTAssertEqual(
+            homeCard,
+            Set(["lookupTodayHealth", "lookupHealth", "lookupDays", "lookupSMARTGoals", "lookupWeightTrend", "searchEvidence", "calculate"])
+        )
+        for name in ["lookupWhatWeRemember", "lookupFood", "rememberAboutPerson", "proposeSMARTGoal", "logGoalCheckIn", "showTrend"] {
+            XCTAssertFalse(homeCard.contains(name), name)
+        }
     }
 
     func test_onlyPersonalAndChangingToolsForceANewSession() async {

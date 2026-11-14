@@ -98,14 +98,17 @@ enum WatchFaceHealthSnapshot {
         let exerciseValue = exerciseMinutes ?? 0
         guard sleepValue > 0 || fiberValue > 0 || exerciseValue > 0 else { return nil }
 
-        let snapshot = WatchFaceScore.snapshot(
+        var snapshot = WatchFaceScore.snapshot(
             dateKey: WatchBridge.localDateKey(from: now, calendar: calendar),
             sleepHours: sleepValue,
             fiberGrams: fiberValue,
             exerciseMinutes: exerciseValue,
             now: now
         )
-        WatchSnapshotStore.save(snapshot)
+        snapshot.origin = WatchSnapshotOrigin.health
+        // A Watch Health read often has no nutrition samples. It may fill an
+        // empty face. It must not replace the iPhone snapshot for this day.
+        WatchSnapshotStore.save(snapshot, source: .health)
         return snapshot
         #else
         return nil

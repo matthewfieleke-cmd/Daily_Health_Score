@@ -13,6 +13,8 @@ enum WatchBridge {
     static let nutritionModeFileName = "dhs.watch.nutritionMode.txt"
     static let snapshotFileName = "dhs.watch.snapshot.json"
     static let compactFaceFileName = "dhs.watch.face.txt"
+    static let snapshotSourceFileName = "dhs.watch.snapshot-source.txt"
+    static let snapshotSourceDefaultsKey = "dhs.watch.snapshotSource"
     static let snapshotSupportFileName = "dhs.watch.snapshot.support.json"
     static let pendingCheckInsDefaultsKey = "dhs.watch.pendingCheckInsJSON"
     static let applicationContextSnapshotKey = "snapshotJSON"
