@@ -113,5 +113,4 @@ Tune `HealthKitService.swift` if your sleep totals differ from the Health app.
 
 ## Content
 
-- **DHS Lifestyle Coach** — one coach (three doctorates, one voice, ABLM/ACLM Lifestyle Medicine). Home is a twice-daily check-in with Reply; Chats is a flat Messages-style list. Private Cloud Compute reasons, calls tools (USDA / Open Food Facts food facts, PubMed evidence, a calculator, the weight trend), writes the reply and the memory notes; the on-device model titles chats, compiles the profile, and tidies the files. On-device answers everything when PCC is unavailable or at its daily limit, and says so. Light Markdown in replies (bold, short lists), 350-word ceiling.
-- Rotating suggestion libraries remain available to the record builder.
+- **DHS Lifestyle Coach** — one coach (three doctorates, one voice, ABLM/ACLM Lifestyle Medicine). Home is Green / Yellow / Red insights from finished days, with Reply and panel taps into chat; Chats is a flat Messages-style list. Private Cloud Compute reasons, calls tools (USDA / Open Food Facts food facts, PubMed evidence, a calculator, the weight trend), writes the reply and the memory notes; the on-device model titles chats, compiles the profile, and tidies the files. On-device answers everything when PCC is unavailable or at its daily limit, and says so. Light Markdown in replies (bold, short lists), 350-word ceiling.

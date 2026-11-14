@@ -1,9 +1,7 @@
 import Foundation
 
-/// `@MainActor` because `build` calls `SettingsStore.nextSuggestion(for:phase:)` to
-/// advance the rotating suggestion text, and `SettingsStore` is itself
-/// MainActor-isolated. The only call sites of `build` are on `AppState`, which
-/// is also MainActor, so the constraint costs us nothing.
+/// Builds a scored daily record from Health metrics and settings. The Home
+/// card owns coaching copy now; this no longer rotates suggestion-pool text.
 @MainActor
 enum RecordBuilder {
     static func build(
@@ -15,15 +13,9 @@ enum RecordBuilder {
         sleepHrvSDNNMs: Double? = nil,
         now: Date = Date()
     ) -> DailyRecord {
+        _ = settingsStore
         let computed = ScoreCalculator.calculate(metrics: metrics, settings: settings)
         let focus = ScoreCalculator.determinePrimaryFocus(computed)
-        let resolved = SuggestionResolver.resolve(
-            date: date,
-            focus: focus,
-            existing: existing?.date == date ? existing : nil,
-            settingsStore: settingsStore,
-            now: now
-        )
         return DailyRecord(
             date: date,
             sleepHours: metrics.sleepHours,
@@ -43,8 +35,8 @@ enum RecordBuilder {
             fiberPercent: computed.fiberPercent,
             exercisePercent: computed.exercisePercent,
             primaryFocus: focus,
-            suggestion: resolved.text,
-            suggestionPhase: resolved.phase,
+            suggestion: "",
+            suggestionPhase: nil,
             createdAt: existing?.createdAt ?? now,
             updatedAt: now
         )

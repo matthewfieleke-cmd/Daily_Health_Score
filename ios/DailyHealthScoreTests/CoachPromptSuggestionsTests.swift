@@ -155,4 +155,38 @@ final class CoachPromptSuggestionsTests: XCTestCase {
         XCTAssertLessThanOrEqual(suggestions.count, CoachPromptSuggestions.maximum)
         XCTAssertEqual(Set(suggestions).count, suggestions.count)
     }
+
+    func test_historicalFocusDoesNotPivotToTodayChips() {
+        let focus = CoachFocusContextBuilder.completedTrend(
+            metric: .sleep,
+            records: [record(sleep: 7.5, fiber: 40, exercise: 30)],
+            settings: UserSettings(sleepGoal: .sevenHalf, fiberGoal: .forty)
+        )
+        let suggestions = CoachPromptSuggestions.build(
+            record: record(sleep: 5, fiber: 10, exercise: 0),
+            phase: .day,
+            focus: focus
+        )
+        XCTAssertFalse(suggestions.isEmpty)
+        XCTAssertFalse(suggestions.contains { $0.localizedCaseInsensitiveContains("today") })
+        XCTAssertFalse(suggestions.contains { $0.contains("grams") || $0.contains("minutes") })
+        XCTAssertTrue(suggestions.contains { $0.contains("stands out") || $0.contains("change") })
+    }
+
+    func test_insightFocusStaysOnThePanel() {
+        let panel = CoachInsightPanel(
+            tone: .green,
+            topic: "Sleep",
+            finding: "The week lengthened.",
+            advice: "Keep that bedtime."
+        )
+        let focus = CoachFocusContextBuilder.homeInsight(panel, dateKey: DateHelpers.localDateKey())
+        let suggestions = CoachPromptSuggestions.build(
+            record: record(sleep: 5, fiber: 10, exercise: 0),
+            phase: .day,
+            focus: focus
+        )
+        XCTAssertTrue(suggestions.contains("What should I do with this insight?"))
+        XCTAssertFalse(suggestions.contains { $0.localizedCaseInsensitiveContains("fiber") })
+    }
 }

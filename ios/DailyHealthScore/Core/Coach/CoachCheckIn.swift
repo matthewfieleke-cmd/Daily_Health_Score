@@ -268,6 +268,62 @@ enum CoachCheckInLogic {
             "- \"\(row.title.limitedToCoachBudget(70))\": \(row.progressText) check-ins; \(row.loggedToday ? "logged today" : "not logged today")"
         }.joined(separator: "\n")
     }
+
+    /// The strongest active goal that the insight text actually names. Nil when
+    /// none match — the Home card must not invent a parallel plan.
+    static func linkedGoal(
+        for panel: CoachInsightPanel,
+        in rows: [CoachCheckInGoalRow]
+    ) -> CoachCheckInGoalRow? {
+        let haystack = "\(panel.topic) \(panel.finding) \(panel.advice)".lowercased()
+        let scored: [(CoachCheckInGoalRow, Int)] = rows.compactMap { row in
+            let title = row.title.lowercased()
+            guard !title.isEmpty else { return nil }
+            var score = 0
+            if haystack.contains(title) { score += 6 }
+            let tokens = significantTokens(title)
+            let hits = tokens.filter { haystack.contains($0) }.count
+            score += hits
+            guard score > 0 else { return nil }
+            // Prefer a goal still open to log today when scores tie later.
+            if row.canLog { score += 1 }
+            return (row, score)
+        }
+        return scored.max(by: { lhs, rhs in
+            if lhs.1 != rhs.1 { return lhs.1 < rhs.1 }
+            if lhs.0.canLog != rhs.0.canLog { return !lhs.0.canLog }
+            return lhs.0.title > rhs.0.title
+        })?.0
+    }
+
+    /// Best single Home-card handoff: scan filled panels, pick the strongest match.
+    static func linkedGoal(
+        for panels: [CoachInsightPanel],
+        goals: [SMARTGoal],
+        activities: [SMARTGoalActivity],
+        todayKey: String
+    ) -> CoachCheckInGoalRow? {
+        let rows = goalRows(goals: goals, activities: activities, todayKey: todayKey)
+        guard !rows.isEmpty else { return nil }
+        let filled = panels.filter { !$0.isBlank }
+        let matches = filled.compactMap { linkedGoal(for: $0, in: rows) }
+        // Prefer canLog, then first panel order (green → yellow → red via panels array).
+        if let open = matches.first(where: \.canLog) { return open }
+        return matches.first
+    }
+
+    /// Words that carry meaning for matching advice to a goal title.
+    private static func significantTokens(_ text: String) -> [String] {
+        let stop: Set<String> = [
+            "a", "an", "the", "and", "or", "to", "of", "in", "on", "for", "with",
+            "my", "me", "i", "at", "after", "before", "each", "every", "day",
+            "days", "week", "times", "time", "this", "that", "from", "into"
+        ]
+        return text
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.count >= 3 && !stop.contains($0) }
+    }
 }
 
 /// Last week against the week before, computed here so the Coach only phrases it.

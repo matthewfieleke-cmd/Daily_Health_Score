@@ -66,12 +66,10 @@ struct TodayView: View {
         .task { await playLaunchDialUpIfNeeded() }
         .onAppear {
             appState.coach.refreshAvailability()
-            appState.refreshTodaySuggestionForDisplayIfNeeded()
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             appState.coach.refreshAvailability()
-            appState.refreshTodaySuggestionForDisplayIfNeeded()
         }
         .onChange(of: displayRecord?.date) { oldDate, newDate in
             guard oldDate == nil, newDate != nil else { return }
@@ -95,7 +93,10 @@ struct TodayView: View {
                         .environmentObject(appState)
                         .environmentObject(appState.coach)
                 } else {
-                    LifestyleCoachChatView(launch: launch)
+                    LifestyleCoachChatView(
+                        initialMessage: launch.seededDraft,
+                        launch: launch
+                    )
                         .environmentObject(appState)
                         .environmentObject(appState.coach)
                 }
@@ -105,9 +106,23 @@ struct TodayView: View {
             FoodGroupLogSheet(dateKey: todayKey)
                 .environmentObject(appState)
         }
-        .sheet(item: $healthChart) { presented in
+        .sheet(item: $healthChart, onDismiss: openChatAfterChart) { presented in
             NavigationStack {
-                HealthChartScreen(measure: presented.measure, stored: presented.chart)
+                HealthChartScreen(
+                    measure: presented.measure,
+                    stored: presented.chart,
+                    showsTalk: true,
+                    onTalk: { loaded in
+                        chatAfterChart = .focus(
+                            CoachFocusContextBuilder.healthMeasure(
+                                presented.measure,
+                                chart: loaded ?? presented.chart,
+                                endingOn: todayKey
+                            )
+                        )
+                        healthChart = nil
+                    }
+                )
             }
         }
         .sheet(item: $trendMetric, onDismiss: openChatAfterChart) { metric in
@@ -118,9 +133,13 @@ struct TodayView: View {
                     metric: metric,
                     showsTalk: true,
                     onTalk: {
-                        chatAfterChart = appState.coach.memory.cachedCheckIn?.replyThreadID.map {
-                            CoachChatLaunch.thread($0)
-                        } ?? .replyToCheckIn
+                        chatAfterChart = .focus(
+                            CoachFocusContextBuilder.completedTrend(
+                                metric: metric,
+                                records: appState.recordStore.records,
+                                settings: appState.settingsStore.settings
+                            )
+                        )
                         trendMetric = nil
                     }
                 )
@@ -147,6 +166,9 @@ struct TodayView: View {
                     record: record,
                     onReply: { coachLaunch = .replyToCheckIn },
                     onContinueReply: { coachLaunch = .thread($0) },
+                    onReplyToInsight: { panel in
+                        coachLaunch = .replyToInsight(panel, dateKey: record.date)
+                    },
                     onIntake: { showIntake = true },
                     onShowChart: { trendMetric = $0 },
                     onShowHealthChart: { measure, chart in

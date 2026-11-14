@@ -49,5 +49,4 @@ Suites:
 
 ## Content
 
-- **DHS Lifestyle Coach** daily card + Ask-the-coach chat (on-device Foundation Models).
-- Legacy rotating suggestion pools remain in the codebase for record-building compatibility.
+- **DHS Lifestyle Coach** Home insights card + Ask-the-coach chat (Private Cloud Compute with on-device fallback).

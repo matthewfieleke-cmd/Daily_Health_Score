@@ -14,6 +14,8 @@ struct HealthChartScreen: View {
     let measure: CoachHealthMeasure
     var stored: CoachHealthChart?
     var endingOn: String = DateHelpers.localDateKey()
+    var showsTalk: Bool = false
+    var onTalk: ((CoachHealthChart?) -> Void)? = nil
 
     @State private var chart: CoachHealthChart?
     @State private var loaded = false
@@ -42,6 +44,11 @@ struct HealthChartScreen: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close") { dismiss() }
+            }
+            if showsTalk, let onTalk {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Talk about this") { onTalk(chart ?? stored) }
+                }
             }
         }
         .task {

@@ -9,6 +9,8 @@ enum CoachFocusFeature: String, Codable, Sendable {
     case history
     case sleepDiagnostic
     case goal
+    /// One Green / Yellow / Red panel from the Home card.
+    case insight
 }
 
 /// Compact, typed coaching context built from app state — never from the model.
@@ -53,7 +55,7 @@ struct CoachFocusContext: Identifiable, Equatable, Sendable {
 
     var isHistorical: Bool {
         switch feature {
-        case .history, .sleepDiagnostic:
+        case .history, .sleepDiagnostic, .insight:
             return true
         case .hrv, .sleep, .fiber, .exercise:
             if let startDateKey, startDateKey != DateHelpers.localDateKey() { return true }
@@ -71,9 +73,10 @@ struct CoachFocusContext: Identifiable, Equatable, Sendable {
         case .fiber: return "Fiber"
         case .exercise: return metricName ?? "Exercise Minutes"
         case .hrv: return "Heart rate variability"
-        case .history: return "Selected history"
+        case .history: return metricName ?? "Selected history"
         case .sleepDiagnostic: return "Sleep records"
         case .goal: return "SMART goal"
+        case .insight: return metricName ?? "Home insight"
         }
     }
 
@@ -107,7 +110,8 @@ struct CoachFocusContext: Identifiable, Equatable, Sendable {
             lines.append("Selected date: \(DateHelpers.formatDisplayDate(startDateKey)).")
         }
         if !valueSummary.isEmpty { lines.append(valueSummary) }
-        if !freshness.isEmpty, !freshness.contains("Do not") {
+        if !baselineComparison.isEmpty { lines.append(baselineComparison) }
+        if !freshness.isEmpty {
             lines.append(freshness)
         }
         return lines.joined(separator: "\n")
@@ -263,6 +267,76 @@ enum CoachFocusContextBuilder {
             baselineComparison: "These are HealthKit samples attributed to this wake day.",
             freshness: "Diagnostic snapshot for \(DateHelpers.formatDisplayDate(dateKey)).",
             missingData: missing
+        )
+    }
+
+    /// One color panel from the Home card. Recent direction, not today's tiles.
+    static func homeInsight(_ panel: CoachInsightPanel, dateKey: String) -> CoachFocusContext {
+        CoachFocusContext(
+            feature: .insight,
+            metricName: "\(panel.tone.name) · \(panel.topic)",
+            startDateKey: dateKey,
+            endDateKey: dateKey,
+            valueSummary: panel.spoken,
+            baselineComparison: "This is one Home insight from finished days (7 / 30 / 90). It is not today's score tiles.",
+            freshness: "Stay with this \(panel.tone.name) insight unless they ask about today."
+        )
+    }
+
+    /// Finished-day score trend the person just looked at.
+    static func completedTrend(
+        metric: TrendMetric,
+        records: [DailyRecord],
+        settings: UserSettings
+    ) -> CoachFocusContext {
+        let title = CompletedTrendBuilder.title(for: metric, settings: settings)
+        guard let trend = CompletedTrendBuilder.build(metric: metric, records: records, settings: settings) else {
+            return CoachFocusContext(
+                feature: .history,
+                metricName: title,
+                valueSummary: "No finished days yet for \(title).",
+                freshness: "Stay with finished days unless they ask about today.",
+                missingData: "Today is still in progress and is excluded from this chart."
+            )
+        }
+        let end = trend.endDateKey
+        let start = trend.bars.first?.dateKey ?? end
+        return CoachFocusContext(
+            feature: .history,
+            metricName: title,
+            unit: metric == .sleep ? "h" : (metric == .fiber && settings.nutritionMode == .fiber ? "g" : nil),
+            startDateKey: start,
+            endDateKey: end,
+            valueSummary: trend.coachSummary,
+            baselineComparison: "This chart uses finished days only. Today is excluded.",
+            freshness: "Stay with this finished-day \(title) trend unless they ask about today."
+        )
+    }
+
+    /// Apple Health measure chart the person just looked at.
+    static func healthMeasure(
+        _ measure: CoachHealthMeasure,
+        chart: CoachHealthChart?,
+        endingOn: String
+    ) -> CoachFocusContext {
+        let points = chart?.points ?? []
+        let summary: String
+        if points.isEmpty {
+            summary = "Apple Health has no \(measure.title.lowercased()) in this window."
+        } else if let spoken = chart?.spoken, !spoken.isEmpty {
+            summary = spoken
+        } else {
+            summary = "\(measure.title): \(points.count) point(s) ending \(DateHelpers.formatDisplayDate(endingOn))."
+        }
+        return CoachFocusContext(
+            feature: .history,
+            metricName: measure.title,
+            startDateKey: points.first?.dateKey ?? endingOn,
+            endDateKey: endingOn,
+            valueSummary: summary,
+            baselineComparison: "This is an Apple Health chart, not the Daily Health Score pillars.",
+            freshness: "Stay with this \(measure.title) record unless they ask about today's score.",
+            missingData: points.isEmpty ? "No samples in this window." : ""
         )
     }
 }

@@ -43,7 +43,6 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    private var usedSuggestions: [String: [String]] = [:]
     private var usedDiscouragement: [String] = []
     private var usedMotivation: [String] = []
 
@@ -77,24 +76,6 @@ final class SettingsStore: ObservableObject {
         loadRotationState()
     }
 
-    func nextSuggestion(for focus: PrimaryFocus, phase: DayPhase) -> String {
-        let focusKey = focus == .maintain ? "maintain" : focus.rawValue
-        let nutritionKey = focus == .fiber && settings.nutritionMode == .foodGroups ? "foodGroups" : focusKey
-        let category = "\(nutritionKey)-\(phase.rawValue)"
-        let pool = SuggestionLibrary.pool(for: focus, phase: phase, nutritionMode: settings.nutritionMode)
-        var used = usedSuggestions[category] ?? []
-        var unused = pool.filter { !used.contains($0.id) }
-        if unused.isEmpty {
-            used = []
-            unused = pool
-        }
-        let choice = unused[0]
-        used.append(choice.id)
-        usedSuggestions[category] = used
-        persistRotation()
-        return choice.text
-    }
-
     func nextDiscouragement() -> String {
         nextFromPool(
             pool: DiscouragementLibrary.all,
@@ -111,10 +92,11 @@ final class SettingsStore: ObservableObject {
         )
     }
 
+    /// Clears leftover rotation keys, including the retired suggestion pool.
     func clearRotationState() {
-        usedSuggestions = [:]
         usedDiscouragement = []
         usedMotivation = []
+        UserDefaults.standard.removeObject(forKey: Keys.usedSuggestions)
         persistRotation()
     }
 
@@ -143,25 +125,11 @@ final class SettingsStore: ObservableObject {
     }
 
     private func loadRotationState() {
-        // `as? [String: [String]]` is a shallow bridge from NSDictionary in Swift: it can
-        // appear to succeed while inner values are still bridged Foundation objects (e.g.
-        // NSNumber if any stale plist value sneaks in). On first mutation Swift then crashes
-        // with "-[__NSCFNumber count]: unrecognized selector". Validate each entry eagerly
-        // and discard anything that doesn't match `[String: [String]]`.
-        let raw = UserDefaults.standard.dictionary(forKey: Keys.usedSuggestions) ?? [:]
-        var validated: [String: [String]] = [:]
-        for (key, value) in raw {
-            if let array = value as? [String] {
-                validated[key] = array
-            }
-        }
-        usedSuggestions = validated
         usedDiscouragement = UserDefaults.standard.stringArray(forKey: Keys.usedDiscouragement) ?? []
         usedMotivation = UserDefaults.standard.stringArray(forKey: Keys.usedMotivation) ?? []
     }
 
     private func persistRotation() {
-        UserDefaults.standard.set(usedSuggestions, forKey: Keys.usedSuggestions)
         UserDefaults.standard.set(usedDiscouragement, forKey: Keys.usedDiscouragement)
         UserDefaults.standard.set(usedMotivation, forKey: Keys.usedMotivation)
     }

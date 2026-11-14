@@ -152,8 +152,9 @@ struct DailyRecord: Identifiable, Equatable, Codable {
     var fiberPercent: Double
     var exercisePercent: Double
     var primaryFocus: PrimaryFocus
+    /// Kept so older records decode. New builds leave this empty; the Home card owns coaching copy.
     var suggestion: String
-    /// Which day/evening pool produced `suggestion`; nil on older records until refreshed.
+    /// Kept so older records decode. No longer written.
     var suggestionPhase: DayPhase? = nil
     var createdAt: Date
     var updatedAt: Date

@@ -52,6 +52,38 @@ final class CoachCheckInLogicTests: XCTestCase {
         XCTAssertEqual(CoachCheckInLogic.goalsBlock([]), "No active SMART goals.")
     }
 
+    func test_linkedGoalMatchesAdviceWithoutInventingAParallelPlan() {
+        let walk = CoachTestFixtures.goal(text: "walk after dinner")
+        let protein = CoachTestFixtures.goal(text: "protein at lunch")
+        let todayKey = "2026-09-19"
+        let rows = CoachCheckInLogic.goalRows(goals: [walk, protein], activities: [], todayKey: todayKey)
+        let movement = CoachInsightPanel(
+            tone: .red,
+            topic: "Exercise Minutes",
+            finding: "Movement fell across the last week.",
+            advice: "Take a walk after dinner on work nights."
+        )
+        let linked = CoachCheckInLogic.linkedGoal(for: movement, in: rows)
+        XCTAssertEqual(linked?.title, "walk after dinner")
+        XCTAssertTrue(linked?.canLog == true)
+
+        let sleep = CoachInsightPanel(
+            tone: .yellow,
+            topic: "Sleep",
+            finding: "Bedtime slipped later.",
+            advice: "Keep the same wind-down."
+        )
+        XCTAssertNil(CoachCheckInLogic.linkedGoal(for: sleep, in: rows))
+
+        let best = CoachCheckInLogic.linkedGoal(
+            for: [movement, sleep],
+            goals: [walk, protein],
+            activities: [],
+            todayKey: todayKey
+        )
+        XCTAssertEqual(best?.goalId, walk.id)
+    }
+
     func test_paceBehindCountAndShrinkDirective() {
         // Created 5 days ago in a 10-day window with 8 check-ins expected: 4 by now.
         var goal = CoachTestFixtures.goal(text: "read ten pages", target: 8)
