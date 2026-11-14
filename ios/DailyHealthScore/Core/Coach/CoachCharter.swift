@@ -97,7 +97,7 @@ enum CoachCharter {
         return """
         Review all of this user's data from Apple Health over the last 7 and 30 and 90 days. Present three valuable insights to the user. Fill in the Card with a Green insight that highlights an area that is going well. Present a Yellow insight that highlights an area that needs close monitoring. Present a Red insight that highlights an area that needs improvement.
 
-        Please also present advice for how to Maintain the Green, Monitor the Yellow, and Improve the Red. The finding holds the insight. The advice holds what to do. You may tie your advice to their SMART goals if it improves the quality of the advice.
+        Please also present advice for how to Maintain the Green, Monitor the Yellow, and Improve the Red. The finding holds the insight. The advice holds what to do. A saved goal is optional. Name one only when it is the natural next step for that color. Advice that stands on the finding alone is complete.
 
         You must never invent data. A blank color is acceptable if you cannot find a health metric that fits that color.
 

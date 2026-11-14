@@ -255,6 +255,7 @@ final class CoachSnapshotBuilderTests: XCTestCase {
         XCTAssertTrue(card.contains("More readings do not make a metric more important."))
         XCTAssertTrue(card.contains("Progress is Green even when the level is still a concern."))
         XCTAssertTrue(card.contains("Do not send the person to a clinician"))
+        XCTAssertTrue(card.contains("A saved goal is optional."))
         XCTAssertFalse(card.contains("The card on the screen now"))
         XCTAssertFalse(card.contains("65 words"))
         XCTAssertFalse(card.contains("the one comment on the Home screen"))

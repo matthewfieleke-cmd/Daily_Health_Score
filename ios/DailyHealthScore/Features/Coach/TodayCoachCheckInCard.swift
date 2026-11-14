@@ -4,6 +4,7 @@ import SwiftUI
 /// Reply opens a chat that starts with those words. Leftover height stays
 /// the grouped screen.
 struct TodayCoachCheckInCard: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var coach: LifestyleCoachController
 
@@ -21,35 +22,34 @@ struct TodayCoachCheckInCard: View {
                 item.sleepHours > 0 || item.fiberGrams > 0 || item.movementValue > 0 || item.foodGroups.isLogged
             )
         }
-        let cachedToday = coach.memory.cachedCheckInKey == CoachCheckInLogic.cacheKey(dateKey: today)
         cardStack
-            .task(id: "\(today)#\(finished)#\(cachedToday)") {
+            .task(id: "\(today)#\(finished)") {
                 guard let record else { return }
-                await coach.ensureCheckIn(
-                    for: record,
-                    records: appState.recordStore.records,
-                    goals: appState.smartGoalStore.goals,
-                    activities: appState.smartGoalStore.activities,
-                    hrvSensitivity: appState.settingsStore.hrvSensitivity,
-                    bodyTrend: appState.bodyTrend,
-                    scoringSettings: appState.settingsStore.settings
-                )
+                await rewriteInsights(for: record)
+            }
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                // Coming back to the app does not recreate this view, so the
+                // task above does not run again. Open still asks for a new card.
+                guard newPhase == .active, oldPhase != .active, let record else { return }
+                Task { await rewriteInsights(for: record) }
             }
             .onChange(of: appState.userRefreshToken) { _, _ in
                 guard let record else { return }
-                Task {
-                    await coach.ensureCheckIn(
-                        for: record,
-                        records: appState.recordStore.records,
-                        goals: appState.smartGoalStore.goals,
-                        activities: appState.smartGoalStore.activities,
-                        hrvSensitivity: appState.settingsStore.hrvSensitivity,
-                        bodyTrend: appState.bodyTrend,
-                        scoringSettings: appState.settingsStore.settings,
-                        force: true
-                    )
-                }
+                Task { await rewriteInsights(for: record) }
             }
+    }
+
+    private func rewriteInsights(for record: DailyRecord) async {
+        await coach.ensureCheckIn(
+            for: record,
+            records: appState.recordStore.records,
+            goals: appState.smartGoalStore.goals,
+            activities: appState.smartGoalStore.activities,
+            hrvSensitivity: appState.settingsStore.hrvSensitivity,
+            bodyTrend: appState.bodyTrend,
+            scoringSettings: appState.settingsStore.settings,
+            force: true
+        )
     }
 
     private var cardStack: some View {

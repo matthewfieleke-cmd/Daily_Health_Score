@@ -63,9 +63,16 @@ final class WatchSnapshotController: NSObject, ObservableObject {
     }
 
     func refreshForForeground() {
-        if snapshot == nil {
-            snapshot = WatchSnapshotStore.load()
-            handshakeNeeded = snapshot == nil
+        #if canImport(WatchConnectivity)
+        if WCSession.isSupported(), WCSession.default.activationState == .activated {
+            applyPayload(WCSession.default.receivedApplicationContext)
+        }
+        #endif
+        if let stored = WatchSnapshotStore.load() {
+            snapshot = WatchSnapshot.preferredForFace(snapshot, stored) ?? stored
+            handshakeNeeded = false
+        } else if snapshot == nil {
+            handshakeNeeded = true
         }
         persistSnapshotForComplication()
         refreshNudges()
@@ -94,7 +101,8 @@ final class WatchSnapshotController: NSObject, ObservableObject {
 
     private func persistSnapshotForComplication() {
         guard let snapshot else { return }
-        WatchSnapshotStore.save(snapshot)
+        let source: WatchSnapshotStore.Source = snapshot.isPhoneSnapshot ? .phone : .health
+        WatchSnapshotStore.save(snapshot, source: source)
     }
 
     /// Companion HealthKit authorization is shared with iPhone. Asking here

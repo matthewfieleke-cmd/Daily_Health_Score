@@ -128,8 +128,8 @@ enum CoachInsightRecord {
 
         \(sections.joined(separator: "\n\n"))
 
-        SMART GOALS
-        Advice may name one of these when it makes the next step clearer. A goal is not a finding.
+        SAVED GOALS
+        Optional. Name a goal only when it is the natural next step for that color. The finding stays the Apple Health record.
         \(goalsText(goals))
         """
         return CoachInsightPacket(text: body, metricCount: sections.count)

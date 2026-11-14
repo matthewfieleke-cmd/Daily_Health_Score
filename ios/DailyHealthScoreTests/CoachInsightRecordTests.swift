@@ -103,7 +103,7 @@ final class CoachInsightRecordTests: XCTestCase {
         XCTAssertTrue(packet.text.contains("Weight"))
         XCTAssertTrue(packet.text.contains("Down"))
         XCTAssertTrue(packet.text.contains("Walk after dinner"))
-        XCTAssertTrue(packet.text.contains("A goal is not a finding."))
+        XCTAssertTrue(packet.text.contains("Optional. Name a goal only when it is the natural next step"))
     }
 
     func test_panelsKeepOneMetricAndDropInventedTopics() {

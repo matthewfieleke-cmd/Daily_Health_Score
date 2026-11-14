@@ -609,6 +609,59 @@ final class WatchSnapshotTests: XCTestCase {
         )
     }
 
+    func test_watchHealthReadingDoesNotReplaceThePhoneSnapshot() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 14, hour: 10, minute: 45))!
+        let phone = faceSnapshot(dateKey: "2026-11-14", fiber: 10, score: 5, at: now.addingTimeInterval(-60))
+        let health = faceSnapshot(
+            dateKey: "2026-11-14",
+            fiber: 0,
+            score: 4,
+            at: now,
+            origin: WatchSnapshotOrigin.health
+        )
+        XCTAssertTrue(WatchSnapshotStore.save(phone, defaults: nil, containerURL: dir))
+        XCTAssertTrue(WatchSnapshotStore.save(health, source: .health, defaults: nil, containerURL: dir))
+        let kept = try XCTUnwrap(WatchSnapshotStore.load(defaults: nil, containerURL: dir))
+        XCTAssertEqual(kept.fiber.value, 10, accuracy: 0.01)
+        XCTAssertEqual(kept.formattedScore, "5.0")
+        XCTAssertEqual(
+            WatchSnapshot.preferredForFace(health, phone, at: now, calendar: calendar)?.fiber.value,
+            10,
+            accuracy: 0.01
+        )
+
+        let newer = faceSnapshot(dateKey: "2026-11-14", fiber: 12, score: 5.2, at: now.addingTimeInterval(30))
+        XCTAssertTrue(WatchSnapshotStore.save(newer, defaults: nil, containerURL: dir))
+        let updated = try XCTUnwrap(WatchSnapshotStore.load(defaults: nil, containerURL: dir))
+        XCTAssertEqual(updated.fiber.value, 12, accuracy: 0.01)
+    }
+
+    private func faceSnapshot(
+        dateKey: String,
+        fiber: Double,
+        score: Double,
+        at: Date,
+        origin: String = WatchSnapshotOrigin.phone
+    ) -> WatchSnapshot {
+        WatchSnapshot(
+            dateKey: dateKey,
+            totalScore: score,
+            sleep: WatchPillarSnapshot(name: "Sleep", value: 7.3, goal: 7.5, unit: "hr", points: 3.9, maxPoints: 4),
+            fiber: WatchPillarSnapshot(name: "Fiber", value: fiber, goal: 40, unit: "g", points: fiber > 0 ? 1 : 0, maxPoints: 4),
+            exercise: WatchPillarSnapshot(name: "Exercise Minutes", value: 1, goal: 30, unit: "min", points: 0.1, maxPoints: 2),
+            goals: [],
+            updatedAt: at,
+            paceNudgesEnabled: true,
+            origin: origin
+        )
+    }
+
     func test_watchBridgeDecodesSnapshotFromConnectivityPayload() {
         let snapshot = WatchSnapshot(
             dateKey: "2026-09-19",

@@ -31,12 +31,32 @@ enum WatchSnapshotStore {
         return WatchBridge.decode(WatchSnapshot.self, from: json)
     }
 
+    /// Where a snapshot was built. A Watch Health reading is only a stand-in
+    /// until the iPhone sends today's record. It must not paint over that record.
+    enum Source: String {
+        case phone
+        case health
+    }
+
     @discardableResult
     static func save(
         _ snapshot: WatchSnapshot,
+        source: Source = .phone,
         defaults: UserDefaults? = WatchSnapshotStore.groupedDefaults,
         containerURL: URL? = WatchSnapshotStore.groupContainer
     ) -> Bool {
+        if let existing = load(defaults: defaults, containerURL: containerURL) {
+            let existingSource = storedSource(defaults: defaults, containerURL: containerURL)
+            if source == .health, existing.dateKey == snapshot.dateKey {
+                return true
+            }
+            if source == .phone,
+               existingSource == .phone,
+               existing.dateKey == snapshot.dateKey,
+               existing.updatedAt > snapshot.updatedAt {
+                return true
+            }
+        }
         guard let data = try? WatchBridge.encoder.encode(snapshot) else { return false }
         var wrote = false
         // `UserDefaults(suiteName:)` still returns an object when the App Group
@@ -83,7 +103,46 @@ enum WatchSnapshotStore {
             }
         }
         WatchNutritionModeStore.save(from: snapshot, defaults: defaults, containerURL: containerURL)
+        remember(source, defaults: defaults, containerURL: containerURL)
         return wrote
+    }
+
+    static func storedSource(
+        defaults: UserDefaults? = WatchSnapshotStore.groupedDefaults,
+        containerURL: URL? = WatchSnapshotStore.groupContainer
+    ) -> Source {
+        if let file = sourceURL(containerURL: containerURL),
+           let text = try? String(contentsOf: file, encoding: .utf8) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let source = Source(rawValue: trimmed) { return source }
+        }
+        if let raw = defaults?.string(forKey: WatchBridge.snapshotSourceDefaultsKey),
+           let source = Source(rawValue: raw) {
+            return source
+        }
+        return .phone
+    }
+
+    private static func remember(
+        _ source: Source,
+        defaults: UserDefaults?,
+        containerURL: URL?
+    ) {
+        if containerURL != nil {
+            defaults?.set(source.rawValue, forKey: WatchBridge.snapshotSourceDefaultsKey)
+        }
+        guard let file = sourceURL(containerURL: containerURL),
+              let data = source.rawValue.data(using: .utf8) else { return }
+        try? FileManager.default.createDirectory(
+            at: file.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? data.write(to: file, options: [.atomic, .noFileProtection])
+        try? protect(file)
+    }
+
+    private static func sourceURL(containerURL: URL?) -> URL? {
+        containerURL?.appendingPathComponent(WatchBridge.snapshotSourceFileName)
     }
 
     /// False when this process is not actually in `group.com.dailyhealthscore.app.mf`.
@@ -114,6 +173,10 @@ enum WatchSnapshotStore {
         if let mode = nutritionModeURL(containerURL: containerURL) {
             try? FileManager.default.removeItem(at: mode)
         }
+        if let source = sourceURL(containerURL: containerURL) {
+            try? FileManager.default.removeItem(at: source)
+        }
+        defaults?.removeObject(forKey: WatchBridge.snapshotSourceDefaultsKey)
     }
 
     static func nutritionModeURL(containerURL: URL? = WatchSnapshotStore.groupContainer) -> URL? {
