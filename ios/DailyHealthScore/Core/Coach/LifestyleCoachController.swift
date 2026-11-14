@@ -199,10 +199,20 @@ final class LifestyleCoachController: ObservableObject {
         do {
             await waitForBackgroundMemoryWork()
             guard checkInGenerationID == generationID else { return }
+            let cardLive = CoachLiveContext()
+            cardLive.records = records
+            cardLive.todayKey = record.date
+            cardLive.nutritionMode = settings.nutritionMode
+            cardLive.scoringSettings = settings
+            cardLive.goals = goals
+            cardLive.activitiesByGoal = Dictionary(grouping: activities, by: \.goalId)
+            cardLive.bodyTrend = bodyTrend
+            attachHealthLookup(cardLive)
             let generated = try await model.generateCheckIn(
                 kind: kind,
                 dateKey: record.date,
                 recordText: packet.text,
+                live: cardLive,
                 currentCard: memory.cachedCheckIn?.insightPrompt ?? "",
                 now: now
             )

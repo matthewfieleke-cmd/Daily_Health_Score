@@ -68,10 +68,14 @@ enum CoachSessionTools {
     /// The inventory, for tests and the eval screen.
     static let toolNames = "lookupTodayHealth, lookupHealth, lookupDays, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, lookupFood, searchEvidence, calculate, rememberAboutPerson, proposeSMARTGoal, logGoalCheckIn, showTrend, readTextInPhoto, readBarcodeInPhoto"
 
-    /// What the Home card can call. The same lookups as a chat. Saving, drafting,
-    /// and check-in stay off the card: nothing there is confirmed. The chart is
-    /// a field on the card, and the app draws it.
+    /// What a chat can call when it is only reading. Saving, drafting, and
+    /// check-in stay off. The chart is a field on the card, and the app draws it.
     static let readToolNames = "lookupTodayHealth, lookupHealth, lookupDays, lookupSMARTGoals, lookupWhatWeRemember, lookupWeightTrend, lookupFood, searchEvidence, calculate"
+
+    /// What the Home card can call. Findings stay Apple Health. Notes and food
+    /// stay off so the card cannot invent from memory or a label. Evidence may
+    /// strengthen the advice. Saving and drafts stay off.
+    static let homeCardToolNames = "lookupTodayHealth, lookupHealth, lookupDays, lookupSMARTGoals, lookupWeightTrend, searchEvidence, calculate"
 
     #if canImport(FoundationModels)
     static func reads(context: CoachLiveContext) -> [any Tool] {
@@ -83,6 +87,18 @@ enum CoachSessionTools {
             CoachLookupPersonTool(context: context),
             CoachBodyTrendTool(context: context),
             CoachFoodLookupTool(context: context),
+            CoachEvidenceSearchTool(context: context),
+            CoachCalculatorTool(context: context)
+        ]
+    }
+
+    static func homeCardReads(context: CoachLiveContext) -> [any Tool] {
+        [
+            CoachLookupTodayTool(context: context),
+            CoachLookupHealthTool(context: context),
+            CoachLookupDaysTool(context: context),
+            CoachLookupGoalsTool(context: context),
+            CoachBodyTrendTool(context: context),
             CoachEvidenceSearchTool(context: context),
             CoachCalculatorTool(context: context)
         ]
