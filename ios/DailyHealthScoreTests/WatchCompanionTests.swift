@@ -642,6 +642,37 @@ final class WatchSnapshotTests: XCTestCase {
         XCTAssertEqual(updated.fiber.value, 12, accuracy: 0.01)
     }
 
+    func test_yesterdayPhoneContextDoesNotReplaceTodaysHealthReading() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let now = Date()
+        let calendar = Calendar.current
+        let todayKey = WatchBridge.localDateKey(from: now, calendar: calendar)
+        let yesterdayKey = WatchBridge.localDateKey(from: now.addingTimeInterval(-24 * 3600), calendar: calendar)
+        let health = faceSnapshot(
+            dateKey: todayKey,
+            fiber: 0,
+            score: 4,
+            at: now,
+            origin: WatchSnapshotOrigin.health
+        )
+        let yesterday = faceSnapshot(
+            dateKey: yesterdayKey,
+            fiber: 8,
+            score: 4.4,
+            at: now.addingTimeInterval(-20 * 3600)
+        )
+        XCTAssertFalse(WatchSnapshot.replaces(health, with: yesterday, at: now, calendar: calendar))
+        XCTAssertTrue(WatchSnapshotStore.save(health, source: .health, defaults: nil, containerURL: dir))
+        XCTAssertTrue(WatchSnapshotStore.save(yesterday, defaults: nil, containerURL: dir))
+        let kept = try XCTUnwrap(WatchSnapshotStore.load(defaults: nil, containerURL: dir))
+        XCTAssertEqual(kept.dateKey, todayKey)
+        XCTAssertEqual(kept.origin, WatchSnapshotOrigin.health)
+        XCTAssertEqual(kept.fiber.value, 0, accuracy: 0.01)
+    }
+
     private func faceSnapshot(
         dateKey: String,
         fiber: Double,

@@ -64,12 +64,14 @@ final class WatchSnapshotController: NSObject, ObservableObject {
 
     func refreshForForeground() {
         #if canImport(WatchConnectivity)
-        if WCSession.isSupported(), WCSession.default.activationState == .activated {
-            applyPayload(WCSession.default.receivedApplicationContext)
+        if WCSession.isSupported(), WCSession.default.activationState == .activated,
+           let incoming = WatchBridge.snapshot(from: WCSession.default.receivedApplicationContext),
+           WatchSnapshot.replaces(snapshot, with: incoming) {
+            applyIncoming(incoming)
         }
         #endif
-        if let stored = WatchSnapshotStore.load() {
-            snapshot = WatchSnapshot.preferredForFace(snapshot, stored) ?? stored
+        if let stored = WatchSnapshotStore.load(), WatchSnapshot.replaces(snapshot, with: stored) {
+            snapshot = stored
             handshakeNeeded = false
         } else if snapshot == nil {
             handshakeNeeded = true
@@ -138,6 +140,7 @@ final class WatchSnapshotController: NSObject, ObservableObject {
     }
 
     private func applyIncoming(_ incoming: WatchSnapshot) {
+        guard WatchSnapshot.replaces(snapshot, with: incoming) else { return }
         let merged = WatchCheckInMerge.apply(
             current: snapshot,
             incoming: incoming,

@@ -181,6 +181,23 @@ struct WatchSnapshot: Codable, Equatable, Sendable {
         return recent.max(by: { $0.updatedAt < $1.updatedAt })
     }
 
+    /// Whether `candidate` should replace what is already on screen. A phone
+    /// snapshot for today beats a Watch Health reading. Yesterday's cached
+    /// iPhone context does not beat a reading already saved for today.
+    static func replaces(
+        _ current: WatchSnapshot?,
+        with candidate: WatchSnapshot,
+        at date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard let winner = preferredForFace(current, candidate, at: date, calendar: calendar) else {
+            return current == nil
+        }
+        return winner.dateKey == candidate.dateKey
+            && winner.updatedAt == candidate.updatedAt
+            && winner.origin == candidate.origin
+    }
+
     /// Prefer a matching dateKey. If the widget calendar disagrees with the
     /// iPhone dateKey, still show a snapshot written the same local day so the
     /// face does not stay on Open iPhone.

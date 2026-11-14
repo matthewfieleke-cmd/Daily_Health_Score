@@ -46,14 +46,15 @@ enum WatchSnapshotStore {
         containerURL: URL? = WatchSnapshotStore.groupContainer
     ) -> Bool {
         if let existing = load(defaults: defaults, containerURL: containerURL) {
-            let existingSource = storedSource(defaults: defaults, containerURL: containerURL)
-            if source == .health, existing.dateKey == snapshot.dateKey {
-                return true
+            var stored = existing
+            if storedSource(defaults: defaults, containerURL: containerURL) == .health {
+                stored.origin = WatchSnapshotOrigin.health
             }
-            if source == .phone,
-               existingSource == .phone,
-               existing.dateKey == snapshot.dateKey,
-               existing.updatedAt > snapshot.updatedAt {
+            var incoming = snapshot
+            if source == .health {
+                incoming.origin = WatchSnapshotOrigin.health
+            }
+            if !WatchSnapshot.replaces(stored, with: incoming) {
                 return true
             }
         }
