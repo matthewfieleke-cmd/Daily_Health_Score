@@ -4,7 +4,6 @@ import SwiftUI
 /// Tapping a panel replies about that color. Reply opens the full card.
 /// When advice matches a SMART goal, one row logs or opens it.
 struct TodayCoachCheckInCard: View {
-    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var coach: LifestyleCoachController
 
@@ -26,13 +25,7 @@ struct TodayCoachCheckInCard: View {
         cardStack
             .task(id: "\(today)#\(finished)") {
                 guard let record else { return }
-                await rewriteInsights(for: record)
-            }
-            .onChange(of: scenePhase) { oldPhase, newPhase in
-                // Coming back to the app does not recreate this view, so the
-                // task above does not run again. Open still asks for a new card.
-                guard newPhase == .active, oldPhase != .active, let record else { return }
-                Task { await rewriteInsights(for: record) }
+                await loadDailyInsights(for: record)
             }
             .onChange(of: appState.userRefreshToken) { _, _ in
                 guard let record else { return }
@@ -40,7 +33,17 @@ struct TodayCoachCheckInCard: View {
             }
     }
 
+    /// First open of the day writes the card. Later opens the same day keep it.
+    private func loadDailyInsights(for record: DailyRecord) async {
+        await requestInsights(for: record, force: false)
+    }
+
+    /// The refresh control asks for a new writing.
     private func rewriteInsights(for record: DailyRecord) async {
+        await requestInsights(for: record, force: true)
+    }
+
+    private func requestInsights(for record: DailyRecord, force: Bool) async {
         await coach.ensureCheckIn(
             for: record,
             records: appState.recordStore.records,
@@ -49,7 +52,7 @@ struct TodayCoachCheckInCard: View {
             hrvSensitivity: appState.settingsStore.hrvSensitivity,
             bodyTrend: appState.bodyTrend,
             scoringSettings: appState.settingsStore.settings,
-            force: true
+            force: force
         )
     }
 
@@ -65,13 +68,14 @@ struct TodayCoachCheckInCard: View {
     }
 
     private var cardStack: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             cardHeader
             if coach.isGeneratingCheckIn, coach.checkIn != nil {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     ProgressView()
+                        .controlSize(.mini)
                     Text("Writing new insights.")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -86,7 +90,7 @@ struct TodayCoachCheckInCard: View {
             }
             door
         }
-        .padding(14)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .top)
         .background(AppTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.Layout.cardCornerRadius, style: .continuous))
@@ -96,13 +100,13 @@ struct TodayCoachCheckInCard: View {
     @ViewBuilder
     private var noteBody: some View {
         if let card = coach.checkIn, card.waitingForHealthData {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
                 ForEach(CoachInsightTone.allCases) { tone in
                     needsDataPanel(tone)
                 }
             }
         } else if let card = coach.checkIn, !card.insights.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
                 ForEach(card.insights) { panel in
                     if panel.isBlank {
                         blankPanel(panel.tone)
@@ -112,25 +116,26 @@ struct TodayCoachCheckInCard: View {
                 }
             }
         } else if let card = coach.checkIn {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(card.displayLines.enumerated()), id: \.offset) { _, line in
                     Text(line)
-                        .font(.footnote)
+                        .font(.caption)
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else if coach.isGeneratingCheckIn {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 ProgressView()
+                    .controlSize(.small)
                 Text("Writing your insights.")
-                    .font(.footnote)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
                 ForEach(CoachInsightTone.allCases) { tone in
                     blankPanel(tone)
                 }
@@ -139,15 +144,15 @@ struct TodayCoachCheckInCard: View {
     }
 
     private var cardHeader: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image("DHSLifestyleCoach")
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(width: 32, height: 32)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .frame(width: 22, height: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .accessibilityHidden(true)
             Text("DHS Lifestyle Coach")
-                .font(.subheadline.weight(.semibold))
+                .font(.caption.weight(.semibold))
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
@@ -157,13 +162,13 @@ struct TodayCoachCheckInCard: View {
         Button {
             onReplyToInsight(panel)
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
                     Circle()
                         .fill(toneColor(panel.tone))
-                        .frame(width: 10, height: 10)
+                        .frame(width: 7, height: 7)
                     Text("\(panel.tone.name) · \(panel.topic)")
-                        .font(.subheadline.weight(.bold))
+                        .font(.caption.weight(.bold))
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
@@ -179,10 +184,11 @@ struct TodayCoachCheckInCard: View {
                     )
                 }
             }
-            .padding(12)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(toneColor(panel.tone).opacity(0.14))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
@@ -190,49 +196,50 @@ struct TodayCoachCheckInCard: View {
     }
 
     private func blankPanel(_ tone: CoachInsightTone) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Circle()
                 .fill(toneColor(tone))
-                .frame(width: 10, height: 10)
+                .frame(width: 7, height: 7)
             Text(tone.name)
-                .font(.subheadline.weight(.semibold))
+                .font(.caption.weight(.semibold))
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(toneColor(tone).opacity(0.14))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .accessibilityLabel("\(tone.name), blank")
     }
 
     private func needsDataPanel(_ tone: CoachInsightTone) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
                 Circle()
                     .fill(toneColor(tone))
-                    .frame(width: 10, height: 10)
+                    .frame(width: 7, height: 7)
                 Text(tone.name)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.caption.weight(.semibold))
             }
             Text(CoachInsightRecord.needsDataSentence)
-                .font(.footnote)
+                .font(.caption2)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(toneColor(tone).opacity(0.14))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private func bullet(_ text: Text) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text("•")
-                .font(.footnote.weight(.bold))
+                .font(.caption2.weight(.bold))
                 .foregroundStyle(.primary)
             text
-                .font(.footnote)
+                .font(.caption2)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
@@ -261,9 +268,9 @@ struct TodayCoachCheckInCard: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: row.canLog ? "checkmark.circle" : "flag")
-                    .font(.caption)
+                    .font(.caption2)
                 Text(row.canLog ? "Log · \(row.title)" : "Open · \(row.title)")
-                    .font(.footnote.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 Text(row.progressText)
@@ -271,8 +278,8 @@ struct TodayCoachCheckInCard: View {
                     .foregroundStyle(.secondary)
             }
             .foregroundStyle(AppTheme.primary)
-            .padding(.vertical, 9)
-            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
             .frame(maxWidth: .infinity)
             .background(AppTheme.primary.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -301,9 +308,9 @@ struct TodayCoachCheckInCard: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: systemImage)
-                    .font(.caption)
+                    .font(.caption2)
                 Text(title)
-                    .font(.footnote.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
@@ -311,8 +318,8 @@ struct TodayCoachCheckInCard: View {
                     .foregroundStyle(.secondary)
             }
             .foregroundStyle(AppTheme.primary)
-            .padding(.vertical, 9)
-            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
             .frame(maxWidth: .infinity)
             .background(AppTheme.primary.opacity(0.10))
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))

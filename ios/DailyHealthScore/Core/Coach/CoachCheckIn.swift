@@ -229,8 +229,8 @@ enum CoachCheckInLogic {
         record.sleepHours > 0 || record.fiberGrams > 0 || record.movementValue > 0 || record.foodGroups.isLogged
     }
 
-    /// Identifies the stored card for this calendar day. Opening the app and a
-    /// refresh both ask for a new writing. The hour and the goals stay out of the key.
+    /// Identifies the stored card for this calendar day. The first open of the
+    /// day uses it. A refresh asks for a new writing. The hour and the goals stay out of the key.
     static func cacheKey(dateKey: String) -> String {
         "\(dateKey)#insights1"
     }

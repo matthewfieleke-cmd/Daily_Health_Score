@@ -213,7 +213,6 @@ final class LifestyleCoachController: ObservableObject {
                 dateKey: record.date,
                 recordText: packet.text,
                 live: cardLive,
-                currentCard: memory.cachedCheckIn?.insightPrompt ?? "",
                 now: now
             )
             guard checkInGenerationID == generationID else { return }

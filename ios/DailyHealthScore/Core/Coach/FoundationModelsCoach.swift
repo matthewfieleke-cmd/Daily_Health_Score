@@ -62,7 +62,6 @@ final class FoundationModelsCoach {
         dateKey: String,
         recordText: String,
         live: CoachLiveContext? = nil,
-        currentCard: String = "",
         now: Date = Date()
     ) async throws -> CoachCheckIn {
         #if canImport(FoundationModels)
@@ -77,7 +76,7 @@ final class FoundationModelsCoach {
             try await CoachModelProvider
                 .makeSession(
                     tier: .onDevice,
-                    instructions: CoachCharter.homeCardFallbackInstructions(currentCard: currentCard)
+                    instructions: CoachCharter.homeCardFallbackInstructions()
                 )
                 .respond(to: prompt, generating: GenerableHomeInsights.self)
                 .content
@@ -90,7 +89,7 @@ final class FoundationModelsCoach {
                 content = try await CoachModelProvider.respond(
                     CoachModelProvider.makeSession(
                         tier: .privateCloud,
-                        instructions: CoachCharter.homeCardInstructions(currentCard: currentCard),
+                        instructions: CoachCharter.homeCardInstructions(),
                         tools: tools
                     ),
                     to: prompt,
